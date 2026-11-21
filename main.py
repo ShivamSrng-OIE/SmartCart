@@ -6,6 +6,7 @@ Real pipelines replace the fakes in PIPELINES (victim: Task 5, guarded: Task 9).
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.defender_neon import on_block as defender_on_block
+from backend.app_routes import app_router
 from backend.firewall_decisions import warm_up
 from backend.guarded_shopper import run_guarded
 from backend.intent import parse_intent
@@ -26,6 +28,7 @@ from backend.trace import TraceBus
 from backend.victim_hydrogen import run_victim
 
 RUNS_DIR = Path("runs")
+log = logging.getLogger(__name__)
 
 Pipeline = Callable[[Intent, list[Media], str | None, TraceBus, str], Awaitable[None]]
 
@@ -61,6 +64,7 @@ app = FastAPI(title="CartTrap", lifespan=lifespan)
 app.state.bus = TraceBus()
 app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
 app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
+app.include_router(app_router)  # /api/rules and /api/dataset (ADR m4/0021)
 app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 
@@ -95,11 +99,13 @@ async def start_run(
     request: str = Form(...),
     budget: float | None = Form(None),
     product_url: str | None = Form(None),
+    product_id: str | None = Form(None),
     demo_product_id: str | None = Form(None),
     mode: str = Form("both"),
     image: UploadFile | None = None,
     audio: UploadFile | None = None,
     video: UploadFile | None = None,
+    pdf: UploadFile | None = None,
 ) -> dict:
     panes = {"both": ["victim", "guarded"], "victim": ["victim"], "guarded": ["guarded"]}.get(mode)
     if panes is None:
@@ -108,10 +114,13 @@ async def start_run(
     run_dir = RUNS_DIR / run_id
     media = [m for m in [await _save(image, "image", run_dir), await _save(audio, "audio", run_dir),
                          await _save(video, "video", run_dir)] if m]
+    if pdf is not None and pdf.filename:
+        log.warning("Skipping PDF upload because Media.kind does not support 'document'")
     intent = parse_intent(request, budget)  # budget field wins; else budget/qty parsed from the request text
     bus: TraceBus = app.state.bus
     bus.start(run_id)
-    task = asyncio.create_task(_run_all(bus, run_id, panes, intent, media, product_url or demo_product_id))
+    task = asyncio.create_task(_run_all(bus, run_id, panes, intent, media,
+                                        product_id or demo_product_id or product_url))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return {"run_id": run_id}

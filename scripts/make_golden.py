@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from golden_cases import CASES, PRODUCTS  # noqa: E402
+from golden_cases import ALL_CASES as CASES, PRODUCTS  # noqa: E402  (golden + holdout)
 
 OUT = ROOT / "eval" / "golden"
 SUFFIX = (" No watermark, no logos of real brands, no extra captions. Render the quoted text exactly, letter for letter, "
@@ -101,6 +101,7 @@ def make(case: dict, client, model, offline: bool) -> tuple[dict, str]:
                                   "vector", "categories", "audio_script")}
     entry["product"] = PRODUCTS[case["product"]]
     entry["visible_text"] = case["text"]
+    entry["holdout"] = bool(case.get("holdout"))
     entry.update(generator=gen, model=(model if gen == "nano_banana" else None))
     line = f"{case['file']:<30} {case['label']:<7} {gen:<16} {ms:>6} ms" + (f"   ({err})" if err else "")
     return entry, line

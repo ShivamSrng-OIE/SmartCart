@@ -45,7 +45,7 @@ def frange(lo: float, hi: float, step: float) -> list[float]:
 
 
 def latest_results() -> Path:
-    files = sorted(GOLDEN.glob("results_*.json"))
+    files = sorted(GOLDEN.glob("results_*.json"))  # holdout_results.json never matches
     for f in reversed(files):
         if all("all_probes" in r for r in json.loads(f.read_text(encoding="utf-8"))["results"]):
             return f
@@ -137,7 +137,9 @@ def main() -> None:
 
     path = args.file or latest_results()
     data = json.loads(path.read_text(encoding="utf-8"))
-    results = [r for r in data["results"] if r["id"] not in args.exclude]
+    if data.get("holdout") or path.name.startswith("holdout"):
+        sys.exit("refusing to sweep a holdout results file: the holdout is never tuned on")
+    results = [r for r in data["results"] if r["id"] not in args.exclude and not r.get("holdout")]
     probes = RuleStore(str(args.rules)).current().probes
     n_atk = sum(r["label"] == "attack" for r in results)
     n_ben = len(results) - n_atk

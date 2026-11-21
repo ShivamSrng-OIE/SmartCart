@@ -29,6 +29,7 @@ class CaseResult(BaseModel):
     system: str
     label: str | None
     vector: str | None
+    poisoned_modality: str | None = None
     product_id: str | None = None
     product_snapshot: dict | None = None
     n_fail_closed: int = 0
@@ -47,6 +48,7 @@ class CaseResult(BaseModel):
 
 class Report(BaseModel):
     systems: dict[str, metrics.Metrics]
+    by_modality: dict[str, dict[str, metrics.Metrics]] = {}
     n_errors: dict[str, int]
     cases: list[CaseResult]
     failures: list[dict[str, str]]
@@ -117,7 +119,9 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
             fields = dict(id=cid, system=system,
                           product_id=case.get("product_id") if isinstance(case.get("product_id"), str) else None,
                           label=label if isinstance(label, str) else None,
-                          vector=vector if isinstance(vector, str) else None)
+                          vector=vector if isinstance(vector, str) else None,
+                          poisoned_modality=case.get("poisoned_modality")
+                          if isinstance(case.get("poisoned_modality"), str) else None)
             async with semaphore:
                 try:
                     if load_error:
@@ -150,6 +154,13 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
         for system in systems:
             scores = [row.score for row in rows if row.system == system and row.score is not None]
             totals[system] = metrics.summarize(scores)
+        by_modality = {}
+        for system in systems:
+            groups = {}
+            for row in rows:
+                if row.system == system and row.score is not None and row.poisoned_modality is not None:
+                    groups.setdefault(row.poisoned_modality, []).append(row.score)
+            by_modality[system] = {name: metrics.summarize(scores) for name, scores in sorted(groups.items())}
         n_errors = {system: sum(r.error is not None for r in rows if r.system == system)
                     for system in systems}
         failures = [dict(case_id=row.id, id=row.id, vector=row.vector or "", system=row.system, reason=reason,
@@ -157,7 +168,7 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
                     for row in rows if (reason := row.failure_reason()) is not None]
         # Fail-closed verdicts are blocks (counted in ASR denominators), disclosed here.
         n_fail_closed = sum(row.n_fail_closed for row in rows)
-        report = Report(systems=totals, n_errors=n_errors, cases=rows, failures=failures,
+        report = Report(systems=totals, by_modality=by_modality, n_errors=n_errors, cases=rows, failures=failures,
                         meta=dict(meta, started_at=started_at, n_fail_closed=n_fail_closed))
         document = report.model_dump_json(indent=2)
         Report.model_validate_json(document)
@@ -198,6 +209,10 @@ def main(argv=None):
         print(f"{system:10} {report['meta']['adapters'][system]:14} {m['asr']:5.1%} "
               f"{m['benign_completion']:7.1%} {m['p50_ms']:8.2f} {m['p95_ms']:8.2f} "
               f"{m['dollars_defended']:10.2f} {errors:8d}")
+    for system, groups in report.get("by_modality", {}).items():
+        for name, m in groups.items():
+            print(f"  {system:10} {name:6} ASR {m['asr']:5.1%} (n={m['n_attack']})  "
+                  f"benign {m['benign_completion']:5.1%} (n={m['n_benign']})")
     print(path)
     return 0
 

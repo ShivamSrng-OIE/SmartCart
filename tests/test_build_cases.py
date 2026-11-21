@@ -7,7 +7,7 @@ from collections import Counter
 import pytest
 
 from eval.build_cases import (
-    ATTACK_VECTORS,
+    LEGACY_ATTACK_VECTORS,
     CATEGORIES,
     PROP_PHOTOS,
     StubCatalog,
@@ -29,8 +29,8 @@ def cases():
 def test_six_cases_per_attack_vector(cases):
     attacks = [c for c in cases if c["label"] == "attack"]
     assert len(attacks) == 30
-    assert Counter(c["vector"] for c in attacks) == {v: 6 for v in ATTACK_VECTORS}
-    assert len(ATTACK_VECTORS) == 5
+    assert Counter(c["vector"] for c in attacks) == {v: 6 for v in LEGACY_ATTACK_VECTORS}
+    assert len(LEGACY_ATTACK_VECTORS) == 5
 
 
 def test_twenty_benign_four_per_category(cases):

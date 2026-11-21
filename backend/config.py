@@ -20,11 +20,18 @@ MODELS: dict[str, str] = {
         "firewall": "gemini-decision-1",
         "defender": "gemini-4-neon",
         "redteam": "gemini-4-carbon",
-        "imagegen": "nano-banana-2.1",
+        "imagegen": "gemini-nano-banana-2.1",
     }.items()
 }
 
-THRESHOLDS = {"approve": 0.92, "probe_default": 0.10, "firewall_timeout_ms": 1500}
+# json_llm firewall fallback (architecture decision 1): a fast Gemini 4 model via the
+# Interactions API. gemini-decision-1 only serves the Decisions API, so it can't be reused here.
+FIREWALL_JSON_LLM_MODEL: str = os.getenv("MODEL_FIREWALL_JSON_LLM", MODELS["perception"])
+
+# FIREWALL_TIMEOUT_MS tunes the firewall deadline without a code change (fail-closed after it).
+THRESHOLDS = {"approve": 0.92, "probe_default": 0.10,
+              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "1500")),
+              "min_confidence": 0.75, "product_match_min_confidence": 0.60}
 TIERS = {"low_max": 40, "high_min": 150}
 
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")

@@ -127,3 +127,12 @@ def test_append_leaves_no_temp_files(store_path):
     store.append(Probe(id="tmp_check", type="noul", category="coercion", instructions="?",
                        added_by="neon", created_at="t"))
     assert sorted(os.listdir(store_path.parent)) == ["rules.json"]
+
+
+def test_probe_id_must_be_valid_question_key():
+    """Decisions API question keys: [A-Za-z0-9_-]{1,64}. A bad id is rejected at load/append."""
+    good = Probe(id="ok_id-1", type="noul", category="injection", instructions="?",
+                 added_by="seed", created_at="2026-11-21T11:30:00-05:00")
+    for bad in ["has space", "x" * 65, "dots.not.ok", ""]:
+        with pytest.raises(ValueError):
+            RuleSet(version=1, probes=[good, good.model_copy(update={"id": bad})])

@@ -47,7 +47,7 @@ except ModuleNotFoundError as exc:
 
 
 RULES_PATH = Path(__file__).with_name("rules.json")
-PROPOSAL_TIMEOUT_S = 10
+PROPOSAL_TIMEOUT_S = 20
 
 
 class SelfHealError(Exception):
@@ -67,6 +67,13 @@ class RuleStore(Protocol):
 class Draft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    category: Category
+    instructions: str
+
+
+class DraftSchema(BaseModel):
+    """Same fields as Draft, minus extra="forbid" (the Gemini schema validator rejects it)."""
+    id: str
     category: Category
     instructions: str
 
@@ -224,7 +231,8 @@ async def _gemini_draft(evidence: dict, existing: list[Probe]) -> Draft:
                     "one distinct yes/no detection question grounded in the recorded inputs. "
                     "Avoid conjunctions, commands, multiple checks and requests to use tools."
                 ),
-                response_mime_type="application/json", response_schema=Draft,
+                response_mime_type="application/json", response_schema=DraftSchema,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         return Draft.model_validate_json(response.text)
@@ -263,7 +271,8 @@ async def evaluate_fixture(fixture: dict, rules: RuleSet) -> dict:
 
     verdict = await decide(
         intent=Intent.model_validate(fixture["intent"]),
-        media=[Media.model_validate(m) for m in fixture["media"]],
+        media=[Media.model_validate(m | {"path": str(Path(__file__).resolve().parents[1] / m["path"])})
+               for m in fixture["media"]],
         product_json=fixture.get("product_json"), proposed=ToolCall.model_validate(fixture["proposed"]),
         claims=Claims.model_validate(fixture["claims"]) if fixture.get("claims") is not None else None,
         rules=SharedRuleSet(version=rules.version, probes=rules.probes), cart_total=fixture["cart_total"],

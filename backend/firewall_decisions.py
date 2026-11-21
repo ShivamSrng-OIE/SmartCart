@@ -91,14 +91,16 @@ def _fires(p: float, threshold: float) -> bool:
 
 
 def gate(action_probs: dict[str, float], results: list[ProbeResult], probes: list[Probe],
-         tier: str, severity: int) -> str:
+         tier: str, severity: int, confidence: float | None = None) -> str:
     """Architecture section 0 decision 5.
 
     hard_block_quarantine: the tier is spend_request (create_spend_request is never approved;
         nothing in our flow needs one), an injection/spend_hijack/coercion/split_payload probe
         fires, attack_severity is 3, or a fired result names a probe we don't know.
     escalate_to_neon_swap: any other probe fires (pack_lie, privacy, promo_benign) or
-        P(approve_checkout) < approve threshold.
+        P(approve_checkout) < approve threshold, or the firewall_action confidence is below
+        THRESHOLDS["min_confidence"] (defaults to the largest action probability when the
+        backend reports none).
     approve_checkout: otherwise.
     """
     by_id = {p.id: p for p in probes}
@@ -112,7 +114,10 @@ def gate(action_probs: dict[str, float], results: list[ProbeResult], probes: lis
             or fired_categories & HARD_CATEGORIES):
         return "hard_block_quarantine"
     p_approve = action_probs.get("approve_checkout", 0.0)
-    if fired_categories or not (p_approve >= config.THRESHOLDS["approve"]):
+    if confidence is None:
+        confidence = max(action_probs.values(), default=0.0)
+    if (fired_categories or not (p_approve >= config.THRESHOLDS["approve"])
+            or not (confidence >= config.THRESHOLDS["min_confidence"])):
         return "escalate_to_neon_swap"
     return "approve_checkout"
 
@@ -122,6 +127,12 @@ def active_probes(rules: RuleSet, product_json: dict | None) -> list[Probe]:
     if product_json is None:
         return [p for p in rules.probes if p.category not in NEEDS_PRODUCT]
     return list(rules.probes)
+
+
+def backend_model(backend: str | None = None) -> str:
+    """The model ID behind a firewall backend (for Verdict.model and trace events)."""
+    backend = backend or config.FIREWALL_BACKEND
+    return config.FIREWALL_JSON_LLM_MODEL if backend == "json_llm" else config.MODELS["firewall"]
 
 
 # --- request building (shared) ----------------------------------------------------------------
@@ -160,6 +171,7 @@ class _Scores(NamedTuple):
     probe_p: dict[str, float]
     action_probs: dict[str, float]
     severity: int
+    confidence: float
 
 
 def _prob(x, what: str) -> float:
@@ -231,7 +243,9 @@ def _parse_decisions_response(raw, probe_ids: list[str]) -> _Scores:
     probe_p = {pid: _prob(_field(answers[pid], "noul"), pid) for pid in probe_ids}
     action_probs = _action_probs(_field(answers[ACTION_Q], "probabilities"))
     severity = _severity(_field(answers[SEVERITY_Q], "score"))
-    return _Scores(probe_p, action_probs, severity)
+    reported = _field(answers[ACTION_Q], "confidence")
+    confidence = _prob(reported, "firewall_action confidence") if reported is not None else max(action_probs.values())
+    return _Scores(probe_p, action_probs, severity, confidence)
 
 
 # --- backend: json_llm fallback ---------------------------------------------------------------
@@ -268,6 +282,13 @@ def _json_llm_schema(probe_ids: list[str]) -> dict:
     }
 
 
+def _json_llm_thinking() -> str:
+    """"minimal" is never used on Hydrogen or Neon (team rule); they get "low" instead."""
+    if config.FIREWALL_JSON_LLM_MODEL in (config.MODELS["victim"], config.MODELS["defender"]):
+        return "low"
+    return JSON_LLM_THINKING
+
+
 async def _call_json_llm(request: dict, timeout_s: float) -> dict:
     """The only place that talks to Gemini for the json_llm backend: one Interactions API call
     with a JSON response schema and no tools. Uses config.FIREWALL_JSON_LLM_MODEL."""
@@ -276,7 +297,7 @@ async def _call_json_llm(request: dict, timeout_s: float) -> dict:
         input=[*gemini.content_blocks(request["media"]), {"type": "text", "text": request["prompt"]}],
         response_format={"type": "text", "mime_type": "application/json",
                          "schema": _json_llm_schema(request["probe_ids"])},
-        generation_config={"thinking_level": JSON_LLM_THINKING},
+        generation_config={"thinking_level": _json_llm_thinking()},
         timeout=timeout_s,
     )
     return json.loads(gemini.output_text(resp))
@@ -290,7 +311,8 @@ def _parse_json_llm_response(raw, probe_ids: list[str]) -> _Scores:
         raise ValueError(f"json_llm response missing probes: {missing[:5]}"
                          + (f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""))
     probe_p = {i: _prob(raw["probes"][i], i) for i in probe_ids}
-    return _Scores(probe_p, _action_probs(raw.get("firewall_action")), _severity(raw.get("attack_severity")))
+    action_probs = _action_probs(raw.get("firewall_action"))
+    return _Scores(probe_p, action_probs, _severity(raw.get("attack_severity")), max(action_probs.values()))
 
 
 # --- decide -----------------------------------------------------------------------------------
@@ -301,6 +323,7 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
     cancellation): every failure becomes a fail-closed hard_block_quarantine Verdict."""
     t0 = time.perf_counter()
     backend = config.FIREWALL_BACKEND
+    model = backend_model(backend)
     timeout_ms = config.THRESHOLDS["firewall_timeout_ms"]
 
     def elapsed_ms() -> int:
@@ -308,7 +331,7 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
 
     def fail_closed(reason: str, tier: str = "normal") -> Verdict:
         v = Verdict(action="hard_block_quarantine", action_probs={}, probes=[], severity=0,
-                    latency_ms=elapsed_ms(), tier=tier, backend=backend, error=reason)
+                    latency_ms=elapsed_ms(), tier=tier, backend=backend, error=reason, model=model)
         log.warning("firewall fail-closed (%s, %d ms): %s", backend, v.latency_ms, reason)
         return v
 
@@ -336,8 +359,9 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
     by_id = {p.id: p for p in probes}
     results = [ProbeResult(id=i, p=scores.probe_p[i], fired=_fires(scores.probe_p[i], threshold_for(by_id[i], tier)))
                for i in ids]
-    action = gate(scores.action_probs, results, probes, tier, scores.severity)
+    action = gate(scores.action_probs, results, probes, tier, scores.severity, scores.confidence)
     v = Verdict(action=action, action_probs=scores.action_probs, probes=results, severity=scores.severity,
+                model=model, confidence=scores.confidence,
                 latency_ms=elapsed_ms(), tier=tier, backend=backend)
     log.info("firewall %s tier=%s action=%s fired=%s latency_ms=%d", backend, tier, action,
              [r.id for r in results if r.fired], v.latency_ms)

@@ -105,6 +105,11 @@ How we use it (`backend/firewall_decisions.py`):
   question sent, a missing or out-of-range probability, a score outside 0 to 3, or
   `prompt_feedback.block_reason` being set.
 
+### Second Decisions call: camera product matching (`backend/product_match.py`)
+Same `_call_decisions`, outside the firewall's critical path. Input is the image blocks plus one text block listing up to 5 catalog candidates. There is one question: `{"product_in_photo": {"type": "choice", "criteria": {"p0": ..., "p4": ..., "other": ...}}}`. Keys are `p0..p4` because Shop GIDs are not valid question keys. It reads `answers.product_in_photo.choice` and `.confidence`, and uses the match only at confidence >= 0.60.
+
+Check the Decisions API from a laptop with a key: `uv run python scripts/check_decisions.py` (one noul question; prints the answer and latency, or the exact error).
+
 ## Interactions API (Argon perception, json_llm firewall fallback)
 
 **Source: the team's notes from the guide** (`client.interactions.create(model=..., input=[...],
@@ -126,6 +131,7 @@ data = json.loads(resp.output_text)                     # a ```json fence is str
 ```
 
 - No `tools` are ever passed (Argon must have none; the firewall needs none).
+- Argon sends video blocks with `"processing": "agentic"` (a typed SDK value, `static | agentic`) so it scrubs frames. The firewall leaves video at the default to stay fast.
 - Argon's schema is `Claims.model_json_schema()`. The json_llm schema is
   `{"probes": {id: number 0-1}, "firewall_action": {action: number 0-1}, "attack_severity": int 0-3}`.
 - Empty `output_text` or invalid JSON: the firewall fails closed, and Argon returns empty `Claims`

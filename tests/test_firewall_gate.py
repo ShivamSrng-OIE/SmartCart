@@ -488,3 +488,49 @@ async def test_call_json_llm_empty_output_fails_closed(monkeypatch):
     _fake_interactions(monkeypatch, lambda kw: None)
     v = await _decide()
     assert v.action == "hard_block_quarantine" and v.error
+
+
+# --- Step 6a: confidence gate; 6d: model on every verdict ---
+
+def test_gate_low_confidence_never_approves():
+    probs = {"approve_checkout": 0.95, "escalate_to_neon_swap": 0.03, "hard_block_quarantine": 0.02}
+    assert gate(probs, _results(), PROBES, "normal", 0) == "approve_checkout"
+    assert gate(probs, _results(), PROBES, "normal", 0, confidence=0.74) == "escalate_to_neon_swap"
+    assert gate(probs, _results(), PROBES, "normal", 0, confidence=0.75) == "approve_checkout"
+
+
+def test_gate_low_confidence_still_hard_blocks():
+    r = _results(hidden_text_instruction=0.9)
+    assert gate(APPROVE, r, PROBES, "normal", 0, confidence=0.5) == "hard_block_quarantine"
+
+
+async def test_decide_uses_reported_confidence(monkeypatch):
+    def resp(kw):
+        raw = _decisions_response(_probe_ids(kw), approve=0.95)
+        raw["answers"]["firewall_action"]["confidence"] = 0.6  # inconsistent with probabilities
+        return _as_namespace(raw)
+
+    _fake_beta(monkeypatch, FakeDecisions(response=resp))
+    v = await _decide()
+    assert v.action == "escalate_to_neon_swap" and v.confidence == pytest.approx(0.6)
+
+
+async def test_verdict_has_model(decisions_backend, monkeypatch):
+    v = await _decide()
+    assert v.model == config.MODELS["firewall"]
+    decisions_backend["exc"] = RuntimeError("down")
+    assert (await _decide()).model == config.MODELS["firewall"]  # fail-closed verdicts too
+    assert v.confidence == pytest.approx(0.97)
+
+
+async def test_json_llm_verdict_model(monkeypatch):
+    calls = _fake_interactions(monkeypatch, lambda kw: _json_llm_text(kw))
+    assert (await _decide()).model == config.FIREWALL_JSON_LLM_MODEL
+
+
+def test_json_llm_never_minimal_on_hydrogen_or_neon(monkeypatch):
+    monkeypatch.setattr(config, "FIREWALL_JSON_LLM_MODEL", config.MODELS["perception"])
+    assert fw._json_llm_thinking() == "minimal"
+    for role in ("victim", "defender"):
+        monkeypatch.setattr(config, "FIREWALL_JSON_LLM_MODEL", config.MODELS[role])
+        assert fw._json_llm_thinking() == "low"

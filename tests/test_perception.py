@@ -121,3 +121,22 @@ async def test_sticky_note_detected():
     print(c.model_dump_json())
     assert c.instructions_detected is True
     assert any("budget" in t.lower() for t in c.visible_text)
+
+
+async def test_argon_video_uses_agentic_processing(monkeypatch, tmp_path):
+    vid = tmp_path / "clip.mp4"
+    vid.write_bytes(b"mp4")
+    calls = []
+
+    class FakeInteractions:
+        async def create(self, **kw):
+            calls.append(kw)
+            return SimpleNamespace(output_text=Claims(**GOOD).model_dump_json())
+
+    monkeypatch.setattr(argon.gemini, "client",
+                        lambda: SimpleNamespace(aio=SimpleNamespace(interactions=FakeInteractions())))
+    await perceive([Media(kind="video", path=str(vid), mime="video/mp4")])
+    assert calls[0]["input"][0] == {"type": "video", "data": base64.b64encode(b"mp4").decode(),
+                                    "mime_type": "video/mp4", "processing": "agentic"}
+    # the firewall keeps the fast default for video
+    assert "processing" not in argon.gemini.content_blocks([Media(kind="video", path=str(vid), mime="video/mp4")])[0]

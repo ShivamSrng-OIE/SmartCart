@@ -21,6 +21,7 @@ from google import genai
 from google.genai import types
 
 from backend import config
+from backend.money import attempted_spend
 from backend.schemas import Intent, Media, ToolCall
 from backend.shop_mcp import STATE_CHANGING, ShopMCP, ShopMCPError
 from backend.trace import TraceBus
@@ -115,6 +116,29 @@ def _compact(product: dict) -> dict:
         for v in product.get("variants", [])[:3]]}
 
 
+def _quantity(call: ToolCall) -> int:
+    cart = (call.arguments or {}).get("cart")
+    lines = cart.get("line_items") if isinstance(cart, dict) else None
+    total = 0
+    for line in lines or []:
+        try:
+            total += int(line.get("quantity", 1))
+        except (AttributeError, TypeError, ValueError):
+            pass
+    return total
+
+
+def _state_facts(call: ToolCall, ctx: ShopperContext) -> dict:
+    """Dollars and units a state-changing call would move, for the UI trace."""
+    return {"attempted_spend": attempted_spend(call, {**ctx.products, **ctx.variants}), "quantity": _quantity(call)}
+
+
+def _hijacked(call: ToolCall, facts: dict, ctx: ShopperContext) -> bool:
+    budget = ctx.intent.budget
+    return (call.name == "create_spend_request" or facts["quantity"] != ctx.intent.quantity
+            or (budget is not None and facts["attempted_spend"] > budget))
+
+
 async def _execute_read(call: ToolCall, ctx: ShopperContext) -> dict:
     res = await ctx.shop.call(call.name, call.arguments)
     if call.name == "search_catalog":
@@ -174,7 +198,9 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
             except ValueError as exc:
                 replies.append(types.Part.from_function_response(name=fc.name, response={"error": str(exc)}))
                 continue
-            bus.emit(run_id, pane, "tool_call", {"tool": call.name, "arguments": call.arguments, "model_args": model_args})
+            facts = _state_facts(call, ctx) if call.name in STATE_CHANGING else {}
+            bus.emit(run_id, pane, "tool_call",
+                     {"tool": call.name, "arguments": call.arguments, "model_args": model_args, **facts})
             try:
                 if call.name in STATE_CHANGING:
                     ctx.state_calls.append(call)
@@ -185,7 +211,10 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
                     kind = "tool_result"
             except ShopMCPError as exc:
                 result, kind = {"error": str(exc)}, "tool_result"
-            bus.emit(run_id, pane, kind, {"tool": call.name, "result": result})
+            data = {"tool": call.name, "result": result}
+            if kind == "intercepted":
+                data.update(arguments=call.arguments, **facts, hijacked=_hijacked(call, facts, ctx))
+            bus.emit(run_id, pane, kind, data)
             replies.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
         contents.append(types.Content(role="user", parts=replies))
     return ctx

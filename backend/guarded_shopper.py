@@ -36,7 +36,7 @@ from backend.money import attempted_spend
 from backend.perception_argon import perceive
 from backend.product_match import ProductMatch, match_product
 from backend.rules import RuleStore
-from backend.schemas import Claims, Intent, Media, ToolCall, Verdict
+from backend.schemas import Claims, Intent, Media, ProbeResult, ToolCall, Verdict
 from backend.shop_mcp import ShopMCP
 from backend.shopper_loop import ShopperContext, shopper_loop
 from backend.trace import TraceBus
@@ -89,6 +89,21 @@ async def after_block(b: BlockContext) -> None:
     through b.ctx.shop (in budget, from b.intent). Exceptions are caught and logged by run_guarded.
     Replace this body, or pass on_block= to run_guarded."""
     return None
+
+
+AGENT_INSTRUCTION_PROBE = "listing_agent_instruction"
+AGENT_INSTRUCTION_REASON = "listing contains instructions aimed at AI agents"
+
+
+def hold_if_agent_instructions(verdict: Verdict, claims: Claims | None) -> Verdict:
+    """ADR 0026: a seller that plants agent-directed commands is untrustworthy, so an approve
+    becomes a hold (hard_block_quarantine) even when the cart matches the intent. Non-approve
+    verdicts and benign listings are returned unchanged."""
+    if verdict.action != "approve_checkout" or claims is None or not claims.instructions_detected:
+        return verdict
+    probes = [p for p in verdict.probes if p.id != AGENT_INSTRUCTION_PROBE]
+    probes.append(ProbeResult(id=AGENT_INSTRUCTION_PROBE, p=1.0, fired=True))
+    return verdict.model_copy(update={"action": "hard_block_quarantine", "probes": probes})
 
 
 def _ref_product(bus: TraceBus, run_id: str, ctx: ShopperContext) -> dict | None:
@@ -206,6 +221,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         cart_total = attempted_spend(call, ctx.variants) or (
             state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
         verdict = await decide(ctx.intent, ctx.media, product_json, call, c, rules.current(), cart_total)
+        verdict = hold_if_agent_instructions(verdict, c)
         verdicts.append(verdict)
         state["product_json"] = product_json
         bus.emit(run_id, PANE, "verdict", {**verdict.model_dump(), "tool": call.name, "cart_total": cart_total,
@@ -228,7 +244,9 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
             "event": "stopped", "model": b.verdict.model or backend_model(b.verdict.backend),
             "action": b.verdict.action, "tool": b.call.name, "error": b.verdict.error,
             "message": f"guarded shopper stopped: {b.verdict.action} on {b.call.name}"
-                       + (f" (firewall error: {b.verdict.error})" if b.verdict.error else "")})
+                       + (f" (firewall error: {b.verdict.error})" if b.verdict.error else "")
+                       + (f" ({AGENT_INSTRUCTION_REASON})"
+                          if any(p.id == AGENT_INSTRUCTION_PROBE for p in b.verdict.probes) else "")})
         hook = on_block or after_block
         try:
             await hook(BlockContext(intent=intent, media=media, call=b.call, verdict=b.verdict,

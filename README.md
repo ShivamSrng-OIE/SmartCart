@@ -85,8 +85,9 @@ All numbers come from files in `eval/results/` and `eval/golden/`. None are type
 
 ## 🏗️ Architecture
 
-<!-- TODO: add the architecture diagram image (docs/images/architecture.png) -->
-![Architecture diagram placeholder](docs/images/architecture-placeholder.png)
+![CartTrap system architecture](docs/images/architecture.png)
+
+<sub>Source: [`docs/images/architecture.svg`](docs/images/architecture.svg)</sub>
 
 ### Simple flow
 

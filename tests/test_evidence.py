@@ -104,14 +104,43 @@ async def test_audio_segment_and_whole_recording_waveform(ev, tmp_path, model, h
         assert wav.readframes(100) == struct.pack("<hh", 0, -2000) * 100
 
 
+async def test_audio_segment_overshooting_the_file_is_clamped(ev, tmp_path, model):
+    source = tmp_path / "voice.wav"
+    with wave.open(str(source), "wb") as wav:
+        wav.setparams((1, 2, 100, 0, "NONE", "not compressed"))
+        wav.writeframes(struct.pack("<h", 1000) * 200)  # 2.0 s
+    model({"modality": "audio", "start_s": 1.2, "end_s": 2.4, "transcript": "overshoots"})
+    item, = await ev.locate([Media(kind="audio", path=str(source), mime="audio/wav")], None, "over")
+    assert item["start_s"] == 1.2 and item["end_s"] == 2.0 and item["transcript"] == "overshoots"
+    model({"modality": "audio", "start_s": 3.0, "end_s": 4.0, "transcript": "entirely past the end"})
+    assert await ev.locate([Media(kind="audio", path=str(source), mime="audio/wav")], None, "past") == []
+
+
 @pytest.mark.parametrize("answer", [
     RuntimeError("unavailable"),
     {"modality": "image", "box": [100, 0, 50, 10], "text": "inverted"},
 ])
-async def test_failure_discards_batch(ev, tmp_path, model, answer):
+async def test_one_bad_file_keeps_the_others(ev, tmp_path, model, answer):
+    """A failing attachment is skipped; evidence found in the other files is still shown."""
     source = picture(tmp_path)
-    model({"modality": "image", "box": [0, 0, 500, 500], "text": "sample"}, answer)
-    assert await ev.locate([source, source], None, "batch") == []
+    # the second file fails on both attempts (each file gets one retry)
+    model({"modality": "image", "box": [0, 0, 500, 500], "text": "sample"}, answer, answer)
+    items = await ev.locate([source, source], None, "batch")
+    assert len(items) == 1 and items[0]["text"] == "sample"
+    assert len(list(ev.EVIDENCE_DIR.rglob("*.jpg"))) == 1
+
+
+async def test_transient_error_is_retried_once(ev, tmp_path, model):
+    source = picture(tmp_path)
+    create = model(RuntimeError("503"), {"modality": "image", "box": [0, 0, 500, 500], "text": "second try"})
+    items = await ev.locate([source], None, "retry")
+    assert create.await_count == 2 and items[0]["text"] == "second try"
+
+
+async def test_every_file_failing_publishes_nothing(ev, tmp_path, model):
+    source = picture(tmp_path)
+    model(*[RuntimeError("down")] * 4)
+    assert await ev.locate([source, source], None, "none") == []
     assert not list(ev.EVIDENCE_DIR.rglob("*.jpg"))
 
 

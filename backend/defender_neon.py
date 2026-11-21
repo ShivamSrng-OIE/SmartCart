@@ -19,8 +19,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-NEON_TIMEOUT_S = 8.0
-ON_BLOCK_TIMEOUT_S = 10.0
+# Measured live: the Neon wording call takes ~15-17 s. An 8 s deadline meant the written
+# explanation never arrived and every card fell back to the generic template. The template card
+# and then the safe cart are emitted first, so nothing on screen waits for the wording.
+NEON_TIMEOUT_S = 30.0
+ON_BLOCK_TIMEOUT_S = 45.0
 PROMPT_PATH = Path(__file__).parent / "prompts" / "neon_fraud_card.md"
 
 
@@ -99,7 +102,7 @@ def _media_claimed(claims: Claims | None) -> list[str]:
     if claims.audio_transcript:
         out.append(claims.audio_transcript)
     if claims.pack_count_claim:
-        out.append(f"{claims.pack_count_claim}-pack")
+        out.append(f"Count claimed: {claims.pack_count_claim}")
     return out
 
 
@@ -117,7 +120,7 @@ def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCal
         price = sells.get("price")
         price_text = f" at ${price:,.2f}" if price is not None else ""
         parts.append(
-            f'The media claims a {claims.pack_count_claim}-pack, but Shopify lists "{sells["title"]}"{price_text}.'
+            f'The media mentions a count of {claims.pack_count_claim}, but Shopify lists "{sells["title"]}"{price_text}.'
         )
     elif sells is None:
         parts.append("The product could not be verified against Shopify.")
@@ -293,6 +296,12 @@ async def on_block(b: BlockContext) -> FraudCard | None:
         try:
             async with asyncio.timeout(ON_BLOCK_TIMEOUT_S):
                 safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
+                if safe_cart is not None:
+                    # Show the alternative now; the Neon wording (slow) replaces the text when it lands.
+                    card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total)
+                    card.safe_cart = safe_cart
+                    card.dollars_defended = dollars_defended(b.cart_total, safe_cart.get("total"))
+                    b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
                 card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
                 b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
         except Exception as exc:

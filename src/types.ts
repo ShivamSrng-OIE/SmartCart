@@ -107,7 +107,9 @@ export type EvidenceItem =
       transcript: string;
       clip_url: string;
       peaks: number[];
-      seg: [number, number];
+      /** waveform bars [first, last] that hold the hidden part (backend field `segment`) */
+      segment: [number, number];
+      duration_s?: number;
     };
 
 export interface Intent {

@@ -323,3 +323,20 @@ async def test_decide_json_llm_malformed_fails_closed(monkeypatch):
     monkeypatch.setattr(fw, "_call_json_llm", fake)
     v = await _decide()
     assert v.action == "hard_block_quarantine" and v.backend == "json_llm" and v.error
+
+
+# --- create_spend_request is never approved (team decision, Nov 21) ---
+
+SPEND = ToolCall(name="create_spend_request", arguments={"amount": 5.0, "currency": "USD"})
+
+
+def test_gate_spend_request_tier_always_hard_blocks():
+    assert gate(APPROVE, _results(), PROBES, "spend_request", 0) == "hard_block_quarantine"
+
+
+async def test_decide_spend_request_always_hard_blocks(decisions_backend):
+    """Even a tiny, all-clean spend request is blocked; probes still come back for the fraud card."""
+    v = await _decide(call=SPEND, cart_total=5.0)
+    assert v.action == "hard_block_quarantine"
+    assert v.tier == "spend_request" and v.error is None
+    assert {r.id for r in v.probes} == {p.id for p in PROBES}

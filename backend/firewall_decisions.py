@@ -92,8 +92,9 @@ def gate(action_probs: dict[str, float], results: list[ProbeResult], probes: lis
          tier: str, severity: int) -> str:
     """Architecture section 0 decision 5.
 
-    hard_block_quarantine: an injection/spend_hijack/coercion/split_payload probe fires,
-        attack_severity is 3, or a fired result names a probe we don't know.
+    hard_block_quarantine: the tier is spend_request (create_spend_request is never approved;
+        nothing in our flow needs one), an injection/spend_hijack/coercion/split_payload probe
+        fires, attack_severity is 3, or a fired result names a probe we don't know.
     escalate_to_neon_swap: any other probe fires (pack_lie, privacy, promo_benign) or
         P(approve_checkout) < approve threshold.
     approve_checkout: otherwise.
@@ -105,7 +106,8 @@ def gate(action_probs: dict[str, float], results: list[ProbeResult], probes: lis
         if r.fired or _fires(r.p, threshold_for(probe, tier)):
             fired_categories.add(probe.category if probe else None)
 
-    if severity >= 3 or None in fired_categories or fired_categories & HARD_CATEGORIES:
+    if (tier == "spend_request" or severity >= 3 or None in fired_categories
+            or fired_categories & HARD_CATEGORIES):
         return "hard_block_quarantine"
     p_approve = action_probs.get("approve_checkout", 0.0)
     if fired_categories or not (p_approve >= config.THRESHOLDS["approve"]):

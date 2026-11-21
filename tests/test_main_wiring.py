@@ -9,8 +9,8 @@ from backend.shop_mcp import ShopMCP
 async def test_guarded_pipeline_calls_run_guarded(monkeypatch):
     seen = {}
 
-    async def fake_run_guarded(intent, media, product_ref, bus, run_id, shop, rules):
-        seen.update(intent=intent, shop=shop, rules=rules, ref=product_ref)
+    async def fake_run_guarded(intent, media, product_ref, bus, run_id, shop, rules, on_block=None):
+        seen.update(intent=intent, shop=shop, rules=rules, ref=product_ref, on_block=on_block)
 
     monkeypatch.setattr(main, "run_guarded", fake_run_guarded)
     assert main.app.state.pipelines["guarded"] is main.guarded_pipeline
@@ -20,6 +20,8 @@ async def test_guarded_pipeline_calls_run_guarded(monkeypatch):
     assert isinstance(seen["shop"], ShopMCP) and seen["shop"].dry_run is False
     assert isinstance(seen["rules"], RuleStore) and seen["rules"] is main.RULES
     assert seen["rules"].current().version >= 1 and seen["ref"] == "gid://p/1"
+    assert seen["on_block"] is main.defender_on_block  # ADR m4/0010
+    assert main.app.state.rules is main.RULES  # ADR m4/0009
 
 
 async def test_run_uses_parse_intent(monkeypatch):

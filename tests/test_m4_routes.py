@@ -137,6 +137,7 @@ async def test_launch_redteam_calls_importable_launcher(client, monkeypatch):
 
     assert response.status_code == 200
     run_id = response.json()["run_id"]
+    _wait_events(http.app.state.bus, run_id)
     assert run_id == calls[0][2]
     assert calls[0][:2] == ("sku-7", 2)
 

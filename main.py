@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.defender_neon import on_block as defender_on_block
 from backend.app_routes import app_router
+from backend.evidence_routes import evidence_router
 from backend.firewall_decisions import warm_up
 from backend.guarded_shopper import run_guarded
 from backend.intent import parse_intent
@@ -65,6 +66,7 @@ app.state.bus = TraceBus()
 app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
 app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
 app.include_router(app_router)  # /api/rules and /api/dataset (ADR m4/0021)
+app.include_router(evidence_router)
 app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 

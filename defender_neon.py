@@ -278,17 +278,28 @@ async def on_block(b: BlockContext) -> FraudCard | None:
         b.bus.emit(b.run_id, "guarded", "log", {"level": "error", "event": "fraud_card",
                                                 "message": f"fraud card failed: {type(exc).__name__}"})
         return None
-    safe_cart = None
-    try:
-        async with asyncio.timeout(ON_BLOCK_TIMEOUT_S):
-            safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
-            card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
-            b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
-    except Exception as exc:
-        # Shop errors can contain access-keyed cart URLs: log the type only.
-        log.warning("Neon block handler failed: %s", type(exc).__name__)
-        b.bus.emit(b.run_id, "guarded", "log", {"level": "warn", "event": "safe_swap",
-                                                "message": f"safe swap/Neon unavailable: {type(exc).__name__}"})
+    async def emit_evidence():
+        from backend.evidence import locate
+
+        try:
+            items = await locate(b.media, b.claims, b.run_id)
+            if items:
+                b.bus.emit(b.run_id, "guarded", "evidence", {"items": items})
+        except Exception as exc:
+            log.warning("evidence event unavailable: %s", type(exc).__name__)
+
+    async with asyncio.TaskGroup() as group:
+        group.create_task(emit_evidence())
+        try:
+            async with asyncio.timeout(ON_BLOCK_TIMEOUT_S):
+                safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
+                card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
+                b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
+        except Exception as exc:
+            # Shop errors can contain access-keyed cart URLs: log the type only.
+            log.warning("Neon block handler failed: %s", type(exc).__name__)
+            b.bus.emit(b.run_id, "guarded", "log", {"level": "warn", "event": "safe_swap",
+                                                    "message": f"safe swap/Neon unavailable: {type(exc).__name__}"})
     return card
 
 

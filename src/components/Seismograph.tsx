@@ -37,7 +37,7 @@ function buildLights(rules: RuleSet, verdict?: Verdict): Light[] {
     .map(({ probe, result }) => ({ probe, result }));
 }
 
-export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verdict?: Verdict; checking: boolean }) {
+export function Seismograph({ rules, rulesLive = true, verdict, checking }: { rules: RuleSet; rulesLive?: boolean; verdict?: Verdict; checking: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const lineRef = useRef<SVGPolylineElement>(null);
   const scanRef = useRef<SVGRectElement>(null);
@@ -115,6 +115,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
           <h3 className="text-[15px] font-semibold tracking-tight">Threat seismograph</h3>
           <span className="tnum text-xs text-ink-3">
             {lights.length} probes · rules v{rules.version}
+            {!rulesLive && <span title="GET /api/rules isn't serving yet; showing the bundled sample rule set"> · sample</span>}
           </span>
         </div>
         {evaluated ? (

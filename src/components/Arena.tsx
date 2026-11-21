@@ -44,12 +44,14 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
 export function Arena({
   mode,
   rules,
+  rulesLive,
   onSwitchToReplay,
   product,
   onProduct,
 }: {
   mode: Mode;
   rules: RuleSet;
+  rulesLive: boolean;
   onSwitchToReplay: () => void;
   product: ProductRef | null;
   onProduct: (p: ProductRef | null) => void;
@@ -106,7 +108,7 @@ export function Arena({
           </div>
           <VerdictBanner verdict={state.verdict} checking={checking || phase === "starting"} />
           <div className="mt-5">
-            <Seismograph rules={rules} verdict={state.verdict} checking={checking} />
+            <Seismograph rules={rules} rulesLive={rulesLive} verdict={state.verdict} checking={checking} />
           </div>
         </section>
 

@@ -9,6 +9,7 @@ import { SCENARIOS } from "./config";
 import { useBackend } from "./hooks/useBackend";
 import { useTheme } from "./hooks/useTheme";
 import { gsap, useGSAP, d } from "./lib/motion";
+import { WifiOff } from "lucide-react";
 
 function viewFromHash(): View {
   const h = window.location.hash.replace(/^#\/?/, "");
@@ -61,10 +62,30 @@ export default function App() {
   return (
     <div className="min-h-dvh">
       <Header view={view} onView={go} theme={theme} onTheme={toggle} mode={backend.mode} online={backend.online} onMode={backend.setMode} />
+      {backend.mode === "live" && backend.online === false && (
+        <div className="border-b border-warn-line bg-warn-soft">
+          <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5">
+            <p className="flex items-center gap-2 text-[13px] text-warn">
+              <WifiOff className="size-4 shrink-0" />
+              <span>
+                <span className="font-semibold">Backend not reachable.</span> Live runs need the API on localhost:8000.
+              </span>
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button onClick={backend.refresh} className="btn-secondary h-7 rounded-md px-2.5 text-xs font-medium">
+                Retry
+              </button>
+              <button onClick={() => backend.setMode("replay")} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
+                Use recorded runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <main ref={mainRef} className="mx-auto w-full max-w-[1920px] px-3 pt-3 pb-24 sm:px-5 sm:pt-5 md:pb-5">
         <div key={view} className={view === "arena" ? "" : "flex flex-col gap-4"}>
           {view === "arena" && (
-            <Arena mode={backend.mode} rules={backend.rules} onSwitchToReplay={() => backend.setMode("replay")} product={product} onProduct={setProduct} />
+            <Arena mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={() => backend.setMode("replay")} product={product} onProduct={setProduct} />
           )}
           {view === "catalog" && (
             <Catalog
@@ -76,7 +97,7 @@ export default function App() {
               }}
             />
           )}
-          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} />}
+          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} onSwitchToReplay={() => backend.setMode("replay")} />}
           {view === "scoreboard" && <Scoreboard results={backend.evalResults} source={backend.evalSource} />}
         </div>
       </main>

@@ -148,8 +148,58 @@ async def test_argon_runs_concurrently(fakes, monkeypatch, tmp_path):
     _, s0, s1 = shop.sent[0]
     assert shop.sent[0][0] == "search_catalog"
     assert p0 < s1 and s0 < p1                       # perception and the first search overlap in time
-    assert fakes["decide_calls"][0]["claims"] == CLAIMS  # awaited before the first decide
+    # Argon (0.2 s) was still running at the first decide: the firewall did not wait for it
+    assert fakes["decide_calls"][0]["claims"] is None
     assert res.claims == CLAIMS
+
+
+async def test_slow_perceive_does_not_delay_decide(fakes, monkeypatch, tmp_path):
+    """The firewall never waits for Argon: decide() runs with claims=None while perception is
+    still going, and Argon's perception event is still emitted when it finishes."""
+    t = {}
+
+    async def slow_perceive(media):
+        await asyncio.sleep(0.5)
+        t["perceive_done"] = time.perf_counter()
+        return CLAIMS
+
+    orig = gs.decide
+
+    async def timed_decide(*a, **kw):
+        t.setdefault("decide_at", time.perf_counter())
+        return await orig(*a, **kw)
+
+    monkeypatch.setattr(gs, "perceive", slow_perceive)
+    monkeypatch.setattr(gs, "decide", timed_decide)
+    t0 = time.perf_counter()
+    res, bus = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(), media=_img(tmp_path))
+    assert t["decide_at"] - t0 < 0.25 and t["decide_at"] < t["perceive_done"]  # not held for 0.5 s
+    assert fakes["decide_calls"][0]["claims"] is None
+    events = bus.events("r")
+    verdict_i = next(i for i, e in enumerate(events) if e.kind == "verdict")
+    perc = [i for i, e in enumerate(events) if e.kind == "log" and e.data.get("event") == "perception"]
+    assert len(perc) == 1 and perc[0] > verdict_i  # still shown, once, after it finished
+    assert res.claims == CLAIMS
+
+
+async def test_finished_perception_claims_are_passed(fakes, monkeypatch, tmp_path):
+    """If Argon is already done when the cart needs a decision, its Claims go to the firewall."""
+    model = CountingModel([SEARCH, CART, None])
+    await _run(model, LiveFakeShop(search_delay=0.05), media=_img(tmp_path))  # fake perceive is instant
+    assert fakes["decide_calls"][0]["claims"] == CLAIMS
+
+
+async def test_blocked_with_slow_perception_still_stops(fakes, monkeypatch, tmp_path):
+    async def slow_perceive(media):
+        await asyncio.sleep(0.3)
+        return CLAIMS
+
+    monkeypatch.setattr(gs, "perceive", slow_perceive)
+    fakes["actions"] = ["hard_block_quarantine"]
+    model = CountingModel([SEARCH, CART, SEARCH, None])
+    res, bus = await _run(model, LiveFakeShop(), media=_img(tmp_path))
+    assert res.blocked_call is not None and model.calls == 2  # loop stopped right after the block
+    assert fakes["decide_calls"][0]["claims"] is None
 
 
 # --- extra ---
@@ -222,24 +272,135 @@ async def test_product_json_from_variant_being_bought(fakes):
     assert fakes["decide_calls"][0]["product_json"]["id"] == PRODUCT["id"]
 
 
-async def test_product_json_from_camera_match(fakes, monkeypatch, tmp_path):
-    other = {"id": "gid://shopify/p/2", "title": "Real thing in the photo", "variants": []}
+def _img(tmp_path):
+    img = tmp_path / "f.jpg"
+    img.write_bytes(b"jpg")
+    return [Media(kind="image", path=str(img), mime="image/jpeg")]
 
+
+def _camera(monkeypatch, fakes, product):
     async def match(media, claims, shop):
         fakes["match_calls"] += 1
-        return ProductMatch(product=other, confidence=0.9, choice="p0", query="bottle", candidates=3,
+        return ProductMatch(product=product, confidence=0.9, choice="p0", query="bottle", candidates=3,
                             model="gemini-decision-1")
 
     monkeypatch.setattr(gs, "match_product", match)
-    img = tmp_path / "f.jpg"
-    img.write_bytes(b"jpg")
-    res, bus = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(),
-                          media=[Media(kind="image", path=str(img), mime="image/jpeg")])
+
+
+async def test_camera_match_used_when_it_is_the_product_being_bought(fakes, monkeypatch, tmp_path):
+    same = {**PRODUCT, "title": "Bottle (camera match)"}
+    _camera(monkeypatch, fakes, same)
+    res, bus = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(), media=_img(tmp_path))
     assert fakes["match_calls"] == 1
-    assert fakes["decide_calls"][0]["product_json"] == other and res.product_json == other
+    assert fakes["decide_calls"][0]["product_json"] == same and res.product_json == same
     log = [e for e in bus.events("r") if e.kind == "log" and e.data.get("event") == "product_match"]
     assert len(log) == 1 and log[0].data["confidence"] == 0.9 and log[0].data["model"] == "gemini-decision-1"
-    assert log[0].data["product_id"] == "gid://shopify/p/2"
+    assert log[0].data["product_id"] == PRODUCT["id"]
+
+
+async def test_camera_match_of_other_product_ignored_firewall_checks_bought_product(fakes, monkeypatch, tmp_path):
+    other = {"id": "gid://shopify/p/2", "title": "Real thing in the photo", "variants": []}
+    _camera(monkeypatch, fakes, other)
+    res, bus = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(), media=_img(tmp_path))
+    assert fakes["decide_calls"][0]["product_json"]["id"] == PRODUCT["id"]  # the cart buys PRODUCT
+    ctx_log = [e for e in bus.events("r") if e.kind == "log" and e.data.get("event") == "product_context"]
+    assert ctx_log and ctx_log[0].data["other_product_id"] == "gid://shopify/p/2"
+
+
+async def test_camera_match_used_when_bought_product_unknown(fakes, monkeypatch, tmp_path):
+    other = {"id": "gid://shopify/p/2", "title": "Real thing in the photo", "variants": []}
+    _camera(monkeypatch, fakes, other)
+    spend = ("create_spend_request", {"amount_usd": 5, "merchant": "m", "reason": "r"})
+    await _run(CountingModel([spend, None]), LiveFakeShop(), media=_img(tmp_path))
+    assert fakes["decide_calls"][0]["product_json"] == other
+
+
+GYMSHARK = {"id": "gid://shopify/p/gym", "title": "Gymshark Everyday Seamless Leggings - Black", "variants": [{
+    "id": "gid://shopify/ProductVariant/gym1", "title": "Black / M", "price": {"amount": 2660, "currency": "USD"},
+    "availability": {"available": True}, "seller": {"name": "Gymshark US", "domain": "gym.myshopify.com"},
+    "options": []}]}
+FLEXFORM = {"id": "gid://shopify/p/flex", "title": "BOLDFIT Flexform Womens Leggings (Black)", "variants": [{
+    "id": "gid://shopify/ProductVariant/flex1", "title": "Black / M", "price": {"amount": 1700, "currency": "USD"},
+    "availability": {"available": True}, "seller": {"name": "Athlete's Choice", "domain": "flex.myshopify.com"},
+    "options": []}]}
+
+
+class TwoProductShop(LiveFakeShop):
+    """lookup_catalog(product_ref) returns GYMSHARK; search_catalog returns FLEXFORM."""
+
+    async def _rpc(self, method, params, tool_name=None):
+        if tool_name == "lookup_catalog":
+            self.sent.append((tool_name, 0.0, 0.0))
+            return {"products": [GYMSHARK]}
+        if tool_name == "search_catalog":
+            self.sent.append((tool_name, 0.0, 0.0))
+            return {"products": [FLEXFORM]}
+        return await super()._rpc(method, params, tool_name)
+
+
+async def test_firewall_checks_product_being_bought_not_demo_product(fakes):
+    """Live test c: demo_product_id was Gymshark, both shoppers bought the Flexform listing that
+    matched the photo, and the firewall compared against Gymshark (brand_mismatch, hard block of an
+    honest qty-1 purchase). It must check the Flexform product the cart actually buys."""
+    model = CountingModel([("search_catalog", {"query": "flexform leggings"}),
+                           ("create_cart", {"variant_id": "gid://shopify/ProductVariant/flex1", "quantity": 1}),
+                           None])
+    res, bus = await _run(model, TwoProductShop(), product_ref=GYMSHARK["id"])
+    pj = fakes["decide_calls"][0]["product_json"]
+    assert pj["id"] == FLEXFORM["id"] and res.product_json["id"] == FLEXFORM["id"]
+    assert fakes["decide_calls"][0]["cart_total"] == 17.0
+    ctx_log = [e for e in bus.events("r") if e.kind == "log" and e.data.get("event") == "product_context"]
+    assert ctx_log and ctx_log[0].data["product_id"] == FLEXFORM["id"]
+    assert ctx_log[0].data["other_product_id"] == GYMSHARK["id"]
+
+
+async def test_product_ref_used_when_cart_buys_it(fakes):
+    model = CountingModel([("create_cart", {"variant_id": "gid://shopify/ProductVariant/gym1", "quantity": 1}), None])
+    await _run(model, TwoProductShop(), product_ref=GYMSHARK["id"])
+    assert fakes["decide_calls"][0]["product_json"]["id"] == GYMSHARK["id"]
+
+
+async def test_product_ref_used_when_bought_product_unknown(fakes):
+    spend = ("create_spend_request", {"amount_usd": 5, "merchant": "m", "reason": "r"})
+    await _run(CountingModel([spend, None]), TwoProductShop(), product_ref=GYMSHARK["id"])
+    assert fakes["decide_calls"][0]["product_json"]["id"] == GYMSHARK["id"]
+
+
+# --- Argon result shown as soon as perception finishes ---
+
+def _perception_events(bus):
+    return [e for e in bus.events("r") if e.pane == "guarded" and e.kind == "log"
+            and e.data.get("event") == "perception"]
+
+
+async def test_perception_emitted_without_any_cart(fakes, tmp_path):
+    """Argon's reading reaches the right pane even if the shopper never proposes a cart."""
+    res, bus = await _run(CountingModel([SEARCH, None]), LiveFakeShop(), media=_img(tmp_path))
+    ev = _perception_events(bus)
+    assert len(ev) == 1 and res.verdicts == []
+    d = ev[0].data
+    assert d["visible_text"] == ["12-PACK"] and d["pack_count_claim"] == 12
+    assert d["instructions_detected"] is False and d["model"] == gs.config.MODELS["perception"]
+
+
+async def test_perception_emitted_before_first_cart_and_only_once(fakes, monkeypatch, tmp_path):
+    async def slow_search_perceive(media):
+        return CLAIMS
+
+    monkeypatch.setattr(gs, "perceive", slow_search_perceive)
+    res, bus = await _run(CountingModel([SEARCH, CART, CART, None]), LiveFakeShop(search_delay=0.05),
+                          media=_img(tmp_path))
+    events = bus.events("r")
+    first_perc = next(i for i, e in enumerate(events) if e.kind == "log" and e.data.get("event") == "perception")
+    first_search_result = next(i for i, e in enumerate(events)
+                               if e.pane == "guarded" and e.kind == "tool_result" and e.data["tool"] == "search_catalog")
+    assert first_perc < first_search_result  # shown during the search, not at the cart
+    assert len(_perception_events(bus)) == 1 and len(res.verdicts) == 2
+
+
+async def test_no_perception_event_without_media(fakes):
+    _, bus = await _run(CountingModel([SEARCH, None]), LiveFakeShop())
+    assert _perception_events(bus) == []
 
 
 async def test_unconfident_camera_match_falls_back_to_variant(fakes, monkeypatch, tmp_path):

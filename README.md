@@ -191,7 +191,7 @@ git clone https://github.com/Dev-22-goel/CartTrap.git && cd CartTrap
 | **Adish Padalia** | Defender, evaluation, red-team & self-heal, live evidence, dataset, full-app integration | [LinkedIn](https://www.linkedin.com/in/adish-padalia-a3768a230/) · [Portfolio](https://adish-padalia-portfolio.vercel.app/) · [GitHub](https://github.com/AdishPadalia26) |
 | **Devansh Goel** | Commerce: Shop MCP client, trace bus, shopper loop, victim agent | [LinkedIn](https://www.linkedin.com/in/devansh-goel-5309/) · [GitHub](https://github.com/Dev-22-goel) |
 | **Udaya Raja** | Firewall: schemas, Argon perception, Decisions API gate, rules, guarded shopper | [LinkedIn](https://www.linkedin.com/in/udaya-raja/) · [GitHub](https://github.com/U-daya) |
-| **Shivam Sarang** | Frontend: Tote storefront, arena, red-team and scoreboard screens | (https://www.linkedin.com/in/shivamsarang/) · [GitHub](https://github.com/ShivamSrng) |
+| **Shivam Sarang** | Frontend: Tote storefront, arena, red-team and scoreboard screens | [LinkedIn](https://www.linkedin.com/in/shivamsarang/) · [GitHub]https://github.com/ShivamSrng) |
 
 ## 🤝 Contributing
 

@@ -9,10 +9,12 @@ every state-changing Shop call goes through the firewall first.
 Flow:
 - Argon perception starts as a task at once, so it runs while the shopper does its first
   search. It is awaited before the first firewall check.
+- Argon's Claims are emitted as a "perception" log event the moment perception finishes.
 - With no product_ref and an image attached, camera product matching (product_match.py) also
   starts in the background, after Argon.
 - For each state-changing call: cart_total = attempted_spend (prices from ctx.variants),
-  product_json per architecture decision 7, then decide(), then a "verdict" event.
+  product_json = the product actually being bought (product_for), then decide(), then a
+  "verdict" event.
   Approve: the call is really sent through `shop` (live ShopMCP; shop_mcp still always
   intercepts spend requests and forbids complete_*).
   Anything else: the loop STOPS (no more model or tool calls), a "log" event says why, and
@@ -110,7 +112,19 @@ def _bought_product(call: ToolCall, ctx: ShopperContext) -> dict | None:
 async def run_guarded(intent: Intent, media: list[Media], product_ref: str | None, bus: TraceBus, run_id: str,
                       shop: ShopMCP, rules: RuleStore, *, client=None,
                       on_block: AfterBlock | None = None) -> GuardedResult:
-    perception = asyncio.create_task(perceive(media))
+    async def _perceive_and_show() -> Claims:
+        """Argon, then its reading on the right pane the moment it returns, not at the first cart
+        (the pane would otherwise say nothing about the photo for the whole search phase)."""
+        c = await perceive(media)
+        if media:  # no media: empty Claims with no API call, nothing worth showing
+            bus.emit(run_id, PANE, "log", {
+                "event": "perception", "model": config.MODELS["perception"],
+                "message": f"Argon: instructions_detected={c.instructions_detected}",
+                "instructions_detected": c.instructions_detected, "visible_text": c.visible_text[:5],
+                "pack_count_claim": c.pack_count_claim, "notes": c.notes})
+        return c
+
+    perception = asyncio.create_task(_perceive_and_show())
     match_task: asyncio.Task | None = None
     if not product_ref and any(m.kind == "image" for m in media):
         async def _match() -> ProductMatch | None:
@@ -120,25 +134,15 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
 
     verdicts: list[Verdict] = []
     approved: list[ToolCall] = []
-    state: dict = {"claims": None, "claims_logged": False, "match": None, "match_logged": False,
+    state: dict = {"claims": None, "match": None, "match_logged": False,
                    "product_json": None, "last_cart_total": 0.0, "ctx": None}
 
     async def claims() -> Claims:
-        c = await perception
-        if not state["claims_logged"]:
-            state["claims_logged"] = True
-            bus.emit(run_id, PANE, "log", {
-                "event": "perception", "model": config.MODELS["perception"],
-                "message": f"Argon: instructions_detected={c.instructions_detected}",
-                "instructions_detected": c.instructions_detected, "visible_text": c.visible_text[:5],
-                "pack_count_claim": c.pack_count_claim, "notes": c.notes})
+        c = await perception  # the "perception" event was already emitted when Argon finished
         state["claims"] = c
         return c
 
-    async def camera_match() -> ProductMatch | None:
-        if match_task is None:
-            return None
-        m = await match_task
+    def _log_match(m: ProductMatch | None) -> None:
         if m is not None and not state["match_logged"]:
             state["match_logged"] = True
             pid = m.product.get("id") if m.product else None
@@ -147,19 +151,48 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
                 "product_id": pid, "query": m.query, "error": m.error,
                 "message": (f"camera match: {m.product.get('title')} ({m.confidence:.2f})" if m.product
                             else f"camera match: none ({m.error or f'{m.choice} at {m.confidence:.2f}'})")})
+
+    async def camera_match() -> ProductMatch | None:
+        if match_task is None:
+            return None
+        m = await match_task
+        _log_match(m)
+        return m
+
+    def camera_match_if_ready() -> ProductMatch | None:
+        """The camera match only if it already finished: never delays a firewall check."""
+        if match_task is None or not match_task.done() or match_task.cancelled() or match_task.exception():
+            return None
+        m = match_task.result()
+        _log_match(m)
         return m
 
     async def product_for(call: ToolCall, ctx: ShopperContext) -> dict | None:
-        """Architecture decision 7: looked-up product_ref, else a confident camera match, else the
-        product of the variant being bought, else None (mismatch probes are then skipped)."""
-        if product_ref:
-            ref = _ref_product(bus, run_id, ctx)
+        """SHOP_PRODUCT_JSON is the product ACTUALLY BEING BOUGHT (the product of the cart's
+        variant). product_ref / the camera match are used only when they are that same product, or
+        when the cart's product is unknown (e.g. a spend request). Otherwise the firewall would
+        compare the photo against a product the cart doesn't buy (test c: demo_product_id was
+        Gymshark, the cart bought the Flexform listing, an honest purchase was hard-blocked).
+        None means no product: mismatch probes are skipped (architecture decision 7)."""
+        bought = _bought_product(call, ctx)
+        ref = _ref_product(bus, run_id, ctx) if product_ref else None
+        if bought is None:
             if ref is not None:
                 return ref
-        m = await camera_match()
-        if m is not None and m.product is not None:
+            m = await camera_match()
+            return m.product if m is not None and m.product is not None else None
+        if ref is not None and ref.get("id") == bought.get("id"):
+            return ref
+        m = camera_match_if_ready()
+        if m is not None and m.product is not None and m.product.get("id") == bought.get("id"):
             return m.product
-        return _bought_product(call, ctx)
+        other = ref if ref is not None else (m.product if m is not None else None)
+        if other is not None:
+            bus.emit(run_id, PANE, "log", {
+                "event": "product_context", "product_id": bought.get("id"), "other_product_id": other.get("id"),
+                "message": f"checking the product being bought ({bought.get('title')}), "
+                           f"not {'the given product' if other is ref else 'the camera match'} ({other.get('title')})"})
+        return bought
 
     async def guard(call: ToolCall, ctx: ShopperContext) -> dict:
         state["ctx"] = ctx

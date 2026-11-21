@@ -3,13 +3,16 @@ import json
 import httpx
 import pytest
 
-from backend.main import app
+from backend.main import app, make_fake
 
 
 @pytest.fixture
 async def client():
+    real = app.state.pipelines
+    app.state.pipelines = {"victim": make_fake("victim"), "guarded": make_fake("guarded")}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
         yield c
+    app.state.pipelines = real
 
 
 def parse_sse(text: str) -> list[dict]:

@@ -1,4 +1,4 @@
-"""Run the frozen eval through ShopMCP: live by default, fixture replay only with --shop replay."""
+"""Run the frozen eval against the live Shop MCP (ADR 0015: no fixture replay)."""
 
 import argparse
 import asyncio
@@ -15,7 +15,8 @@ from pydantic import BaseModel, ConfigDict
 from eval import metrics
 from eval.build_cases import ATTACK_VECTORS, BENIGN_VECTORS
 from eval.runner.storage import append_record, case_dir_hash, checkpoint, git_sha
-from eval.runner.systems import ROOT, SEED, ShopUnavailable, Systems, backend_module, require_shop
+from backend import config
+from eval.runner.systems import ROOT, SEED, ShopUnavailable, Systems, require_shop
 
 
 SYSTEMS = ("baseline", "hardened", "carttrap")
@@ -30,6 +31,7 @@ class CaseResult(BaseModel):
     vector: str | None
     product_id: str | None = None
     product_snapshot: dict | None = None
+    n_fail_closed: int = 0
     score: metrics.CaseScore | None = None
     error: str | None = None
 
@@ -70,8 +72,8 @@ def load_cases(directory):
     return cases
 
 
-async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency=4,
-              resume=False, execute=None, timeout=60, shop="live"):
+async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency=6,
+              resume=False, execute=None, timeout=120, shop="live"):
     directory, out = Path(cases).resolve(), Path(out).resolve()
     systems = list(systems)
     if not systems or len(systems) != len(set(systems)) or set(systems) - set(SYSTEMS):
@@ -81,10 +83,7 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
     if out.is_relative_to(directory):
         raise ValueError("choose an output directory outside the frozen case directory")
 
-    if execute is None:
-        require_shop(shop)  # fail fast, before any file is written; never fall back to fixtures
-    elif shop not in {"live", "replay"}:
-        raise ValueError(f"shop mode must be live or replay, not {shop!r}")
+    require_shop(shop)  # live only; fail fast, before any file is written
     digest = case_dir_hash(directory)
     inputs = load_cases(directory)
     selected = set(inputs if only is None else only)
@@ -92,14 +91,13 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
     if unknown:
         raise ValueError(f"unknown case ids: {', '.join(sorted(unknown))}")
     ids = sorted(selected)[:limit]
-    config = backend_module("config")
     if execute is None:
         execute = Systems(systems, directory, shop)
         adapters = execute.adapters
     else:
         adapters = dict.fromkeys(systems, "injected")
     meta = dict(case_dir_hash=digest, git_sha=git_sha(ROOT), systems=systems,
-                model_ids=dict(config.MODELS) if config else {}, seed=SEED, adapters=adapters, shop_mode=shop)
+                model_ids=dict(config.MODELS), backend=config.FIREWALL_BACKEND, seed=SEED, adapters=adapters, shop_mode=shop)
     identity = {"format": 1, "meta": meta, "ids": ids, "timeout_seconds": timeout}
     pairs = [(cid, system) for cid in ids for system in systems]
     semaphore = asyncio.BoundedSemaphore(concurrency)
@@ -128,7 +126,9 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
                         raise ValueError(f"unknown label/vector combination: {label!r}/{vector!r}")
                     trace = await asyncio.wait_for(execute(system, case), timeout)
                     score = metrics.score_case(case, trace.calls, trace.verdicts, trace.products)
-                    row = CaseResult(**fields, score=score, product_snapshot=trace.products)
+                    fail_closed = sum(getattr(v, "error", None) is not None for v in trace.verdicts)
+                    row = CaseResult(**fields, score=score, product_snapshot=trace.products,
+                                     n_fail_closed=fail_closed)
                 except TimeoutError:
                     row = CaseResult(**fields, error=f"timeout during case execution (limit {timeout:g}s)")
                 except Exception as exc:
@@ -152,24 +152,21 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
             totals[system] = metrics.summarize(scores)
         n_errors = {system: sum(r.error is not None for r in rows if r.system == system)
                     for system in systems}
-        failures = [dict(id=row.id, system=row.system, reason=reason)
+        failures = [dict(case_id=row.id, id=row.id, vector=row.vector or "", system=row.system, reason=reason,
+                         note=f"{row.system} on {row.label}/{row.vector}: {reason}")
                     for row in rows if (reason := row.failure_reason()) is not None]
-        report = Report(systems=totals, n_errors=n_errors, cases=rows, failures=failures, meta=dict(meta, started_at=started_at))
+        # Fail-closed verdicts are blocks (counted in ASR denominators), disclosed here.
+        n_fail_closed = sum(row.n_fail_closed for row in rows)
+        report = Report(systems=totals, n_errors=n_errors, cases=rows, failures=failures,
+                        meta=dict(meta, started_at=started_at, n_fail_closed=n_fail_closed))
         document = report.model_dump_json(indent=2)
         Report.model_validate_json(document)
-        shared = backend_module("schemas")
-        schema = getattr(shared, "Metrics", None)
-        if schema is not None:
-            if "systems" in schema.model_fields:
-                schema.model_validate_json(document)
-            else:
-                for summary in report.model_dump()["systems"].values():
-                    schema.model_validate(summary)
         if case_dir_hash(directory) != digest:
             raise ValueError("case directory changed during the run")
-        temporary = target.with_suffix(".json.tmp")
-        temporary.write_text(document + "\n", encoding="utf-8")
-        os.replace(temporary, target)
+        for destination in (target, out / "latest.json"):
+            temporary = destination.with_suffix(".json.tmp")
+            temporary.write_text(document + "\n", encoding="utf-8")
+            os.replace(temporary, destination)
         return target
 
 
@@ -180,9 +177,8 @@ def main(argv=None):
     parser.add_argument("--out", type=Path, default=ROOT / "eval/results")
     parser.add_argument("--only", nargs="+", help="case ids, comma- or space-separated")
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--concurrency", type=int, default=4)
-    parser.add_argument("--shop", choices=("live", "replay"), default="live",
-                        help="live Shop MCP (default, official runs) or fixture replay (tests and dry runs only)")
+    parser.add_argument("--concurrency", type=int, default=6)
+    parser.add_argument("--shop", choices=("live",), default="live", help="live Shop MCP only (ADR 0015)")
     parser.add_argument("--resume", action="store_true", help="resume the latest checkpoint in --out")
     args = parser.parse_args(argv)
     only = [cid.strip() for part in args.only for cid in part.split(",")] if args.only else None
@@ -192,7 +188,8 @@ def main(argv=None):
     except (ValueError, OSError, ShopUnavailable) as exc:
         parser.exit(2, f"eval: {exc}\n")
     report = json.loads(path.read_bytes())
-    print(f"shop mode: {report['meta']['shop_mode']}")
+    print(f"shop mode: {report['meta']['shop_mode']}  backend: {report['meta']['backend']}  "
+          f"fail-closed blocks: {report['meta']['n_fail_closed']}")
     print("system     adapter          ASR   benign   p50 ms   p95 ms   defended   errors")
     for system, m in report["systems"].items():
         errors = report["n_errors"][system]

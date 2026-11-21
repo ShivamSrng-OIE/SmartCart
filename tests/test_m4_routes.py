@@ -9,6 +9,19 @@ from backend.replay import iter_trace
 from backend.trace import TraceBus
 
 
+def _wait_events(bus, run_id, timeout=3.0):
+    """Background tasks finish on the TestClient's loop; poll instead of assuming timing."""
+    import time
+    deadline = time.monotonic() + timeout
+    events = []
+    while time.monotonic() < deadline:
+        events = list(bus.events(run_id))
+        if events and events[-1].kind == "done":
+            return events
+        time.sleep(0.02)
+    return events
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     results = tmp_path / "results"
@@ -83,7 +96,7 @@ def test_launch_redteam_replays_demo_when_live_module_missing(client, monkeypatc
     assert response.status_code == 200
     run_id = response.json()["run_id"]
     assert run_id != "rt_demo"
-    stream_events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+    stream_events = [event.model_dump() for event in _wait_events(http.app.state.bus, run_id)]
     assert stream_events[0]["data"]["message"] == "replayed"
     assert stream_events[-1]["kind"] == "done"
 
@@ -100,7 +113,7 @@ def test_replay_pushes_events_with_done(client, monkeypatch):
 
     response = http.post("/api/redteam/launch")
     run_id = response.json()["run_id"]
-    stream_events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+    stream_events = [event.model_dump() for event in _wait_events(http.app.state.bus, run_id)]
 
     assert [event["kind"] for event in stream_events] == ["log", "verdict", "done"]
     assert all(event["run_id"] == run_id for event in stream_events)
@@ -143,7 +156,7 @@ def test_launch_returns_run_id_and_streams_via_bus(client, monkeypatch):
     assert response.status_code == 200
     run_id = response.json()["run_id"]
     assert set(response.json()) == {"run_id"}
-    events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+    events = [event.model_dump() for event in _wait_events(http.app.state.bus, run_id)]
     assert [event["kind"] for event in events] == ["log", "done"]
     assert events[0]["data"]["stage"] == "started"
 

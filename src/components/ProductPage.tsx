@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Play, Plus, ShieldCheck, Star, Store } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Minus, Play, Plus, ShieldCheck, Star, Store, TrendingDown, TrendingUp } from "lucide-react";
 import { getProduct, mediaSummary, modelSources, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
 import { ModelViewerModal } from "./ModelViewerModal";
 import { AutoRail } from "./AutoRail";
@@ -274,6 +274,72 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
   );
 }
 
+/* ----------------------------------------------------------- price check */
+
+type Verdict = { tone: "good" | "fair" | "high"; label: string; detail: string };
+
+/** Compare this item's best price with the typical (median) price of similar live listings. */
+function priceVerdict(value: number | null, typical: number | null, currency: string): Verdict | null {
+  if (value == null || typical == null || typical <= 0) return null;
+  const pct = (value - typical) / typical;
+  const diff = money(Math.abs(value - typical), false, currency);
+  if (pct <= -0.08) return { tone: "good", label: "Good price", detail: `${Math.round(-pct * 100)}% below typical · ${diff} less` };
+  if (pct >= 0.08) return { tone: "high", label: "Higher than usual", detail: `${Math.round(pct * 100)}% above typical · ${diff} more` };
+  return { tone: "fair", label: "Typical price", detail: `Within ${Math.max(1, Math.round(Math.abs(pct) * 100))}% of similar items` };
+}
+
+const VERDICT_STYLE: Record<Verdict["tone"], { pill: string; dot: string; icon: typeof TrendingDown }> = {
+  good: { pill: "bg-safe-soft text-safe shadow-[inset_0_0_0_1px_var(--safe-line)]", dot: "bg-safe", icon: TrendingDown },
+  fair: { pill: "bg-surface-2 text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]", dot: "bg-ink", icon: Minus },
+  high: { pill: "bg-warn-soft text-warn shadow-[inset_0_0_0_1px_var(--warn-line)]", dot: "bg-warn", icon: TrendingUp },
+};
+
+/** Lowest → highest similar price, with "typical" marked and this item's price sliding into place. */
+function PriceRange({ low, high, typical, value, currency, tone, size = "md" }: { low: number; high: number; typical: number | null; value: number; currency: string; tone: Verdict["tone"]; size?: "sm" | "md" }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const min = Math.min(low, value);
+  const max = Math.max(high, value);
+  const pos = (v: number) => (max - min < 0.01 ? 50 : ((v - min) / (max - min)) * 100);
+  useGSAP(
+    () => {
+      gsap.fromTo("[data-marker]", { left: "0%" }, { left: `${pos(value)}%`, duration: d(1.1), ease: "power3.out", delay: 0.2 });
+    },
+    { scope: ref, dependencies: [value, min, max] },
+  );
+  const big = size === "md";
+  return (
+    <div ref={ref} className={cx("relative", big ? "pt-7 pb-6" : "pt-1 pb-4")}>
+      <div className={cx("relative rounded-full bg-[linear-gradient(90deg,var(--safe-soft),var(--surface-2)_50%,var(--warn-soft))] shadow-[inset_0_0_0_1px_var(--line)]", big ? "h-2.5" : "h-1.5")}>
+        {typical != null && (
+          <span className="absolute top-1/2 h-[180%] w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink-3" style={{ left: `${pos(typical)}%` }} title={`Typical: ${money(typical, false, currency)}`} />
+        )}
+        <span data-marker className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${pos(value)}%` }}>
+          <span className={cx("block rounded-full ring-[3px] ring-surface", VERDICT_STYLE[tone].dot, big ? "size-4" : "size-3")} />
+          {big && (
+            <span
+              className={cx(
+                "tnum absolute bottom-[calc(100%+8px)] rounded-md bg-ink px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-ink-inverse",
+                pos(value) < 15 ? "left-0 -translate-x-2" : pos(value) > 85 ? "right-0 translate-x-2" : "left-1/2 -translate-x-1/2",
+              )}
+            >
+              This item {money(value, false, currency)}
+            </span>
+          )}
+        </span>
+      </div>
+      <div className={cx("tnum absolute inset-x-0 flex justify-between text-ink-3", big ? "bottom-0 text-xs" : "bottom-0 text-[10px]")}>
+        <span>{big ? "Lowest " : ""}{money(low, false, currency)}</span>
+        {big && typical != null && pos(typical) > 26 && pos(typical) < 74 && (
+          <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${pos(typical)}%` }}>
+            Typical {money(typical, false, currency)}
+          </span>
+        )}
+        <span>{big ? "Highest " : ""}{money(high, false, currency)}</span>
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------------------------------------------- price chart */
 
 interface Dot {
@@ -505,8 +571,14 @@ export function ProductPage({
   ];
   if (!offers.length && p.price != null) dots.push({ key: p.id, label: p.shopName ?? "Store", sub: "", price: p.price, self: true });
 
-  const simPrices = (similar ?? []).map((s) => s.price).filter((x): x is number => x != null).sort((a, b) => a - b);
+  const simPrices = (similar ?? []).filter((s) => s.currency === currency).map((s) => s.price).filter((x): x is number => x != null).sort((a, b) => a - b);
   const typical = simPrices.length ? simPrices[Math.floor(simPrices.length / 2)] : null;
+  const bestPrice = best?.price ?? p.price;
+  const verdict = priceVerdict(bestPrice, typical, currency);
+  const rangeLow = simPrices.length ? Math.min(simPrices[0], bestPrice ?? simPrices[0]) : null;
+  const rangeHigh = simPrices.length ? Math.max(simPrices[simPrices.length - 1], bestPrice ?? 0) : null;
+  const cheapestId = offers.filter((o) => o.price != null && o.available !== false).sort((a, b) => a.price! - b.price!)[0]?.variantId;
+  const toPriceCheck = () => document.getElementById("price-check")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const addOffer = (o: Offer | null, from?: Element | null) => {
     cart.add(o ? offerAsProduct(p, o) : p);
@@ -551,6 +623,29 @@ export function ProductPage({
             {stores > 1 && <span className="text-sm text-ink-2">from {stores} stores</span>}
             {best?.available === false && <Chip tone="danger">Sold out</Chip>}
           </div>
+
+          {/* price check, at a glance */}
+          {verdict && bestPrice != null && rangeLow != null && rangeHigh != null ? (
+            <button onClick={toPriceCheck} className="group flex flex-col gap-1.5 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-line-strong">
+              <span className="flex flex-wrap items-center gap-2">
+                {(() => {
+                  const V = VERDICT_STYLE[verdict.tone];
+                  return (
+                    <span className={cx("inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold", V.pill)}>
+                      <V.icon className="size-4" /> {verdict.label}
+                    </span>
+                  );
+                })()}
+                <span className="text-[13px] text-ink-2">{verdict.detail}</span>
+                <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-ink-3 group-hover:text-ink">
+                  Compare <ArrowDown className="size-3.5 transition-transform group-hover:translate-y-0.5" />
+                </span>
+              </span>
+              <PriceRange low={rangeLow} high={rangeHigh} typical={typical} value={bestPrice} currency={currency} tone={verdict.tone} size="sm" />
+            </button>
+          ) : similar === null ? (
+            <div className="h-[74px] animate-pulse rounded-xl bg-surface-2" aria-label="Checking prices" />
+          ) : null}
 
           {p.highlights.length > 0 && <p className="text-[15px] leading-relaxed text-ink-2">{p.highlights[0]}</p>}
 
@@ -606,56 +701,35 @@ export function ProductPage({
         </div>
       </section>
 
-      {/* about */}
-      {(p.description || p.features.length > 0) && (
-        <section data-sec className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          {p.description && (
-            <div className="card p-5 sm:p-6">
-              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
-              <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{p.description}</p>
-            </div>
-          )}
-          {p.features.length > 0 && (
-            <div className="card p-5 sm:p-6">
-              <h2 className="text-[17px] font-semibold tracking-tight">Features</h2>
-              <ul className="mt-3 flex flex-col gap-2.5">
-                {p.features.map((f) => (
-                  <li key={f} className="flex gap-2.5 text-[14px] leading-relaxed text-ink-2">
-                    <Check className="mt-1 size-3.5 shrink-0 text-safe" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      )}
-
       {/* prices */}
-      <section data-sec className="card p-5 sm:p-6">
+      <section id="price-check" data-sec className="card scroll-mt-20 p-5 sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-[17px] font-semibold tracking-tight">Compare prices</h2>
-          <span className="text-xs text-ink-3">Live prices right now · Shopify doesn’t share price history</span>
+          <h2 className="text-[17px] font-semibold tracking-tight">Is this a good price?</h2>
+          <span className="text-xs text-ink-3">Today’s live prices across stores and similar items</span>
         </div>
-        <p className="mt-1 text-sm text-ink-2">
-          {best?.price != null && typical != null ? (
-            best.price <= typical ? (
-              <>
-                The best price here is <span className="font-medium text-ink">{money(typical - best.price, false, currency)} below</span> a typical similar item ({money(typical, false, currency)}).
-              </>
-            ) : (
-              <>
-                The best price here is <span className="font-medium text-ink">{money(best.price - typical, false, currency)} above</span> a typical similar item ({money(typical, false, currency)}).
-              </>
-            )
-          ) : similar === null ? (
-            "Looking up similar items…"
-          ) : (
-            "Prices from each store selling this item."
-          )}
-        </p>
-        {dots.length > 0 && (
-          <div className="mt-6">
+        {!verdict && <p className="mt-1 text-sm text-ink-2">{similar === null ? "Looking up similar items…" : "Prices from each store selling this item."}</p>}
+        {verdict && bestPrice != null && rangeLow != null && rangeHigh != null && (
+          <div className="mt-4 grid gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-10">
+            {(() => {
+              const V = VERDICT_STYLE[verdict.tone];
+              return (
+                <div className="flex items-center gap-3">
+                  <span className={cx("flex size-12 items-center justify-center rounded-2xl", V.pill)}>
+                    <V.icon className="size-6" />
+                  </span>
+                  <div>
+                    <p className="text-xl font-semibold tracking-tight">{verdict.label}</p>
+                    <p className="text-sm text-ink-2">{verdict.detail}</p>
+                  </div>
+                </div>
+              );
+            })()}
+            <PriceRange low={rangeLow} high={rangeHigh} typical={typical} value={bestPrice} currency={currency} tone={verdict.tone} />
+          </div>
+        )}
+        {dots.length > 1 && (
+          <div className="mt-6 border-t border-line pt-5">
+            <p className="mb-3 text-[13px] font-medium">Every listing</p>
             <PriceChart dots={dots} currency={currency} />
           </div>
         )}
@@ -699,7 +773,12 @@ export function ProductPage({
                           </div>
                         </div>
                       </td>
-                      <td className="tnum py-3 pr-3 font-semibold">{money(o.price, false, o.currency)}</td>
+                      <td className="tnum py-3 pr-3 font-semibold whitespace-nowrap">
+                        {money(o.price, false, o.currency)}
+                        {o.variantId === cheapestId && offers.length > 1 && (
+                          <span className="ml-2 rounded-full bg-safe-soft px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-safe">Best price</span>
+                        )}
+                      </td>
                       <td className="py-3 pr-3">
                         {o.available === false ? <span className="text-danger">Sold out</span> : <span className="text-ink-2">In stock</span>}
                         {o.condition.length > 0 && <span className="text-ink-3"> · {o.condition.join(", ")}</span>}
@@ -730,6 +809,31 @@ export function ProductPage({
           </div>
         )}
       </section>
+
+      {/* about */}
+      {(p.description || p.features.length > 0) && (
+        <section data-sec className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          {p.description && (
+            <div className="card p-5 sm:p-6">
+              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
+              <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{p.description}</p>
+            </div>
+          )}
+          {p.features.length > 0 && (
+            <div className="card p-5 sm:p-6">
+              <h2 className="text-[17px] font-semibold tracking-tight">Features</h2>
+              <ul className="mt-3 flex flex-col gap-2.5">
+                {p.features.map((f) => (
+                  <li key={f} className="flex gap-2.5 text-[14px] leading-relaxed text-ink-2">
+                    <Check className="mt-1 size-3.5 shrink-0 text-safe" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* similar */}
       <section data-sec className="flex flex-col gap-3">

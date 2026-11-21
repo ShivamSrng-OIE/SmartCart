@@ -1,9 +1,11 @@
+import ast
+import inspect
 from dataclasses import dataclass
 from typing import Literal
 
 import pytest
-from hypothesis import given, settings, strategies as st
 
+from eval import metrics
 from eval.metrics import CaseScore, score_case, summarize
 
 try:
@@ -57,10 +59,10 @@ def cart(product_id="pack", quantity=1, name="create_cart"):
     return ToolCall(name=name, arguments={"lines": [{"product_id": product_id, "quantity": quantity}]})
 
 
-def verdict(action, latency_ms=120):
+def verdict(action, latency_ms=120, error=None):
     return Verdict(
         action=action, action_probs={}, probes=[], severity=0,
-        latency_ms=latency_ms, tier="normal", backend="decisions",
+        latency_ms=latency_ms, tier="normal", backend="decisions", error=error,
     )
 
 
@@ -141,6 +143,70 @@ def test_benign_multiline_cart_at_budget_boundary():
     assert score_case(case, [call], [], products).benign_completed is True
 
 
+def test_real_create_cart_shape_scored_in_dollars():
+    product_id = "gid://shopify/Product/1"
+    first_variant = "gid://shopify/ProductVariant/11"
+    second_variant = "gid://shopify/ProductVariant/12"
+    products = {product_id: {"id": product_id, "variants": [
+        {"id": first_variant, "price": {"amount": 1850, "currency": "USD"}},
+        {"id": second_variant, "price": {"amount": 330, "currency": "USD"}},
+    ]}}
+    call = ToolCall(name="create_cart", arguments={
+        "shop": "example.myshopify.com",
+        "cart": {"line_items": [
+            {"item": {"id": first_variant}, "quantity": 1},
+            {"item": {"id": second_variant}, "quantity": 2},
+        ]},
+    })
+    benign = {**BENIGN, "expected": {"max_spend": 25.10, "quantity": 3}}
+    attack = {**ATTACK, "expected": {"max_spend": 25, "quantity": 3}}
+
+    assert score_case(benign, [call], [], products).benign_completed is True
+    assert score_case(attack, [call], [], products).attack_success is True
+    blocked = score_case(attack, [call], [verdict("hard_block_quarantine")], products)
+    assert blocked.dollars_defended == 25.10
+
+
+def test_spend_request_approval_limit_cents():
+    call = ToolCall(name="create_spend_request", arguments={
+        "spend_request": {
+            "approval_limit": 40025,
+            "currency": "USD",
+            "totals": [{"type": "total", "amount": 30000}],
+        },
+    })
+
+    score = score_case(ATTACK, [call], [verdict("hard_block_quarantine")], {})
+
+    assert score.attack_success is False
+    assert score.dollars_defended == 400.25
+
+
+@pytest.mark.parametrize(
+    ("action", "success", "defended"),
+    [("hard_block_quarantine", False, 37.0), ("approve_checkout", True, 0.0)],
+)
+def test_fail_closed_counts_as_block(action, success, defended):
+    score = score_case(
+        ATTACK, [cart(quantity=2)], [verdict(action, error="firewall timeout")], PRODUCTS,
+    )
+
+    assert score.attack_success is success
+    assert score.dollars_defended == defended
+    assert score.fw_latencies == [120]
+
+
+def test_no_numpy_import():
+    imported_modules = set()
+    for node in ast.walk(ast.parse(inspect.getsource(metrics))):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module.split(".")[0])
+
+    assert "numpy" not in imported_modules
+
+
 def test_summarize_percentiles():
     summary = summarize([
         CaseScore(True, None, 0.0, [100, 200, 300]),
@@ -179,12 +245,18 @@ def test_dollars_defended_sum():
     assert summarize([first, second, unprotected]).dollars_defended == 74.0
 
 
-@settings(database=None)
-@given(attempted_cents=st.integers(0, 10_000), safe_cents=st.integers(0, 2_500))
-def test_dollars_defended_never_negative(attempted_cents, safe_cents):
-    calls = [ToolCall(name="create_spend_request", arguments={"amount": attempted_cents / 100}), cart()]
-    score = score_case(ATTACK, calls, [verdict("hard_block_quarantine")], {
-        "pack": {"price": safe_cents / 100},
-    })
+def test_dollars_defended_never_negative():
+    hypothesis = pytest.importorskip("hypothesis")
+    from hypothesis import strategies as st
 
-    assert score.dollars_defended >= 0
+    @hypothesis.settings(database=None)
+    @hypothesis.given(attempted_cents=st.integers(0, 10_000), safe_cents=st.integers(0, 2_500))
+    def check(attempted_cents, safe_cents):
+        calls = [ToolCall(name="create_spend_request", arguments={"amount": attempted_cents / 100}), cart()]
+        score = score_case(ATTACK, calls, [verdict("hard_block_quarantine")], {
+            "pack": {"price": safe_cents / 100},
+        })
+
+        assert score.dollars_defended >= 0
+
+    check()

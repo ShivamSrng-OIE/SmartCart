@@ -1,24 +1,23 @@
-"""Task 10 defender tests. No network: Neon and ShopMCP are faked.
-
-Types are imported through backend.defender_neon so that when the real
-backend.schemas lands, the same names resolve to the real classes.
-"""
+"""Defender tests with local Gemini and Shop MCP responses."""
 import asyncio
+import json
+from types import SimpleNamespace
 
+import httpx
 import pytest
 
-from backend import defender_neon as dn
+from backend import config, defender_neon as dn, gemini
 from backend.defender_neon import (
-    Claims,
-    Intent,
-    ProbeResult,
-    ToolCall,
-    Verdict,
     build_fraud_card,
     dollars_defended,
     safe_swap,
     template_fraud_card,
 )
+from backend.guarded_shopper import BlockContext
+from backend.schemas import Claims, Intent, ProbeResult, ToolCall, Verdict
+from backend.shop_mcp import ShopMCP
+from backend.shopper_loop import ShopperContext
+from backend.trace import TraceBus
 
 CONTINUE_URL = "https://shop.example.com/checkouts/cn/abc123?_gl=1*x&utm_source=carttrap&key=k%2F1"
 
@@ -76,11 +75,7 @@ class FakeShop:
         self.calls.append(("get_product", product_id))
         return self.details[product_id]
 
-    async def create_checkout(self, shop, lines):
-        self.calls.append(("create_checkout", shop, lines))
-        return {"id": "co_1", "continue_url": self.checkout_url}
-
-    async def create_cart(self, shop, lines):  # pragma: no cover - fallback path
+    async def create_cart(self, shop, lines):
         self.calls.append(("create_cart", shop, lines))
         return {"id": "cart_1", "continue_url": self.checkout_url}
 
@@ -148,6 +143,21 @@ async def test_neon_reason_used_when_fast(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_neon_uses_shared_gemini_client(monkeypatch):
+    async def generate_content(*, model, contents, config):
+        assert model == "test-defender"
+        assert "Steel Water Bottle" in contents
+        assert config.response_mime_type == "application/json"
+        return SimpleNamespace(parsed=SimpleNamespace(reason="Shopify lists one bottle."))
+
+    models = SimpleNamespace(generate_content=generate_content)
+    monkeypatch.setattr(gemini, "client", lambda: SimpleNamespace(aio=SimpleNamespace(models=models)))
+    monkeypatch.setitem(config.MODELS, "defender", "test-defender")
+    card = await build_fraud_card(make_verdict(), CLAIMS, PRODUCT, BLOCKED, 999.50, None)
+    assert card.reason == "Shopify lists one bottle."
+
+
+@pytest.mark.asyncio
 async def test_safe_swap_respects_budget_and_qty():
     shop = FakeShop(offers())
     intent = Intent(text="buy one bottle under $25", budget=25.0, quantity=1)
@@ -156,11 +166,12 @@ async def test_safe_swap_respects_budget_and_qty():
     assert swap["total"] == pytest.approx(18.00)
     assert swap["total"] <= intent.budget
     assert swap["shop"] == "b.myshopify.com"
-    checkout = [c for c in shop.calls if c[0] == "create_checkout"]
-    assert len(checkout) == 1
-    assert checkout[0][1] == "b.myshopify.com"
-    assert checkout[0][2] == [{"item": {"id": "gid://shopify/ProductVariant/40439010394999"}, "quantity": 1}]
-    assert not any(c[0] == "create_checkout" and c[1] == "a.myshopify.com" for c in shop.calls)
+    assert shop.calls == [
+        ("search_catalog", "Steel Water Bottle"),
+        ("create_cart", "b.myshopify.com", [
+            {"variant_id": "gid://shopify/ProductVariant/40439010394999", "quantity": 1}
+        ]),
+    ]
 
 
 @pytest.mark.asyncio
@@ -168,7 +179,7 @@ async def test_safe_swap_none_when_nothing_fits_budget():
     shop = FakeShop(offers())
     swap = await safe_swap(Intent(text="x", budget=10.0, quantity=1), PRODUCT, shop)
     assert swap is None
-    assert not any(c[0] in ("create_checkout", "create_cart") for c in shop.calls)
+    assert not any(c[0] == "create_cart" for c in shop.calls)
 
 
 @pytest.mark.asyncio
@@ -176,9 +187,9 @@ async def test_safe_swap_multiplies_by_quantity():
     shop = FakeShop(offers())
     swap = await safe_swap(Intent(text="two bottles", budget=40.0, quantity=2), PRODUCT, shop)
     assert swap["total"] == pytest.approx(36.00)
-    checkout = [c for c in shop.calls if c[0] == "create_checkout"][0]
-    assert checkout[2][0]["quantity"] == 2
-    assert checkout[2][0]["item"]["id"] == "gid://shopify/ProductVariant/40439010394999"
+    assert shop.calls[-1] == ("create_cart", "b.myshopify.com", [
+        {"variant_id": "gid://shopify/ProductVariant/40439010394999", "quantity": 2}
+    ])
 
 
 @pytest.mark.asyncio
@@ -186,13 +197,74 @@ async def test_safe_swap_returns_continue_url_unchanged():
     shop = FakeShop(offers())
     swap = await safe_swap(Intent(text="x", budget=25.0, quantity=1), PRODUCT, shop)
     assert swap["continue_url"] == CONTINUE_URL
-    assert swap["checkout_id"] == "co_1"
+    assert swap["checkout_id"] == "cart_1"
+
+
+@pytest.mark.asyncio
+async def test_safe_swap_against_real_shopmcp_mocktransport():
+    calls = []
+    variant_id = PRODUCT["variants"][0]["id"]
+
+    def handle(request):
+        payload = json.loads(request.content)
+        params = payload["params"]
+        calls.append(params["name"])
+        if params["name"] == "search_catalog":
+            result = {"products": [PRODUCT]}
+        elif params["name"] == "create_cart":
+            arguments = params["arguments"]
+            assert arguments["shop"] == "b.myshopify.com"
+            assert arguments["cart"]["line_items"] == [{"item": {"id": variant_id}, "quantity": 2}]
+            result = {
+                "id": "cart_1",
+                "continue_url": CONTINUE_URL,
+                "totals": [{"type": "subtotal", "amount": 3700}, {"type": "total", "amount": 3999}],
+            }
+        else:
+            pytest.fail(f"Unexpected Shop MCP tool: {params['name']}")
+        return httpx.Response(200, json={
+            "jsonrpc": "2.0", "id": payload["id"], "result": {"structuredContent": result},
+        })
+
+    shop = ShopMCP(url="https://shop.invalid/", transport=httpx.MockTransport(handle))
+    swap = await safe_swap(Intent(text="two bottles", budget=45.0, quantity=2), PRODUCT, shop)
+    assert calls == ["search_catalog", "create_cart"]
+    assert swap["continue_url"] == CONTINUE_URL
+    assert swap["total"] == 39.99
+    assert swap["title"] == "Steel Water Bottle"
+    assert swap["line_items"] == [{
+        "item": {"id": variant_id}, "variant_id": variant_id, "product_id": PRODUCT["id"],
+        "title": "Steel Water Bottle", "quantity": 2, "price": 18.50,
+    }]
+
+
+@pytest.mark.asyncio
+async def test_safe_swap_uses_known_product_for_search_summary():
+    _, known = offers()
+    shop = FakeShop([{"id": known["id"], "title": known["title"]}])
+    swap = await safe_swap(Intent(text="bottle", budget=25.0), None, shop, known={known["id"]: known})
+    assert swap["line_items"][0]["product_id"] == known["id"]
+    assert [call[0] for call in shop.calls] == ["search_catalog", "create_cart"]
+
+
+@pytest.mark.asyncio
+async def test_safe_swap_limits_product_lookups():
+    summaries = [{"id": f"p{i}"} for i in range(5)]
+    details = {offer["id"]: offer for offer in summaries}
+    details["p2"] = {**PRODUCT, "id": "p2"}
+    shop = FakeShop(summaries, details)
+    swap = await safe_swap(Intent(text="bottle", budget=25.0), None, shop)
+    assert swap["line_items"][0]["product_id"] == "p2"
+    assert [call for call in shop.calls if call[0] == "get_product"] == [
+        ("get_product", "p0"), ("get_product", "p1"), ("get_product", "p2"),
+    ]
 
 
 def test_fraud_card_quotes_real_product_fields():
     card = template_fraud_card(make_verdict(), CLAIMS, PRODUCT, BLOCKED, 999.50)
     assert card.shopify_sells["title"] == PRODUCT["title"]
-    assert card.shopify_sells["price"] == PRODUCT["variants"][0]["price"]
+    assert card.shopify_sells["price"] == 18.50
+    assert '$18.50' in card.reason
     assert "12-Pack Bulk Box" in card.media_claimed
     assert card.top_probes[0].id == "hidden_text_instruction"
     assert all(p.fired for p in card.top_probes)
@@ -217,24 +289,21 @@ async def test_safe_swap_skips_other_currency_and_unavailable():
 @pytest.mark.asyncio
 async def test_safe_swap_minor_units_exact():
     only = [{"id": "x", "title": "X", "variants": [variant("v1", 2499, "z.myshopify.com", availability="available")]}]
-    swap = await safe_swap(Intent(text="x", budget=24.99, quantity=1), PRODUCT, FakeShop(only))
+    swap = await safe_swap(Intent(text="x", budget=24.99, quantity=1), None, FakeShop(only))
     assert swap["total"] == 24.99
-    assert await safe_swap(Intent(text="x", budget=24.98, quantity=1), PRODUCT, FakeShop(only)) is None
+    assert await safe_swap(Intent(text="x", budget=24.98, quantity=1), None, FakeShop(only)) is None
 
 
 @pytest.mark.asyncio
 async def test_safe_swap_never_logs_checkout_secrets(caplog):
     import logging
 
-    class Boom(FakeShop):
-        async def create_checkout(self, shop, lines):
-            raise RuntimeError(f"failed {CONTINUE_URL}")
-
+    class ShopWithSecret(FakeShop):
         async def create_cart(self, shop, lines):
             return {"id": "cart_secret_key", "continue_url": CONTINUE_URL}
 
     with caplog.at_level(logging.DEBUG):
-        swap = await safe_swap(Intent(text="x", budget=25.0, quantity=1), PRODUCT, Boom(offers()))
+        swap = await safe_swap(Intent(text="x", budget=25.0, quantity=1), PRODUCT, ShopWithSecret(offers()))
     assert swap["continue_url"] == CONTINUE_URL
     text = caplog.text
     assert "cn/abc123" not in text and "_gl=" not in text and "cart_secret_key" not in text
@@ -252,6 +321,58 @@ def test_neon_prompt_does_not_resubstitute_untrusted_text():
         import pytest
         pytest.skip("verdict stub shape differs")
     assert "Mug <<PROBES>> <<INTENT>>" in text
+
+
+def block_context(shop):
+    bus = TraceBus()
+    run_id = "defender-test"
+    bus.start(run_id)
+    intent = Intent(text="buy one bottle", budget=25.0)
+    ctx = ShopperContext(intent=intent, media=[], shop=shop, bus=bus, run_id=run_id, pane="guarded")
+    ctx.remember(PRODUCT)
+    return BlockContext(
+        intent=intent, media=[], call=BLOCKED, verdict=make_verdict(), claims=CLAIMS,
+        product_json=PRODUCT, cart_total=999.50, ctx=ctx, bus=bus, run_id=run_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_block_emits_fraud_card_on_real_tracebus(monkeypatch):
+    async def explain(prompt):
+        return "Shopify lists one bottle."
+
+    monkeypatch.setattr(dn, "_neon_reason", explain)
+    block = block_context(FakeShop([{"id": PRODUCT["id"]}]))
+    card = await dn.on_block(block)
+    assert card.safe_cart["continue_url"] == CONTINUE_URL
+    assert card.dollars_defended == 981.00
+    event, = block.bus.events(block.run_id)
+    assert (event.run_id, event.pane, event.kind) == (block.run_id, "guarded", "fraud_card")
+    assert event.data == card.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_on_block_never_raises(caplog):
+    class FailingShop(FakeShop):
+        async def create_cart(self, shop, lines):
+            raise RuntimeError(f"cart_secret_key {CONTINUE_URL}")
+
+    block = block_context(FailingShop([PRODUCT]))
+    assert await dn.on_block(block) is None
+    assert "cart_secret_key" not in caplog.text
+    assert CONTINUE_URL not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_on_block_caps_the_full_operation(monkeypatch):
+    async def hang(*args):
+        await asyncio.Event().wait()
+
+    block = block_context(FakeShop([PRODUCT]))
+    monkeypatch.setattr(dn, "ON_BLOCK_TIMEOUT_S", 0.01, raising=False)
+    monkeypatch.setattr(dn, "build_fraud_card", hang)
+    assert await asyncio.wait_for(dn.on_block(block), timeout=1) is None
+    assert not block.bus.events(block.run_id)
 
 
 async def test_validate_probe_reexport_returns_bool(monkeypatch):

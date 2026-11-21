@@ -173,5 +173,6 @@ def test_launch_uses_app_rules_store(client, monkeypatch):
 
     monkeypatch.setattr(m4_routes, "launch_redteam", launch_redteam)
     response = http.post("/api/redteam/launch", json={})
+    _wait_events(http.app.state.bus, response.json()["run_id"])
 
     assert calls == [store]

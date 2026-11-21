@@ -36,6 +36,7 @@ class Claims(BaseModel):
     audio_transcript: str | None
     instructions_detected: bool
     notes: str = ""
+    product_description: str | None = None  # short search query for the product shown (used for camera matching)
 
 
 class ToolCall(BaseModel):
@@ -69,6 +70,8 @@ class Verdict(BaseModel):
     tier: Tier
     backend: Literal["decisions", "json_llm"]
     error: str | None = None  # set when the firewall failed closed
+    model: str | None = None  # model that produced it, e.g. "gemini-decision-1"
+    confidence: float | None = None  # calibrated confidence of the firewall_action answer
 
 
 class FraudCard(BaseModel):
@@ -82,7 +85,8 @@ class FraudCard(BaseModel):
 
 class TraceEvent(BaseModel):
     run_id: str
-    pane: Literal["victim", "guarded", "redteam"]
+    # "system" is used only for the final `done` event, which belongs to no pane (Member 1, main.py).
+    pane: Literal["victim", "guarded", "redteam", "system"]
     t_ms: int
     kind: Literal["tool_call", "tool_result", "intercepted", "verdict", "fraud_card", "log", "done"]
     data: dict

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 import threading
 
@@ -12,6 +13,9 @@ from pydantic import BaseModel, model_validator
 from backend.schemas import Probe
 
 log = logging.getLogger(__name__)
+
+# Probe ids are sent as Decisions API question keys, which must match this.
+PROBE_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 class RuleSet(BaseModel):
@@ -24,6 +28,9 @@ class RuleSet(BaseModel):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"duplicate probe ids: {sorted(dupes)}")
+        bad = [i for i in ids if not PROBE_ID_RE.fullmatch(i)]
+        if bad:
+            raise ValueError(f"probe ids must match [A-Za-z0-9_-]{{1,64}}: {bad}")
         return self
 
 

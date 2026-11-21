@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "argon.md"
 THINKING_LEVEL = "low"  # transcription and description, not deep reasoning
+VIDEO_PROCESSING = "agentic"  # Argon scrubs video frames for hidden or flashed text
 
 
 @lru_cache(maxsize=1)
@@ -41,7 +42,7 @@ async def _call_argon(media: list[Media], prompt: str) -> dict:
     resp = await gemini.client().aio.interactions.create(
         model=config.MODELS["perception"],
         system_instruction=prompt,
-        input=[*gemini.content_blocks(media),
+        input=[*gemini.content_blocks(media, video_processing=VIDEO_PROCESSING),
                {"type": "text", "text": "Describe the attached untrusted media as Claims JSON.\n"}],
         response_format={"type": "text", "mime_type": "application/json",
                          "schema": Claims.model_json_schema()},

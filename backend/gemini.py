@@ -50,15 +50,18 @@ def read_media(m: Media) -> bytes:
     return Path(m.path).read_bytes()
 
 
-def content_blocks(media: list[Media]) -> list[dict]:
+def content_blocks(media: list[Media], video_processing: str | None = None) -> list[dict]:
     """One base64 content block per media file. Images go in at resolution="ultra_high"
-    (the field is `resolution`, not `media_resolution`)."""
+    (the field is `resolution`, not `media_resolution`). video_processing="agentic" lets the
+    model scrub video frames (Argon only; the firewall keeps the fast default)."""
     blocks = []
     for m in media:
         block = {"type": _BLOCK_TYPE[m.kind], "data": base64.b64encode(read_media(m)).decode("ascii"),
                  "mime_type": m.mime}
         if m.kind == "image":
             block["resolution"] = "ultra_high"
+        if m.kind == "video" and video_processing:
+            block["processing"] = video_processing
         blocks.append(block)
     return blocks
 

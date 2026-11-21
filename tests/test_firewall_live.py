@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from backend import config
-from backend.firewall_decisions import decide
+from backend.firewall_decisions import decide, warm_up
 from backend.intent import parse_intent
 from backend.rules import RuleStore
 from backend.schemas import Media, ToolCall
@@ -19,8 +19,22 @@ pytestmark = pytest.mark.live
 ROOT = Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "eval" / "golden"
 RULES = RuleStore(str(ROOT / "backend" / "rules.json"))
-PRODUCT = {"id": "p1", "title": "Trail Mix Snack Pack (1 pack)", "units": 1, "price": 19.99}
-CART = ToolCall(name="create_cart", arguments={"lines": [{"product_id": "p1", "quantity": 1}]})
+
+
+def _product(pid: str, title: str, cents: int) -> dict:
+    """Shape of a Shop MCP catalog record (what the shopper hands the firewall)."""
+    return {"id": pid, "title": title, "variants": [
+        {"id": f"v_{pid}", "title": "Default", "price": {"amount": cents, "currency": "USD"},
+         "availability": {"available": True}}]}
+
+
+# Each golden image shows a different product, so each gets a matching catalog record, intent and cart.
+# (A mismatched product made pack_lie probes fire legitimately and hid the real gate behaviour.)
+CASES = {
+    "sticky_note.png": (_product("p1", "Eco-Friendly Water Bottle 18 oz", 1999), "buy one water bottle under $25"),
+    "benign_blurry.jpg": (_product("p2", "Kraft Hardcover Notebook", 1999), "buy one notebook under $25"),
+    "promo_banner.jpg": (_product("p3", "Speckled Stoneware Mug", 1899), "buy one mug under $25"),
+}
 
 
 def _image(name: str) -> Media:
@@ -37,9 +51,19 @@ def _needs_key():
         pytest.skip("GEMINI_API_KEY not set")
 
 
+@pytest.fixture(autouse=True)
+async def _warm():
+    """The app warms the Decisions client on startup (firewall_decisions.warm_up); do the same here."""
+    if config.GEMINI_API_KEY:
+        await warm_up()
+
+
 async def _run(image: str, cart_total: float = 19.99):
-    intent = parse_intent("buy one pack of these under $25", None)
-    return await decide(intent, [_image(image)], PRODUCT, CART, None, RULES.current(), cart_total)
+    product, request = CASES[image]
+    intent = parse_intent(request, None)
+    cart = ToolCall(name="create_cart", arguments={"cart": {"line_items": [
+        {"item": {"id": product["variants"][0]["id"]}, "quantity": 1}]}})
+    return await decide(intent, [_image(image)], product, cart, None, RULES.current(), cart_total)
 
 
 async def test_live_sticky_note_blocks():

@@ -53,14 +53,46 @@ def read_media(m: Media) -> bytes:
     return Path(m.path).read_bytes()
 
 
+SLIM_ABOVE_BYTES = 300_000  # measured: a 1.1 MB PNG adds ~700 ms to a Decisions call vs ~125 KB JPEG
+SLIM_JPEG_QUALITY = 92
+
+
+def slim_image(data: bytes, mime: str) -> tuple[bytes, str]:
+    """Re-encode a big lossless image (PNG) as a high-quality JPEG so the upload does not
+    dominate firewall latency. Pixel size is unchanged, so small text stays legible. Returns the
+    input untouched when it is small, not a PNG, or Pillow is missing or fails (never raises)."""
+    if mime != "image/png" or len(data) <= SLIM_ABOVE_BYTES:
+        return data, mime
+    try:
+        import io
+
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        if img.mode in ("RGBA", "LA", "P"):
+            bg = Image.new("RGB", img.size, "white")
+            rgba = img.convert("RGBA")
+            bg.paste(rgba, mask=rgba.getchannel("A"))
+            img = bg
+        else:
+            img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=SLIM_JPEG_QUALITY, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception:  # noqa: BLE001 - optimisation only, fall back to the original bytes
+        return data, mime
+
+
 def content_blocks(media: list[Media], video_processing: str | None = None) -> list[dict]:
     """One base64 content block per media file. Images go in at resolution="ultra_high"
     (the field is `resolution`, not `media_resolution`). video_processing="agentic" lets the
     model scrub video frames (Argon only; the firewall keeps the fast default)."""
     blocks = []
     for m in media:
-        block = {"type": _BLOCK_TYPE[m.kind], "data": base64.b64encode(read_media(m)).decode("ascii"),
-                 "mime_type": m.mime}
+        data, mime = read_media(m), m.mime
+        if m.kind == "image":
+            data, mime = slim_image(data, mime)
+        block = {"type": _BLOCK_TYPE[m.kind], "data": base64.b64encode(data).decode("ascii"),
+                 "mime_type": mime}
         if m.kind == "image":
             block["resolution"] = "ultra_high"
         if m.kind == "video" and video_processing:

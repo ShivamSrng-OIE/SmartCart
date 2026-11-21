@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 from pathlib import Path
 
@@ -14,7 +15,8 @@ from fastapi.responses import FileResponse
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
-ITEMS_DIR = ROOT / "eval" / "props" / "generated" / "items"
+# CARTTRAP_ITEMS_DIR points the warehouse dataset somewhere else (e.g. a local folder of test items).
+ITEMS_DIR = Path(os.environ.get("CARTTRAP_ITEMS_DIR") or ROOT / "eval" / "props" / "generated" / "items")
 CASES_DIR = ROOT / "eval" / "cases"
 ITEM_ID_RE = re.compile(r"^type-\d+-v\d+$")
 DATASET_FILES = frozenset({"image.png", "audio.wav", "video.mp4", "spec.pdf", "description.txt"})

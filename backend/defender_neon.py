@@ -1,91 +1,34 @@
-"""Neon defender: fraud card, Dollars Defended, safe swap (Task 10).
-
-Shop access goes only through the ShopMCP interface. This module never calls
-the forbidden Shop tools (checkout completion, spend-request completion or creation).
-
-The stubs below are used only until the real modules exist:
-  - backend.schemas   (Member 2, C1)  -> Intent, Claims, ToolCall, ProbeResult, Verdict, FraudCard
-  - backend.config    (Member 1)      -> MODELS["defender"]
-  - ShopMCP           (Member 1, C2)  -> structural Protocol ShopLike below
-"""
+"""Neon defender: fraud card, Dollars Defended, and safe swap via ShopMCP."""
 from __future__ import annotations
 
 import asyncio
 import json
-import re
 import logging
-import os
+import re
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel
 
+from backend import config, gemini
+from backend.schemas import Claims, FraudCard, Intent, ProbeResult, ToolCall, Verdict
+
+if TYPE_CHECKING:
+    from backend.guarded_shopper import BlockContext
+
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------- schema stubs
-try:  # real schemas win as soon as they exist
-    from backend.schemas import Claims, FraudCard, Intent, ProbeResult, ToolCall, Verdict
-except ImportError:  # STUB: remove when backend/schemas.py lands (C1)
-
-    class Intent(BaseModel):
-        text: str
-        budget: float | None = None
-        quantity: int = 1
-
-    class Claims(BaseModel):
-        visible_text: list[str] = []
-        pack_count_claim: int | None = None
-        brand_claims: list[str] = []
-        audio_transcript: str | None = None
-        instructions_detected: bool = False
-        notes: str = ""
-
-    class ToolCall(BaseModel):
-        name: str
-        arguments: dict
-
-    class ProbeResult(BaseModel):
-        id: str
-        p: float
-        fired: bool
-
-    class Verdict(BaseModel):
-        action: Literal["approve_checkout", "escalate_to_neon_swap", "hard_block_quarantine"]
-        action_probs: dict[str, float]
-        probes: list[ProbeResult]
-        severity: int
-        latency_ms: int
-        tier: Literal["low", "normal", "high", "spend_request"]
-        backend: Literal["decisions", "json_llm"]
-        error: str | None = None
-
-    class FraudCard(BaseModel):
-        reason: str
-        media_claimed: list[str]
-        shopify_sells: dict | None
-        top_probes: list[ProbeResult]
-        dollars_defended: float
-        safe_cart: dict | None
-
-
-try:
-    from backend.config import MODELS
-
-    NEON_MODEL = MODELS["defender"]
-except (ImportError, KeyError):  # TODO: remove stub once backend/config.py exists (model IDs live only there)
-    NEON_MODEL = "TODO-neon-model-id"
-
 NEON_TIMEOUT_S = 8.0
+ON_BLOCK_TIMEOUT_S = 10.0
 PROMPT_PATH = Path(__file__).parent / "prompts" / "neon_fraud_card.md"
 
 
 class ShopLike(Protocol):
-    """The slice of ShopMCP (C2) the defender uses. Signatures follow ADR m4/0008."""
+    """Catalog and cart operations used by the defender."""
 
     async def search_catalog(self, query: str, **filters) -> list[dict]: ...
     async def get_product(self, product_id: str) -> dict: ...
-    async def create_checkout(self, shop: str, lines: list[dict]) -> dict: ...
     async def create_cart(self, shop: str, lines: list[dict]) -> dict: ...
 
 
@@ -99,15 +42,20 @@ BUDGET_CURRENCY = "USD"
 _UNAVAILABLE_WORDS = ("out_of_stock", "out of stock", "outofstock", "unavailable", "sold_out", "sold out", "preorder_closed")
 
 
-def _variant_dollars(variant: dict) -> Decimal | None:
-    """Variant price is {"amount": int minor units, "currency"}. Other currencies are rejected, not converted."""
-    price = variant.get("price")
-    if not isinstance(price, dict) or price.get("currency") != BUDGET_CURRENCY:
+def _minor_units_to_dollars(amount: object) -> Decimal | None:
+    if isinstance(amount, bool) or not isinstance(amount, (int, str)):
         return None
     try:
-        return Decimal(int(price["amount"])) / 100
-    except (KeyError, TypeError, ValueError):
+        cents = int(amount)
+    except ValueError:
         return None
+    return Decimal(cents) / 100 if cents >= 0 else None
+
+
+def _usd_price(price: object) -> Decimal | None:
+    if not isinstance(price, dict) or price.get("currency") != BUDGET_CURRENCY:
+        return None
+    return _minor_units_to_dollars(price.get("amount"))
 
 
 def _purchasable(variant: dict) -> bool:
@@ -131,7 +79,9 @@ def _shopify_sells(product_json: dict | None) -> dict | None:
         return None
     sells = {"title": product_json.get("title")}
     variants = product_json.get("variants") or []
-    sells["price"] = variants[0].get("price") if variants else product_json.get("price")
+    price = _usd_price(variants[0].get("price") if variants else product_json.get("price"))
+    if price is not None:
+        sells["price"] = float(price)
     pid = product_json.get("id") or product_json.get("product_id")
     if pid is not None:
         sells["product_id"] = pid
@@ -159,26 +109,27 @@ def _top_probes(verdict: Verdict, n: int = 3) -> list[ProbeResult]:
     return sorted(pool, key=lambda p: p.p, reverse=True)[:n]
 
 
-def _template_reason(verdict, claims, product_json, blocked, attempted) -> str:
+def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCall, attempted: float) -> str:
     parts = [f"CartTrap blocked {blocked.name} before any money moved (attempted ${attempted:,.2f})."]
     if claims is not None and claims.instructions_detected:
         parts.append("The photo, audio or document contained text trying to give orders to the shopping agent.")
-    if claims is not None and claims.pack_count_claim and product_json:
-        title = product_json.get("title")
+    if claims is not None and claims.pack_count_claim and sells and sells.get("title"):
+        price = sells.get("price")
+        price_text = f" at ${price:,.2f}" if price is not None else ""
         parts.append(
-            f'The media claims a {claims.pack_count_claim}-pack, but Shopify lists "{title}" '
-            f"at {(_shopify_sells(product_json) or {}).get('price')}."
+            f'The media claims a {claims.pack_count_claim}-pack, but Shopify lists "{sells["title"]}"{price_text}.'
         )
-    elif product_json is None:
+    elif sells is None:
         parts.append("The product could not be verified against Shopify.")
     return " ".join(parts)
 
 
 def template_fraud_card(verdict, claims, product_json, blocked, attempted) -> FraudCard:
+    sells = _shopify_sells(product_json)
     return FraudCard(
-        reason=_template_reason(verdict, claims, product_json, blocked, attempted),
+        reason=_template_reason(claims, sells, blocked, attempted),
         media_claimed=_media_claimed(claims),
-        shopify_sells=_shopify_sells(product_json),
+        shopify_sells=sells,
         top_probes=_top_probes(verdict),
         dollars_defended=dollars_defended(attempted, None),
         safe_cart=None,
@@ -207,12 +158,10 @@ class _NeonText(BaseModel):
 
 async def _neon_reason(prompt: str) -> str:
     """One Neon call, structured output. Raises on any failure; caller falls back."""
-    from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    resp = await client.aio.models.generate_content(
-        model=NEON_MODEL,
+    resp = await gemini.client().aio.models.generate_content(
+        model=config.MODELS["defender"],
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json", response_schema=_NeonText
@@ -237,50 +186,97 @@ async def build_fraud_card(verdict, claims, product_json, blocked, attempted, sa
 
 
 # ---------------------------------------------------------------- safe swap
-async def safe_swap(intent: Intent, original: dict | None, shop: ShopLike) -> dict | None:
-    """Honest product within the user's budget and quantity, ending in a real checkout link.
-
-    Returns {checkout_id, continue_url, shop, line_items, total} or None. continue_url is
-    passed through byte for byte (ADR m4/0008).
-    """
-    query = (original or {}).get("title") or intent.text
-    qty = intent.quantity
-    budget = None if intent.budget is None else Decimal(str(intent.budget))
-
-    best = None  # (unit price, variant)
-    for offer in (await shop.search_catalog(query))[:8]:
-        product = await shop.get_product(offer["id"])  # truth ledger, not the search snippet
+def _best_variant(
+    products: dict[str, dict], qty: int, budget: Decimal | None,
+) -> tuple[Decimal, str, dict, dict] | None:
+    best = None
+    for product_id, product in products.items():
         for variant in product.get("variants") or []:
-            unit = _variant_dollars(variant)
+            unit = _usd_price(variant.get("price"))
             domain = (variant.get("seller") or {}).get("domain")
             if unit is None or not domain or not variant.get("id") or not _purchasable(variant):
                 continue
             if budget is not None and unit * qty > budget:
                 continue
             if best is None or unit < best[0]:
-                best = (unit, variant)
+                best = (unit, product_id, product, variant)
+    return best
+
+
+async def safe_swap(
+    intent: Intent, original: dict | None, shop: ShopLike, *, known: dict[str, dict] | None = None,
+) -> dict | None:
+    """Create a cart for a matching Shopify offer within the user's budget."""
+    original = original or {}
+    known = known or {}
+    qty = intent.quantity
+    budget = None if intent.budget is None else Decimal(str(intent.budget))
+    query = original.get("title") or intent.text
+
+    # Restrict candidates to the original product and results relevant to this search.
+    products = {}
+    for offer in [original, *(await shop.search_catalog(query))[:8]]:
+        product_id = offer.get("id") or offer.get("product_id")
+        if not product_id or (products.get(product_id) or {}).get("variants"):
+            continue
+        cached = known.get(product_id)
+        products[product_id] = cached if cached and cached.get("variants") else offer
+
+    best = _best_variant(products, qty, budget)
+    if best is None:
+        missing = [product_id for product_id, product in products.items() if not product.get("variants")]
+        details = {product_id: await shop.get_product(product_id) for product_id in missing[:3]}
+        best = _best_variant(details, qty, budget)
     if best is None:
         return None
 
-    unit, variant = best
+    unit, product_id, product, variant = best
     domain = variant["seller"]["domain"]
-    lines = [{"item": {"id": variant["id"]}, "quantity": qty}]
-    try:
-        res = await shop.create_checkout(domain, lines)
-    except Exception as exc:  # ADR 0008: anonymous checkout may fail live; fall back to cart
-        # Log the type only: messages can embed the access-keyed URL.
-        log.warning("create_checkout failed (%s); falling back to create_cart", type(exc).__name__)
-        res = await shop.create_cart(domain, lines)
+    variant_id = variant["id"]
+    res = await shop.create_cart(domain, [{"variant_id": variant_id, "quantity": qty}])
+    total = unit * qty
+    for entry in res.get("totals") or []:
+        if entry.get("type") == "total":
+            cart_total = _minor_units_to_dollars(entry.get("amount"))
+            if cart_total is not None:
+                total = cart_total
+                break
+    if budget is not None and total > budget:
+        return None
+
+    title = product.get("title") or variant.get("title")
     out = {
         "checkout_id": res.get("id") or res.get("checkout_id"),
         "continue_url": res.get("continue_url"),
         "shop": domain,
-        "line_items": lines,
-        "total": float(unit * qty),
+        "title": title,
+        "line_items": [{
+            "item": {"id": variant_id},
+            "variant_id": variant_id,
+            "product_id": product_id,
+            "title": variant.get("title") or title,
+            "price": float(unit),
+            "quantity": qty,
+        }],
+        "total": float(total),
     }
     if res.get("intercepted"):
         out["intercepted"] = True
     return out
+
+
+async def on_block(b: BlockContext) -> FraudCard | None:
+    """Explain the guarded block and offer a safe cart within one deadline."""
+    try:
+        async with asyncio.timeout(ON_BLOCK_TIMEOUT_S):
+            safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
+            card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
+            b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
+            return card
+    except Exception as exc:
+        # Shop errors can contain access-keyed cart URLs.
+        log.warning("Neon block handler failed: %s", type(exc).__name__)
+        return None
 
 
 # ---------------------------------------------------------------- self-heal re-exports (ADR m4/0003)

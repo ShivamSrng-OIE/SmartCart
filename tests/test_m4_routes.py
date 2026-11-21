@@ -1,5 +1,4 @@
 import json
-from dataclasses import dataclass
 
 import pytest
 from fastapi import FastAPI
@@ -7,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend import m4_routes
 from backend.replay import iter_trace
+from backend.trace import TraceBus
 
 
 @pytest.fixture
@@ -18,8 +18,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(m4_routes, "RESULTS_DIR", results)
     monkeypatch.setattr(m4_routes, "DEMO_TRACE", runs / "redteam_demo.jsonl")
     app = FastAPI()
+    app.state.bus = TraceBus()
+    app.state.rules = object()
     app.include_router(m4_routes.m4_router)
-    return TestClient(app), results, runs
+    with TestClient(app) as http:
+        yield http, results, runs
 
 
 def test_latest_eval_returns_newest_json(client):
@@ -31,6 +34,17 @@ def test_latest_eval_returns_newest_json(client):
 
     assert response.status_code == 200
     assert response.json() == {"tag": "new"}
+
+
+def test_latest_prefers_latest_json(client):
+    http, results, _ = client
+    (results / "latest.json").write_text('{"tag":"frozen"}', encoding="utf-8")
+    (results / "later.json").write_text('{"tag":"newer mtime"}', encoding="utf-8")
+
+    response = http.get("/api/eval/latest")
+
+    assert response.status_code == 200
+    assert response.json() == {"tag": "frozen"}
 
 
 def test_latest_eval_returns_404_when_no_results(client):
@@ -62,33 +76,46 @@ def test_launch_redteam_replays_demo_when_live_module_missing(client, monkeypatc
         "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
     )
     monkeypatch.setattr(m4_routes, "launch_redteam", None)
+    monkeypatch.setattr(m4_routes, "REPLAY_SPEED", 0)
 
     response = http.post("/api/redteam/launch", json={"rounds": 1})
 
     assert response.status_code == 200
-    assert response.json() == {"run_id": "rt_demo", "events": events}
+    run_id = response.json()["run_id"]
+    assert run_id != "rt_demo"
+    stream_events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+    assert stream_events[0]["data"]["message"] == "replayed"
+    assert stream_events[-1]["kind"] == "done"
+
+
+def test_replay_pushes_events_with_done(client, monkeypatch):
+    http, _, runs = client
+    events = [
+        {"run_id": "source", "pane": "redteam", "t_ms": 4, "kind": "log", "data": {"stage": "attack"}},
+        {"run_id": "source", "pane": "redteam", "t_ms": 9, "kind": "verdict", "data": {"action": "blocked"}},
+    ]
+    (runs / "redteam_demo.jsonl").write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+    monkeypatch.setattr(m4_routes, "launch_redteam", None)
+    monkeypatch.setattr(m4_routes, "REPLAY_SPEED", 0)
+
+    response = http.post("/api/redteam/launch")
+    run_id = response.json()["run_id"]
+    stream_events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+
+    assert [event["kind"] for event in stream_events] == ["log", "verdict", "done"]
+    assert all(event["run_id"] == run_id for event in stream_events)
+    assert stream_events[0]["data"]["stage"] == "attack"
 
 
 @pytest.mark.asyncio
 async def test_launch_redteam_calls_importable_launcher(client, monkeypatch):
     http, _, _ = client
     calls = []
+    monkeypatch.setattr("backend.config.MANAGED_AGENTS", True)
 
-    @dataclass
-    class Event:
-        run_id: str = "rt_live"
-        pane: str = "redteam"
-        t_ms: int = 1
-        kind: str = "done"
-        data: dict | None = None
-
-    class Bus:
-        def emit(self, event):
-            calls.append(event)
-
-    async def launch_redteam(product_id, rounds, bus, run_id):
-        calls.append((product_id, rounds, run_id))
-        bus.emit(Event(data={"done": True}))
+    async def launch_redteam(product_id, rounds, bus, run_id, *, store):
+        calls.append((product_id, rounds, run_id, store))
+        bus.emit(type("Event", (), {"run_id": run_id, "pane": "redteam", "kind": "done", "data": {"done": True}})())
         return []
 
     monkeypatch.setattr(m4_routes, "launch_redteam", launch_redteam)
@@ -96,5 +123,42 @@ async def test_launch_redteam_calls_importable_launcher(client, monkeypatch):
     response = http.post("/api/redteam/launch", json={"product_id": "sku-7", "rounds": 2})
 
     assert response.status_code == 200
-    assert response.json() == {"run_id": calls[0][2]}
+    run_id = response.json()["run_id"]
+    assert run_id == calls[0][2]
     assert calls[0][:2] == ("sku-7", 2)
+
+
+def test_launch_returns_run_id_and_streams_via_bus(client, monkeypatch):
+    http, _, _ = client
+    monkeypatch.setattr(m4_routes, "REPLAY_SPEED", 0)
+    monkeypatch.setattr("backend.config.MANAGED_AGENTS", True)
+
+    async def launch_redteam(product_id, rounds, bus, run_id, *, store):
+        bus.emit(type("Event", (), {"run_id": run_id, "pane": "redteam", "kind": "log", "data": {"stage": "started"}})())
+        bus.emit(type("Event", (), {"run_id": run_id, "pane": "redteam", "kind": "done", "data": {}})())
+
+    monkeypatch.setattr(m4_routes, "launch_redteam", launch_redteam)
+    response = http.post("/api/redteam/launch", json={"product_id": "sku", "rounds": 1})
+
+    assert response.status_code == 200
+    run_id = response.json()["run_id"]
+    assert set(response.json()) == {"run_id"}
+    events = [event.model_dump() for event in http.app.state.bus.events(run_id)]
+    assert [event["kind"] for event in events] == ["log", "done"]
+    assert events[0]["data"]["stage"] == "started"
+
+
+def test_launch_uses_app_rules_store(client, monkeypatch):
+    http, _, _ = client
+    store = http.app.state.rules
+    calls = []
+    monkeypatch.setattr("backend.config.MANAGED_AGENTS", True)
+
+    async def launch_redteam(product_id, rounds, bus, run_id, *, store):
+        calls.append(store)
+        bus.emit(type("Event", (), {"run_id": run_id, "pane": "redteam", "kind": "done", "data": {}})())
+
+    monkeypatch.setattr(m4_routes, "launch_redteam", launch_redteam)
+    response = http.post("/api/redteam/launch", json={})
+
+    assert calls == [store]

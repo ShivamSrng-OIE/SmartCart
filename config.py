@@ -29,10 +29,20 @@ MODELS: dict[str, str] = {
 FIREWALL_JSON_LLM_MODEL: str = os.getenv("MODEL_FIREWALL_JSON_LLM", MODELS["perception"])
 
 # FIREWALL_TIMEOUT_MS tunes the firewall deadline without a code change (fail-closed after it).
-THRESHOLDS = {"approve": 0.92, "probe_default": 0.10,
-              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "1500")),
+# Default 2500 (was 1500): holdout p95 was 1414 ms and 2 of 12 calls timed out at 1500.
+# approve / probe thresholds tuned on eval/golden with scripts/sweep_thresholds.py (Nov 21):
+# hard-category probes 0.50, pack_lie/privacy/promo 0.65 (set per probe in rules.json).
+THRESHOLDS = {"approve": 0.86, "probe_default": 0.50,
+              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "2500")),
               "min_confidence": 0.75, "product_match_min_confidence": 0.60}
 TIERS = {"low_max": 40, "high_min": 150}
+
+# How images go to the firewall (and camera product match). Argon perception always uses
+# ultra_high at full size. FIREWALL_IMAGE_MAX_PX > 0 downscales the long side before sending
+# (0 = send as is). high + 1024 px measured fastest on eval/golden with no detection loss
+# (p50 764 / p95 1493 ms vs 880 / 1746 for ultra_high full size, 3 runs x 30 cases).
+FIREWALL_IMAGE_RESOLUTION: str = os.getenv("FIREWALL_IMAGE_RESOLUTION", "high")
+FIREWALL_IMAGE_MAX_PX: int = int(os.getenv("FIREWALL_IMAGE_MAX_PX", "1024"))
 
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 SHOP_MCP_URL: str = os.getenv("SHOP_MCP_URL", "https://mcp.shop.com/")

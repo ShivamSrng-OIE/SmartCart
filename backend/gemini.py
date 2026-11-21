@@ -10,6 +10,8 @@ clients or the private call functions and never reach the network).
 from __future__ import annotations
 
 import base64
+import functools
+import io
 import re
 from pathlib import Path
 
@@ -53,52 +55,58 @@ def read_media(m: Media) -> bytes:
     return Path(m.path).read_bytes()
 
 
-SLIM_ABOVE_BYTES = 300_000  # measured: a 1.1 MB PNG adds ~700 ms to a Decisions call vs ~125 KB JPEG
-SLIM_JPEG_QUALITY = 92
+@functools.lru_cache(maxsize=64)
+def _downscaled_jpeg(path: str, mtime_ns: int, max_px: int) -> bytes | None:
+    """JPEG bytes of the image with its long side cut to max_px, or None if already small enough.
+    Cached on (path, mtime) so repeated firewall checks of the same photo don't re-encode it."""
+    from PIL import Image
+
+    with Image.open(path) as im:
+        if max(im.size) <= max_px:
+            return None
+        im = im.convert("RGB")
+        im.thumbnail((max_px, max_px), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
 
 
-def slim_image(data: bytes, mime: str) -> tuple[bytes, str]:
-    """Re-encode a big lossless image (PNG) as a high-quality JPEG so the upload does not
-    dominate firewall latency. Pixel size is unchanged, so small text stays legible. Returns the
-    input untouched when it is small, not a PNG, or Pillow is missing or fails (never raises)."""
-    if mime != "image/png" or len(data) <= SLIM_ABOVE_BYTES:
-        return data, mime
-    try:
-        import io
-
-        from PIL import Image
-        img = Image.open(io.BytesIO(data))
-        if img.mode in ("RGBA", "LA", "P"):
-            bg = Image.new("RGB", img.size, "white")
-            rgba = img.convert("RGBA")
-            bg.paste(rgba, mask=rgba.getchannel("A"))
-            img = bg
-        else:
-            img = img.convert("RGB")
-        out = io.BytesIO()
-        img.save(out, "JPEG", quality=SLIM_JPEG_QUALITY, optimize=True)
-        return out.getvalue(), "image/jpeg"
-    except Exception:  # noqa: BLE001 - optimisation only, fall back to the original bytes
-        return data, mime
+def _image_bytes(m: Media, max_px: int) -> tuple[bytes, str]:
+    if max_px > 0:
+        p = Path(m.path)
+        mtime = p.stat().st_mtime_ns  # a missing file raises here; callers fail closed
+        try:
+            small = _downscaled_jpeg(str(p), mtime, max_px)
+        except Exception:  # noqa: BLE001 - Pillow can't decode it: send the original bytes as is
+            small = None
+        if small is not None:
+            return small, "image/jpeg"
+    return read_media(m), m.mime
 
 
-def content_blocks(media: list[Media], video_processing: str | None = None) -> list[dict]:
-    """One base64 content block per media file. Images go in at resolution="ultra_high"
-    (the field is `resolution`, not `media_resolution`). video_processing="agentic" lets the
-    model scrub video frames (Argon only; the firewall keeps the fast default)."""
+def content_blocks(media: list[Media], video_processing: str | None = None,
+                   resolution: str = "ultra_high", max_px: int = 0) -> list[dict]:
+    """One base64 content block per media file. Images go in at `resolution` (the field is
+    `resolution`, not `media_resolution`); max_px > 0 downscales an image's long side first
+    (re-encoded as JPEG). video_processing="agentic" lets the model scrub video frames (Argon
+    only; the firewall keeps the fast default)."""
     blocks = []
     for m in media:
-        data, mime = read_media(m), m.mime
-        if m.kind == "image":
-            data, mime = slim_image(data, mime)
+        data, mime = _image_bytes(m, max_px) if m.kind == "image" else (read_media(m), m.mime)
         block = {"type": _BLOCK_TYPE[m.kind], "data": base64.b64encode(data).decode("ascii"),
                  "mime_type": mime}
         if m.kind == "image":
-            block["resolution"] = "ultra_high"
+            block["resolution"] = resolution
         if m.kind == "video" and video_processing:
             block["processing"] = video_processing
         blocks.append(block)
     return blocks
+
+
+def firewall_content_blocks(media: list[Media]) -> list[dict]:
+    """content_blocks with the firewall's image settings (config.FIREWALL_IMAGE_*)."""
+    return content_blocks(media, resolution=config.FIREWALL_IMAGE_RESOLUTION,
+                          max_px=config.FIREWALL_IMAGE_MAX_PX)
 
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)

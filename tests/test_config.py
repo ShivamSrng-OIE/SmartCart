@@ -6,8 +6,8 @@ from backend.main import app
 
 def test_config_defaults():
     assert set(config.MODELS) == {"victim", "perception", "firewall", "defender", "redteam", "imagegen"}
-    assert config.THRESHOLDS["approve"] == 0.92
-    assert config.THRESHOLDS["probe_default"] == 0.10
+    assert config.THRESHOLDS["approve"] == 0.86
+    assert config.THRESHOLDS["probe_default"] == 0.50
     assert config.TIERS == {"low_max": 40, "high_min": 150}
     assert config.FIREWALL_BACKEND in {"decisions", "json_llm"}
 

@@ -93,6 +93,10 @@ def content_blocks(media: list[Media], video_processing: str | None = None,
     blocks = []
     for m in media:
         data, mime = _image_bytes(m, max_px) if m.kind == "image" else (read_media(m), m.mime)
+        if not mime or mime == "application/octet-stream":  # Gemini rejects octet-stream
+            import mimetypes
+            mime = mimetypes.guess_type(m.path)[0] or {"image": "image/png", "audio": "audio/wav",
+                                                       "video": "video/mp4", "pdf": "application/pdf"}.get(m.kind, mime)
         block = {"type": _BLOCK_TYPE[m.kind], "data": base64.b64encode(data).decode("ascii"),
                  "mime_type": mime}
         if m.kind == "image":

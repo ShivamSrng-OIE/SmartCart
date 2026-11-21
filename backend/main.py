@@ -84,6 +84,11 @@ async def _save(upload: UploadFile | None, kind: str, run_dir: Path) -> Media | 
     path = run_dir / f"{kind}{Path(upload.filename).suffix}"
     path.write_bytes(await upload.read())
     mime = upload.content_type or "application/octet-stream"
+    if mime in ("application/octet-stream", "") or "/" not in mime:
+        # Clients (curl, some browsers) send no type: guess from the file name so Gemini accepts it.
+        import mimetypes
+        guessed = mimetypes.guess_type(upload.filename or "")[0]
+        mime = guessed or {"image": "image/png", "audio": "audio/wav", "video": "video/mp4"}.get(kind, mime)
     if kind == "pdf":
         mime = "application/pdf"
     if kind == "audio":  # webm/ogg/mp3 -> PCM WAV so Gemini and the audio evidence both read it

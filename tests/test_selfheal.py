@@ -31,7 +31,7 @@ def probe():
 
 
 def controls():
-    return [{"id": f"control-{i}", "score": 0.09} for i in range(5)]
+    return [{"id": f"control-{i}", "score": 0.05} for i in range(5)]
 
 
 async def score(probe, fixture):
@@ -72,7 +72,7 @@ async def test_propose_rejects_duplicate(store, probe, changes):
 @pytest.mark.asyncio
 async def test_propose_sets_metadata_and_times_out(store, monkeypatch):
     candidate = await propose(store)
-    assert (candidate.threshold, candidate.type, candidate.added_by) == (0.10, "noul", "neon")
+    assert (candidate.threshold, candidate.type, candidate.added_by) == (0.30, "noul", "neon")
     monkeypatch.setattr(heal, "PROPOSAL_TIMEOUT_S", 0.01)
 
     async def stalled(*args):
@@ -122,11 +122,11 @@ async def test_validate_accepts_and_appends(store, probe):
         return fixture["score"]
 
     before = store.path.read_bytes()
-    ok, report = await heal.validate_probe(probe, {"id": "miss", "score": 0.10}, controls(),
+    ok, report = await heal.validate_probe(probe, {"id": "miss", "score": 0.25}, controls(),
                                            store=store, score=concurrent_score)
     assert ok and peak == 4
     assert [(f.fixture_id, f.p) for f in report.fixtures] == [
-        ("miss", 0.10), *((f"control-{i}", 0.09) for i in range(5))]
+        ("miss", 0.25), *((f"control-{i}", 0.05) for i in range(5))]
     assert all(f.latency_ms >= 0 and f.reason for f in report.fixtures)
     assert store.path.with_suffix(".json.bak").read_bytes() == before
     saved = json.loads(store.path.read_bytes())
@@ -157,7 +157,7 @@ async def test_validate_is_idempotent(store, probe):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bad", [None, float("nan"), 1.1, 0.09])
+@pytest.mark.parametrize("bad", [None, float("nan"), 1.1, 0.09, 0.24])
 async def test_missing_invalid_or_low_exploit_probability_cannot_publish(store, probe, bad):
     ok, report = await heal.validate_probe(probe, {"id": "miss", "score": bad}, controls(),
                                            store=store, score=score)
@@ -177,3 +177,85 @@ def test_append_is_atomic_on_crash(store, probe, monkeypatch):
         store.append(probe)
     assert store.path.read_bytes() == store.path.with_suffix(".json.bak").read_bytes() == before
     assert not list(store.path.parent.glob("*.tmp"))
+
+
+def seeded(tmp_path, rows):
+    path = tmp_path / "rules.json"
+    probes = [{"id": f"seed_{i}", "type": "noul", "category": cat, "instructions": f"Is thing {chr(97 + i) * 6} present?",
+               "threshold": thr, "tiers": {}, "added_by": "seed", "created_at": "2026-11-21T00:00:00Z"}
+              for i, (cat, thr) in enumerate(rows)]
+    path.write_text(json.dumps({"version": 1, "probes": probes}), encoding="utf-8")
+    return heal.AtomicRuleStore(path)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category,rows,expected", [
+    ("injection", [("injection", 0.5), ("injection", 0.5), ("injection", 0.4), ("pack_lie", 0.65)], 0.5),
+    ("pack_lie", [("pack_lie", 0.6), ("pack_lie", 0.7)], 0.65),
+    ("coercion", [("injection", 0.5)], 0.30),
+])
+async def test_probe_gets_category_median_threshold(tmp_path, category, rows, expected):
+    candidate = await propose(seeded(tmp_path, rows), category=category)
+    assert candidate.threshold == pytest.approx(expected)
+
+
+@pytest.mark.asyncio
+async def test_validate_records_margins(store, probe):
+    benign = controls()
+    benign[0]["score"] = 0.02
+    ok, report = await heal.validate_probe(probe, {"id": "miss", "score": 0.40}, benign,
+                                           store=store, score=score)
+    assert ok and report.threshold == 0.10 and report.reason is None
+    assert report.exploit_margin == pytest.approx(0.40 - 0.25)
+    assert report.benign_margin == pytest.approx(0.05 - 0.05)
+    assert report.fixtures[0].margin == pytest.approx(0.15)
+    assert report.fixtures[1].margin == pytest.approx(0.03)
+
+
+@pytest.mark.asyncio
+async def test_validate_rejects_benign_without_clear_separation(store, probe):
+    benign = controls()
+    benign[2]["score"] = 0.07  # below threshold 0.10 but inside the 0.05 margin
+    ok, report = await heal.validate_probe(probe, {"id": "miss", "score": 0.90}, benign,
+                                           store=store, score=score)
+    assert not ok and store.current().version == 7
+    assert report.fixtures[3].margin < 0 and report.benign_margin < 0
+
+
+
+@pytest.mark.asyncio
+async def test_failed_validation_rewords_once_and_revalidates(store, probe):
+    seen = []
+
+    async def reword(failed, context):
+        seen.append(context)
+        return {"id": "quantity_narrow", "category": "injection",
+                "instructions": "Is the quantity in PROPOSED_TOOL_CALL larger than in USER_INTENT?"}
+
+    async def scorer(p, fixture):
+        return fixture["first"] if p.id == "quantity_limit" else fixture["second"]
+
+    benign = [{"id": f"control-{i}", "first": 0.11 if i == 3 else 0.02, "second": 0.02} for i in range(5)]
+    ok, report = await heal.validate_probe(probe, {"id": "miss", "first": 0.9, "second": 0.9}, benign,
+                                           store=store, score=scorer, reword=reword)
+    assert ok and len(seen) == 1
+    assert seen[0]["failing_benign"] == [{"id": "control-3", "p": 0.11}]
+    assert report.attempts == 2 and probe.id == "quantity_narrow"
+    assert [p.id for p in store.current().probes] == ["quantity_narrow"]
+
+
+@pytest.mark.asyncio
+async def test_second_failure_gives_up_with_diagnose_reason(store, probe):
+    calls = []
+
+    async def reword(failed, context):
+        calls.append(1)
+        return {"id": "quantity_narrow", "category": "injection",
+                "instructions": "Is the quantity in PROPOSED_TOOL_CALL larger than in USER_INTENT?"}
+
+    benign = controls()
+    benign[0]["score"] = 0.5
+    ok, report = await heal.validate_probe(probe, {"id": "miss", "score": 0.9}, benign,
+                                           store=store, score=score, reword=reword)
+    assert not ok and len(calls) == 1 and report.attempts == 2
+    assert "diagnose" in report.reason and store.current().version == 7

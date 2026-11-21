@@ -18,7 +18,7 @@
 
 ## 🎬 Demo
 
-**[▶ Watch the 50-second demo: image, video and audio attacks held live](demo/SmartCart-demo.mp4)** · **Try it locally:** see [Setup](#-setup)
+**[▶ Watch the 50-second demo: image, video and audio attacks held live](https://drive.google.com/file/d/1M1uhcndMoO7fPsk2D7aWiRjlTvPunZRO/view?usp=sharing)** · **Try it locally:** see [Setup](#-setup)
 
 ![Live demo: search "dog treats", open a Warehouse item, Add to cart, Safe Checkout holds it and shows where the hidden instruction is](demo/SmartCart-demo.gif)
 

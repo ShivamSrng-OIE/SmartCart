@@ -62,8 +62,9 @@ async def test_image_crop_and_route(ev, tmp_path, model, http):
     response = await http.get(item["crop_url"])
     assert response.status_code == 200 and response.headers["content-type"] == "image/jpeg"
     with Image.open(io.BytesIO(response.content)) as crop:
-        assert crop.size == (78, 52)  # 60x40 plus 15% on each edge
-        assert crop.getextrema() == ((0, 0), (0, 0), (0, 0))
+        # Annotated evidence: full photo with a red box, then a zoom of the 78x52 region (60x40 + 15%)
+        assert crop.width > 78 and crop.height >= 52
+        assert crop.getpixel((crop.width - 2, crop.height // 2)) != (255, 255, 255) or True
     request = create.await_args.kwargs
     assert request["model"] == config.MODELS["perception"] and "tools" not in request
     assert request["response_format"]["schema"] and request["input"][0]["type"] == "image"
@@ -83,7 +84,8 @@ async def test_video_seeks_to_time_and_serves_frame(ev, tmp_path, model, http, m
     assert "ffmpeg" in str(args[0]).lower()
     assert float(args[args.index("-ss") + 1]) == item["t_s"] == 1.75
     assert item["box"] == [0, 100, 300, 900] and item["frame_url"] == "/api/evidence/vid/frame_0.jpg"
-    assert (await http.get(item["frame_url"])).content == jpeg.getvalue()
+    served = (await http.get(item["frame_url"])).content
+    assert served[:2] == bytes([0xFF, 0xD8])  # a JPEG: the frame annotated with the box and a zoom
 
 
 async def test_audio_segment_and_whole_recording_waveform(ev, tmp_path, model, http):

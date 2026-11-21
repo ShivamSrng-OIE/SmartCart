@@ -75,19 +75,46 @@ def run_directory(run_id: str) -> Path:
     return path
 
 
-def _crop(path: str, box: list[int]) -> tuple[bytes, list[float]]:
+def _annotate(image, box: list[int]) -> tuple[bytes, list[float]]:
+    """One evidence picture a shopper can read: the full photo/frame with a red box over the
+    hidden instruction (left) next to a 2.5x zoom of that region (right)."""
+    from PIL import ImageDraw
+    image = image.convert("RGB")
     top, left, bottom, right = box
-    with Image.open(path) as source:
-        image = ImageOps.exif_transpose(source)
-        w, h = image.size
-        dx, dy = (right - left) * 0.15, (bottom - top) * 0.15
-        x0 = max(0, math.floor((left - dx) * w / 1000))
-        y0 = max(0, math.floor((top - dy) * h / 1000))
-        x1 = min(w, math.ceil((right + dx) * w / 1000))
-        y1 = min(h, math.ceil((bottom + dy) * h / 1000))
-        output = io.BytesIO()
-        image.crop((x0, y0, x1, y1)).convert("RGB").save(output, "JPEG", quality=90)
+    w, h = image.size
+    dx, dy = (right - left) * 0.15, (bottom - top) * 0.15
+    x0 = max(0, math.floor((left - dx) * w / 1000))
+    y0 = max(0, math.floor((top - dy) * h / 1000))
+    x1 = min(w, math.ceil((right + dx) * w / 1000))
+    y1 = min(h, math.ceil((bottom + dy) * h / 1000))
+    full = image.copy()
+    full.thumbnail((900, 900))
+    sx, sy = full.width / w, full.height / h
+    draw = ImageDraw.Draw(full)
+    stroke = max(3, full.width // 150)
+    draw.rectangle([x0 * sx, y0 * sy, x1 * sx, y1 * sy], outline=(239, 68, 68), width=stroke)
+    zoom = image.crop((x0, y0, x1, y1))
+    scale = min(2.5, 700 / max(1, zoom.width), full.height / max(1, zoom.height))
+    zoom = zoom.resize((max(1, int(zoom.width * scale)), max(1, int(zoom.height * scale))))
+    canvas = Image.new("RGB", (full.width + 24 + zoom.width, max(full.height, zoom.height)), (255, 255, 255))
+    canvas.paste(full, (0, 0))
+    canvas.paste(zoom, (full.width + 24, (canvas.height - zoom.height) // 2))
+    ImageDraw.Draw(canvas).rectangle([full.width + 24, (canvas.height - zoom.height) // 2,
+                                      full.width + 23 + zoom.width, (canvas.height + zoom.height) // 2 - 1],
+                                     outline=(239, 68, 68), width=stroke)
+    output = io.BytesIO()
+    canvas.save(output, "JPEG", quality=90)
     return output.getvalue(), [1000 * y0 / h, 1000 * x0 / w, 1000 * y1 / h, 1000 * x1 / w]
+
+
+def _crop(path: str, box: list[int]) -> tuple[bytes, list[float]]:
+    with Image.open(path) as source:
+        return _annotate(ImageOps.exif_transpose(source), box)
+
+
+def _annotate_frame(data: bytes, box: list[int]) -> bytes:
+    with Image.open(io.BytesIO(data)) as frame:
+        return _annotate(frame, box)[0]
 
 
 async def _frame(path: str, seconds: float) -> bytes:
@@ -179,6 +206,10 @@ async def _localize(index: int, media: Media, claims: str, run_id: str):
         if isinstance(location, VideoLocation):
             kind = "frame"
             data = await _frame(media.path, location.t_s)
+            try:
+                data = await asyncio.to_thread(_annotate_frame, data, location.box)
+            except Exception:  # noqa: BLE001 - keep the raw frame if annotation fails
+                pass
         else:
             kind = "crop"
             data, item["crop_bounds"] = await asyncio.to_thread(_crop, media.path, location.box)

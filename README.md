@@ -18,7 +18,7 @@
 
 ## 🎬 Demo
 
-**[▶ Watch the 1-minute demo (live site)](demo/carttrap-demo.mp4)** · **Try it locally:** see [Setup](#-setup)
+**[▶ Watch the 50-second demo: image, video and audio attacks held live](demo/carttrap-demo.mp4)** · **Try it locally:** see [Setup](#-setup)
 
 ![Live demo: search "dog treats", open a Warehouse item, Add to cart, Safe Checkout holds it and shows where the hidden instruction is](demo/carttrap-demo.gif)
 

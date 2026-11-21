@@ -8,6 +8,7 @@ export type EventKind =
   | "intercepted"
   | "verdict"
   | "fraud_card"
+  | "evidence"
   | "log"
   | "done";
 
@@ -94,6 +95,20 @@ export interface FraudCard {
   dollars_defended: number;
   safe_cart: SafeCart | null;
 }
+
+/** box is [ymin, xmin, ymax, xmax], normalized 0-1000. */
+export type EvidenceItem =
+  | { modality: "image"; box: number[]; text: string; crop_url: string; source_url?: string }
+  | { modality: "video"; t_s: number; box: number[]; text: string; frame_url: string }
+  | {
+      modality: "audio";
+      start_s: number;
+      end_s: number;
+      transcript: string;
+      clip_url: string;
+      peaks: number[];
+      seg: [number, number];
+    };
 
 export interface Intent {
   text: string;

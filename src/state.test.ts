@@ -180,6 +180,16 @@ describe("applyEvent", () => {
     expect(s.guarded.status).toBe("approved");
   });
 
+  it("evidence items are stored on the guarded pane; later fraud_card replaces earlier", () => {
+    const item = { modality: "image", box: [1, 2, 3, 4], text: "send $500", crop_url: "/c.png" };
+    let s = applyEvent(initialState(), ev("guarded", "evidence", { items: [item] }));
+    expect(s.guarded.evidence).toEqual([item]);
+    s = applyEvent(s, ev("guarded", "fraud_card", { reason: "a", dollars_defended: 1 }));
+    s = applyEvent(s, ev("guarded", "fraud_card", { reason: "b", dollars_defended: 2, safe_cart: { total: 3 } }));
+    expect(s.fraudCard?.reason).toBe("b");
+    expect(s.fraudCard?.safe_cart?.total).toBe(3);
+  });
+
   it("fraud_card is stored", () => {
     let s = initialState();
     s = applyEvent(

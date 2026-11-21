@@ -1,9 +1,10 @@
 import { useRef } from "react";
 import { Quote, ShieldCheck } from "lucide-react";
-import type { FraudCard as FraudCardT, Verdict } from "../types";
+import type { EvidenceItem, FraudCard as FraudCardT, Verdict } from "../types";
 import type { PaneStatus } from "../state";
 import { checkLabel, money, prob } from "../lib/format";
 import { countTo, gsap, useGSAP, d } from "../lib/motion";
+import { Evidence } from "./Evidence";
 import { SafeCart } from "./SafeCart";
 import { cx } from "./ui";
 
@@ -31,7 +32,12 @@ export function FraudCard({
   attempted,
   className,
   bare,
+  evidence,
+  photoUrl,
 }: {
+  evidence?: EvidenceItem[];
+  /** the run's attached photo, used when an image item has no source_url */
+  photoUrl?: string;
   /** no card chrome or header (inside the Assistant page's Review tab) */
   bare?: boolean;
   card?: FraudCardT;
@@ -160,6 +166,12 @@ export function FraudCard({
             )}
           </div>
         </div>
+
+        {evidence && evidence.length > 0 && (
+          <div data-fc>
+            <Evidence items={evidence} photoUrl={photoUrl} />
+          </div>
+        )}
 
         {/* probes */}
         {top.length > 0 && (

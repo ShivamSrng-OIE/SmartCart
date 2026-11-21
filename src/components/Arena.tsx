@@ -139,6 +139,7 @@ export function Arena({
           {/* Why it was stopped */}
           <FraudCard
             card={state.fraudCard}
+            evidence={state.guarded.evidence}
             verdict={state.verdict}
             status={state.guarded.status}
             attempted={state.victim.attempted}

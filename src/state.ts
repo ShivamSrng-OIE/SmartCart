@@ -1,4 +1,4 @@
-import type { FraudCard, Intent, Pane, TraceEvent, Verdict } from "./types";
+import type { EvidenceItem, FraudCard, Intent, Pane, TraceEvent, Verdict } from "./types";
 import { STATE_CHANGING, summarizeCall, violatesIntent, type ProductLedger } from "./lib/spend";
 
 export type Tone = "neutral" | "danger" | "safe" | "warn";
@@ -36,6 +36,8 @@ export interface PaneState {
   attempted: number;
   finished: boolean;
   lastT: number;
+  /** guarded only: where the hidden instruction is (latest evidence event) */
+  evidence?: EvidenceItem[];
 }
 
 export interface ArenaState {
@@ -230,6 +232,11 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
       const card = data as unknown as FraudCard;
       const step: Step = { id, kind: e.kind, t_ms: e.t_ms, title: "fraud_card", tone: "neutral", data };
       return { ...patchPane(s, paneKey, { ...base, steps: [...prev.steps, step] }), fraudCard: card };
+    }
+
+    case "evidence": {
+      const items = Array.isArray(data.items) ? (data.items as EvidenceItem[]) : [];
+      return patchPane(s, paneKey, { ...base, evidence: items });
     }
 
     case "log": {

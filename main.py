@@ -13,7 +13,11 @@ from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend.guarded_shopper import run_guarded
+from backend.intent import parse_intent
+from backend.rules import RuleStore
 from backend.schemas import Intent, Media
+from backend.shop_mcp import ShopMCP
 from backend.trace import TraceBus
 from backend.victim_hydrogen import run_victim
 
@@ -30,10 +34,18 @@ def make_fake(pane: str) -> Pipeline:
     return run
 
 
+RULES = RuleStore(str(Path(__file__).resolve().parent / "rules.json"))  # shared, hot-reloads on edit
+
+
+async def guarded_pipeline(intent, media, product_ref, bus, run_id):
+    """Task 9: protected pane. Live ShopMCP (approved carts are really created; spend requests
+    are still always intercepted and complete_* is forbidden inside shop_mcp)."""
+    await run_guarded(intent, media, product_ref, bus, run_id, shop=ShopMCP(), rules=RULES)
+
+
 app = FastAPI(title="CartTrap")
 app.state.bus = TraceBus()
-# TODO(Task 9): replace the guarded fake with Member 2's run_guarded.
-app.state.pipelines = {"victim": run_victim, "guarded": make_fake("guarded")}
+app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 
 
@@ -80,8 +92,7 @@ async def start_run(
     run_dir = RUNS_DIR / run_id
     media = [m for m in [await _save(image, "image", run_dir), await _save(audio, "audio", run_dir),
                          await _save(video, "video", run_dir)] if m]
-    # TODO: switch to Member 2's parse_intent (backend/intent.py) once merged, to pull budget/qty from text.
-    intent = Intent(text=request, budget=budget)
+    intent = parse_intent(request, budget)  # budget field wins; else budget/qty parsed from the request text
     bus: TraceBus = app.state.bus
     bus.start(run_id)
     task = asyncio.create_task(_run_all(bus, run_id, panes, intent, media, product_url or demo_product_id))

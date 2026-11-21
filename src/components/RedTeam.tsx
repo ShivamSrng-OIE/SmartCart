@@ -3,7 +3,7 @@ import { Bug, CheckCircle2, FlaskConical, GitCommitHorizontal, Play, RotateCcw, 
 import { fixtureEvents, launchRedteam, replay, streamRun } from "../api";
 import type { TraceEvent } from "../types";
 import type { Mode } from "../hooks/useBackend";
-import { clock, humanize, ms, prob } from "../lib/format";
+import { checkLabel, clock, humanize, ms, prob } from "../lib/format";
 import { gsap, useGSAP, d } from "../lib/motion";
 import { Button, Chip, cx } from "./ui";
 
@@ -11,23 +11,23 @@ type StageKey = "launch" | "attack" | "blocked" | "mutate" | "bypass" | "diagnos
 type Tone = "neutral" | "danger" | "safe" | "warn";
 
 const STAGE: Record<StageKey, { title: string; icon: typeof Bug; tone: Tone }> = {
-  launch: { title: "Test run started", icon: Rocket, tone: "neutral" },
-  attack: { title: "New test order", icon: Bug, tone: "neutral" },
+  launch: { title: "Review cycle started", icon: Rocket, tone: "neutral" },
+  attack: { title: "New order pattern", icon: Bug, tone: "neutral" },
   blocked: { title: "Held by Safe Checkout", icon: ShieldCheck, tone: "safe" },
   mutate: { title: "New variation", icon: Wand2, tone: "neutral" },
-  bypass: { title: "Missed", icon: ShieldX, tone: "danger" },
+  bypass: { title: "Slipped through", icon: ShieldX, tone: "danger" },
   diagnose: { title: "Reviewing the miss", icon: Stethoscope, tone: "neutral" },
   probe_proposed: { title: "New check drafted", icon: FlaskConical, tone: "warn" },
-  validate: { title: "New check tested", icon: CheckCircle2, tone: "safe" },
+  validate: { title: "New check verified", icon: CheckCircle2, tone: "safe" },
   patched: { title: "New check switched on", icon: GitCommitHorizontal, tone: "safe" },
   reblocked: { title: "Same order, now held", icon: ShieldCheck, tone: "safe" },
 };
 
 const ORDER: StageKey[] = ["attack", "blocked", "bypass", "probe_proposed", "patched", "reblocked"];
 const ORDER_LABEL: Record<string, string> = {
-  attack: "Test",
+  attack: "Pattern",
   blocked: "Held",
-  bypass: "Missed",
+  bypass: "Slipped",
   probe_proposed: "New check",
   patched: "Enabled",
   reblocked: "Held again",
@@ -148,7 +148,7 @@ export function RedTeam({
             <p className="label mb-1">Safety updates</p>
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">How Safe Checkout adds new checks</h1>
             <p className="mt-1 max-w-lg text-sm text-ink-2">
-              Safe Checkout is tested continuously with new kinds of orders. When one slips through, a new check is drafted, tested on normal orders, and switched on.
+              Safe Checkout keeps learning. When a new kind of order slips through, a check is drafted, verified against everyday orders, and switched on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -177,7 +177,7 @@ export function RedTeam({
           {error && (
             <div className="mb-3 flex flex-col gap-2 rounded-lg border border-danger-line bg-danger-soft px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-danger">
-                <span className="font-semibold">Couldn’t start a test run.</span> Please try again in a moment.
+                <span className="font-semibold">Couldn’t start a review cycle.</span> Please try again in a moment.
               </p>
               <Button size="sm" onClick={launch}>
                 Try again
@@ -187,9 +187,9 @@ export function RedTeam({
           {items.length === 0 ? (
             <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center">
               <Bug className="size-6 text-ink-3" />
-              <p className="text-[15px] font-medium">Start a test run</p>
+              <p className="text-[15px] font-medium">Start a review cycle</p>
               <p className="max-w-sm text-sm text-ink-3">
-                Runs up to 3 test rounds.
+                Up to 3 rounds.
               </p>
             </div>
           ) : (
@@ -219,7 +219,7 @@ export function RedTeam({
                       {typeof it.data.latency_ms === "number" && (
                         <p className="tnum mt-1 font-mono text-[11px] text-ink-3">
                           {ms(it.data.latency_ms as number)}
-                          {it.data.top_probe ? ` · ${humanize(String((it.data.top_probe as Record<string, unknown>).id))} ${prob(Number((it.data.top_probe as Record<string, unknown>).p))}` : ""}
+                          {it.data.top_probe ? ` · ${checkLabel(String((it.data.top_probe as Record<string, unknown>).id))} ${prob(Number((it.data.top_probe as Record<string, unknown>).p))}` : ""}
                           {typeof it.data.approve_p === "number" ? ` · P(approve) ${prob(it.data.approve_p as number)}` : ""}
                         </p>
                       )}
@@ -273,11 +273,11 @@ export function RedTeam({
         </section>
 
         <section className="card p-4 sm:p-5">
-          <p className="label mb-3">Tested before switching on</p>
+          <p className="label mb-3">Verified before switching on</p>
           {exploit ? (
             <ul className="flex flex-col gap-2.5">
               <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                <span className="text-[14px] font-medium">Flags the missed order</span>
+                <span className="text-[14px] font-medium">Flags the order that slipped through</span>
                 <span className={cx("tnum font-mono text-[13px] font-semibold", exploit.fired ? "text-safe" : "text-danger")}>{prob(exploit.p)}</span>
                 <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <span className="block h-full rounded-full bg-safe" style={{ width: `${exploit.p * 100}%` }} />
@@ -294,7 +294,7 @@ export function RedTeam({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-ink-3">A check is only enabled if it flags the missed order and none of 5 normal orders.</p>
+            <p className="text-sm text-ink-3">A check is only enabled if it flags that order and none of 5 everyday orders.</p>
           )}
         </section>
       </aside>

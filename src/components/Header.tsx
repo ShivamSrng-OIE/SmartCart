@@ -26,28 +26,29 @@ export const MODES: NavItem[] = [
 export const MORE: NavItem[] = [
   { id: "compare", label: "Compare", short: "Compare", hint: "Assistant and Safe Checkout side by side", icon: Columns2 },
   { id: "redteam", label: "Safety updates", short: "Updates", hint: "How Safe Checkout learns new checks", icon: Swords },
-  { id: "results", label: "Performance", short: "Performance", hint: "Accuracy on 50 test orders", icon: Trophy },
+  { id: "results", label: "Performance", short: "Performance", hint: "How often orders come out right", icon: Trophy },
 ];
 
 export const ALL_VIEWS: View[] = ["home", "product", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];
 
-/** Logo: a shopping bag whose body carries a check. Works at 16px and in both themes. */
+/** Tote mark: a rounded tote bag with an arched handle. Reads at 16px and in both themes. */
 export function LogoMark({ className = "size-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
       <rect width="32" height="32" rx="9" fill="var(--brand)" />
-      <path d="M11.5 11V9.75a4.5 4.5 0 0 1 9 0V11" fill="none" stroke="var(--brand-ink)" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M8.6 12.4c.1-.8.8-1.4 1.6-1.4h11.6c.8 0 1.5.6 1.6 1.4l1.1 10.2a2.4 2.4 0 0 1-2.4 2.7H9.9a2.4 2.4 0 0 1-2.4-2.7z" fill="var(--brand-ink)" />
-      <path d="m12.6 18.4 2.4 2.4 4.6-4.8" fill="none" stroke="var(--brand)" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.25 13V11.5a3.75 3.75 0 0 1 7.5 0V13" fill="none" stroke="var(--brand-ink)" strokeWidth="2.1" strokeLinecap="round" />
+      <path d="M8.4 13.6c0-.6.5-1.1 1.1-1.1h13c.6 0 1.1.5 1.1 1.1l-1.05 9.35a2.6 2.6 0 0 1-2.58 2.3h-7.96a2.6 2.6 0 0 1-2.58-2.3z" fill="var(--brand-ink)" />
+      <path d="M12.6 17.2c1 .9 2.1 1.35 3.4 1.35s2.4-.45 3.4-1.35" fill="none" stroke="var(--brand)" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }
 
+/** Wordmark: lowercase "tote", tight and heavy enough to sit next to the mark. */
 export function Logo() {
   return (
     <span className="flex items-center gap-2">
       <LogoMark />
-      <span className="text-[15px] font-semibold tracking-[-0.02em]">CartTrap</span>
+      <span className="text-[19px] leading-none font-bold tracking-[-0.05em]">tote</span>
     </span>
   );
 }
@@ -202,7 +203,7 @@ export function Header({
     <>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
         <div className="mx-auto flex h-14 max-w-[2400px] items-center gap-3 px-3 sm:px-5 xl:px-8">
-          <button onClick={() => onView("home")} className="shrink-0" aria-label="CartTrap home">
+          <button onClick={() => onView("home")} className="shrink-0" aria-label="Tote home">
             <Logo />
           </button>
 

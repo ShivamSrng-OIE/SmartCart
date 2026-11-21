@@ -37,7 +37,7 @@ let rpcId = 0;
 
 /** Low-level tools/call. Returns `result.structuredContent` (falls back to parsing content[0].text). */
 export async function callTool<T = Record<string, unknown>>(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-  if (name === "complete_checkout" || name === "complete_spend_request") throw new ShopError(`${name} is never called from CartTrap`, "forbidden");
+  if (name === "complete_checkout" || name === "complete_spend_request") throw new ShopError(`${name} is never called from this site`, "forbidden");
   const body = {
     jsonrpc: "2.0",
     id: ++rpcId,

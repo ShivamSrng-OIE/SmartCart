@@ -89,14 +89,14 @@ export default function App() {
 
   useEffect(() => {
     const titles: Record<View, string> = {
-      home: "CartTrap",
-      product: productSeed?.title ? `${productSeed.title} · CartTrap` : "Product · CartTrap",
-      shop: "Shop · CartTrap",
-      unprotected: "Assistant · CartTrap",
-      protected: "Safe Checkout · CartTrap",
-      compare: "Compare · CartTrap",
-      redteam: "Safety updates · CartTrap",
-      results: "Performance · CartTrap",
+      home: "Tote",
+      product: productSeed?.title ? `${productSeed.title} · Tote` : "Product · Tote",
+      shop: "Shop · Tote",
+      unprotected: "Assistant · Tote",
+      protected: "Safe Checkout · Tote",
+      compare: "Compare · Tote",
+      redteam: "Safety updates · Tote",
+      results: "Performance · Tote",
     };
     document.title = titles[view];
   }, [view, productSeed?.title]);

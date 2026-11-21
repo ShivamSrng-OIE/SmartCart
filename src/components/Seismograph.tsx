@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { Probe, ProbeCategory, ProbeResult, RuleSet, Verdict } from "../types";
-import { humanize, prob } from "../lib/format";
+import { checkLabel, prob } from "../lib/format";
 import { gsap, useGSAP, d } from "../lib/motion";
 import { Chip, cx } from "./ui";
 
@@ -156,7 +156,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
               onMouseEnter={() => setFocus(l.probe.id)}
               onFocus={() => setFocus(l.probe.id)}
               onClick={() => setFocus(l.probe.id)}
-              aria-label={`${humanize(l.probe.id)}: ${r ? prob(p) : "not evaluated"}`}
+              aria-label={`${checkLabel(l.probe.id)}: ${r ? prob(p) : "not evaluated"}`}
               className={cx(
                 "group relative flex min-w-0 flex-col items-start gap-1 rounded-lg border px-1.5 py-1.5 text-left transition-colors sm:px-2",
                 isFired ? "border-danger-line bg-danger-soft" : "border-line bg-surface hover:border-line-strong",
@@ -174,7 +174,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
                 </span>
                 <span className={cx("tnum font-mono text-[10px] sm:text-[11px]", isFired ? "font-semibold text-danger" : "text-ink-3")}>{r ? prob(p) : "··"}</span>
               </span>
-              <span className={cx("hidden w-full text-[10.5px] leading-[1.2] hyphens-auto @xs:line-clamp-2", isFired ? "text-ink" : "text-ink-2")}>{humanize(l.probe.id)}</span>
+              <span className={cx("hidden w-full text-[10.5px] leading-[1.2] hyphens-auto @xs:line-clamp-2", isFired ? "text-ink" : "text-ink-2")}>{checkLabel(l.probe.id)}</span>
             </button>
           );
         })}
@@ -186,7 +186,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
           <>
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-ink">
-                {humanize(focused.probe.id)}
+                {checkLabel(focused.probe.id)}
                 <span className="ml-2 font-mono text-[10px] tracking-wide text-ink-3 uppercase">{CATEGORY_LABEL[focused.probe.category] ?? focused.probe.category}</span>
                 {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">new</span>}
               </p>

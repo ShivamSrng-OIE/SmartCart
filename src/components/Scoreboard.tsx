@@ -42,12 +42,12 @@ export function Scoreboard({ results }: { results: EvalResults | null }) {
       <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
         <div>
           <p className="label mb-1">Performance</p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Accuracy on test orders</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">How Safe Checkout performs</h1>
         </div>
         <div className="card flex flex-col items-center gap-2 px-6 py-16 text-center">
           <BarChart3 className="size-7 text-ink-3" />
-          <p className="text-[15px] font-medium">Results will appear here after the next evaluation run</p>
-          <p className="max-w-md text-sm text-ink-3">Each run compares the regular assistant and Safe Checkout on the same set of everyday and tricky orders.</p>
+          <p className="text-[15px] font-medium">Results will appear here after the next review</p>
+          <p className="max-w-md text-sm text-ink-3">Each run compares the regular assistant and Safe Checkout on the same set of everyday and unusual orders.</p>
         </div>
       </div>
     );
@@ -82,10 +82,10 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
         <div>
           <p className="label mb-1">Performance</p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Accuracy on {(ct?.n_attack ?? 0) + (ct?.n_benign ?? 0) || 50} test orders
+            How Safe Checkout performs across {(ct?.n_attack ?? 0) + (ct?.n_benign ?? 0) || 50} orders
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
-            {ct?.n_attack ?? 30} tricky orders and {ct?.n_benign ?? 20} everyday ones, compared across three setups.
+            {ct?.n_attack ?? 30} unusual orders and {ct?.n_benign ?? 20} everyday ones, compared across three setups.
           </p>
         </div>
       </div>
@@ -132,7 +132,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
             <div>
               <p className="label">Amount protected</p>
               <Num value={ct.dollars_defended} format={moneyFmt} className="mt-1 block text-2xl font-semibold tracking-tight sm:text-3xl" />
-              <p className="mt-0.5 text-xs text-ink-3">across all test orders</p>
+              <p className="mt-0.5 text-xs text-ink-3">across all reviewed orders</p>
             </div>
           </div>
         </div>
@@ -189,7 +189,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
             <div className="flex items-baseline justify-between">
               <p className="text-[15px] font-semibold">{r.label}</p>
               <p className="tnum font-mono text-xs text-ink-3">
-                {r.m.n_attack} + {r.m.n_benign} cases
+                {r.m.n_attack} + {r.m.n_benign} orders
               </p>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
@@ -231,17 +231,17 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-ink-3">The failure list from the latest results file shows here.</p>
+            <p className="mt-2 text-sm text-ink-3">Known issues from the latest review show here.</p>
           )}
         </div>
 
         {/* provenance */}
         <div data-reveal className="card p-4 sm:p-5">
           <p className="label mb-1">Methodology</p>
-          <h2 className="text-[17px] font-semibold tracking-tight">Test set locked before tuning</h2>
+          <h2 className="text-[17px] font-semibold tracking-tight">Order set locked before tuning</h2>
           <dl className="mt-3 flex flex-col gap-2 text-sm">
             {[
-              ["Test set fingerprint", meta.case_dir_hash ? meta.case_dir_hash.slice(0, 12) : "—"],
+              ["Order set fingerprint", meta.case_dir_hash ? meta.case_dir_hash.slice(0, 12) : "—"],
               ["Run started", meta.started_at ? new Date(meta.started_at).toLocaleString([], { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" }) : "—"],
               ["Shopify data", meta.shop_mode ?? "—"],
               ["Checker", meta.backend ?? "—"],

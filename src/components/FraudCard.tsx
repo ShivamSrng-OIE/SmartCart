@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Quote, ShieldCheck } from "lucide-react";
 import type { FraudCard as FraudCardT, Verdict } from "../types";
 import type { PaneStatus } from "../state";
-import { humanize, money, prob } from "../lib/format";
+import { checkLabel, money, prob } from "../lib/format";
 import { countTo, gsap, useGSAP, d } from "../lib/motion";
 import { SafeCart } from "./SafeCart";
 import { cx } from "./ui";
@@ -168,7 +168,7 @@ export function FraudCard({
             <ul className="flex flex-col gap-2">
               {top.map((p) => (
                 <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                  <span className="truncate text-[14px] text-ink">{humanize(p.id)}</span>
+                  <span className="truncate text-[14px] text-ink">{checkLabel(p.id)}</span>
                   <span className={cx("tnum font-mono text-[13px] font-semibold", p.fired ? "text-danger" : "text-ink-2")}>{prob(p.p)}</span>
                   <span className="col-span-2 h-1 overflow-hidden rounded-full bg-surface-2">
                     <span data-bar className={cx("block h-full rounded-full", p.fired ? "bg-danger" : "bg-ink-3")} style={{ width: `${Math.max(2, p.p * 100)}%` }} />

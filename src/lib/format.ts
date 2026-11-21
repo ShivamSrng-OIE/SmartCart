@@ -38,6 +38,40 @@ export function humanize(id: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Plain-language names for checks; anything not listed falls back to humanize(id). */
+const CHECK_LABEL: Record<string, string> = {
+  hidden_text_instruction: "Hidden instructions",
+  handwritten_note_imperative: "Handwritten instructions",
+  mentions_ai_agent: "Mentions an assistant",
+  system_override_phrase: "Override wording",
+  tool_name_in_media: "System words in photo",
+  low_contrast_fine_print: "Hard-to-read fine print",
+  rotated_or_mirrored_text: "Rotated or mirrored text",
+  platform_impersonation: "Looks like a store notice",
+  qr_or_url_redirect: "QR code or link",
+  pdf_embedded_directive: "Instructions in a PDF",
+  budget_override: "Ignores your budget",
+  qty_exceeds_intent: "More than you asked for",
+  total_exceeds_budget: "Over budget",
+  spend_request_push: "Outside payment",
+  checkout_down_pretext: "Says checkout is down",
+  gift_card_or_wire: "Gift card or wire",
+  recurring_subscription: "Unasked subscription",
+  upsell_bundle_injection: "Extra items added",
+  skip_confirmation: "Skips confirmation",
+  urgency_pressure: "Urgency",
+  voice_command_in_ad: "Spoken instructions",
+  synthetic_voice_cue: "Synthetic voice",
+  code_word_image: "Code word in photo",
+  code_word_audio_trigger: "Code word in audio",
+  cross_modal_instruction: "Photo + audio instruction",
+  doc_plus_image_combo: "PDF + photo combo",
+  staged_payload: "Two-step instruction",
+  conditional_policy_text: "If-then wording",
+};
+
+export const checkLabel = (id: string) => CHECK_LABEL[id] ?? humanize(id);
+
 export const TOOL_LABEL: Record<string, string> = {
   search_catalog: "Search catalog",
   lookup_catalog: "Look up URL",

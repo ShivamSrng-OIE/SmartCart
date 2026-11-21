@@ -232,13 +232,13 @@ export function AgentPage({
         headline: "This order doesn’t match your request",
         body: (
           <>
-            The assistant put together <span className="font-medium text-ink">{call ?? "an order you didn’t ask for"}</span>. You asked for {asked}. Sandbox mode, so nothing was charged.
+            The assistant put together <span className="font-medium text-ink">{call ?? "an order you didn’t ask for"}</span>. You asked for {asked}. Nothing has been charged.
           </>
         ),
         action: otherBtn,
       };
     else if (p.status === "intercepted")
-      result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "Your cart is ready", body: <>{call ? `${call}.` : "The cart matches your request."} Sandbox mode, so nothing was charged.</>, action: otherBtn };
+      result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "Your cart is ready", body: <>{call ? `${call}.` : "The cart matches your request."} Nothing has been charged yet.</>, action: otherBtn };
     else if (p.finished) result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "No order placed", body: "The assistant finished without building a cart." };
     else result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: "Working on it…", body: "Searching Shopify and looking at your photo." };
   } else {

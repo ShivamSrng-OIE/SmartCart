@@ -1,4 +1,6 @@
-# CartTrap (frontend)
+# Tote (CartTrap frontend)
+
+The storefront is branded **Tote**; CartTrap is the project name. The site reads as an ordinary Shopify shopping site with an AI assistant. Nothing on it mentions tests, demos or traps, so when the regular assistant places the wrong order it lands as a surprise.
 
 Can an AI shopping agent be tricked into buying the wrong thing? CartTrap's site lets you try it three ways on real Shopify products:
 

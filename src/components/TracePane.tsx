@@ -116,7 +116,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
           <span className="block text-[14px] font-medium">Order prepared</span>
           <span className="block truncate text-[13px] text-ink-2">
             {summarize(step, products) ?? "—"}
-            <span className="text-ink-3"> · not submitted (sandbox)</span>
+            <span className="text-ink-3"> · not submitted</span>
           </span>
         </span>
         {step.spend != null && <span className={cx("tnum shrink-0 font-mono text-xs", step.tone === "danger" ? "text-danger" : "text-ink-2")}>{money(step.spend)}</span>}
@@ -139,7 +139,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
               {toolLabel(step.title)}
               <span className="font-normal text-ink-2"> · {summarize(step, products) ?? "—"}</span>
             </p>
-            <p className="mt-0.5 text-xs text-ink-3">Sandbox mode: the order was prepared but not submitted, so nothing was charged.</p>
+            <p className="mt-0.5 text-xs text-ink-3">The order was prepared but not submitted, so nothing was charged.</p>
           </div>
           {step.spend != null && (
             <div className="text-right">

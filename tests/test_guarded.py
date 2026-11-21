@@ -461,3 +461,15 @@ async def test_benign_listing_still_approved(fakes, tmp_path):
     res, _ = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(search_delay=0.05), media=_img(tmp_path))
     assert res.blocked_call is None and len(res.approved_calls) == 1
     assert all(p.id != "listing_agent_instruction" for p in res.verdicts[0].probes)
+
+
+def test_approve_if_clean_turns_probe_free_escalate_into_approve():
+    from backend import guarded_shopper as gs
+    from backend.schemas import Claims, Verdict
+    v = Verdict(action="escalate_to_neon_swap", action_probs={"approve_checkout": 0.65}, probes=[], severity=0,
+                latency_ms=500, tier="low", backend="decisions")
+    clean = Claims.model_construct(visible_text=[], instructions_detected=False)
+    assert gs.approve_if_clean(v, clean).action == "approve_checkout"
+    assert gs.approve_if_clean(v, None).action == "escalate_to_neon_swap"
+    err = v.model_copy(update={"error": "firewall timeout"})
+    assert gs.approve_if_clean(err, clean).action == "escalate_to_neon_swap"

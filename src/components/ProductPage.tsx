@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Minus, Play, Plus, ShieldCheck, Star, Store, TrendingDown, TrendingUp, X } from "lucide-react";
-import { getProduct, mediaSummary, modelSources, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
+import { getProduct, mediaSummary, modelSources, parseWarehouseId, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
+import { warehouseRunForm } from "../api";
 import { ModelViewerModal } from "./ModelViewerModal";
 import { AutoRail } from "./AutoRail";
+import { FraudCard } from "./FraudCard";
+import { useAgentRun } from "../hooks/useAgentRun";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
+import { parseIntent } from "../lib/intent";
 import { flyToCart, gsap, reducedMotion, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, cx } from "./ui";
@@ -679,6 +683,111 @@ function SimilarTile({ s, onOpen }: { s: CatalogProduct; onOpen: () => void }) {
 
 /* ----------------------------------------------------------------- page */
 
+export function completeWarehouseAdd({ phase, state }: Pick<ReturnType<typeof useAgentRun>, "phase" | "state">, add: () => void): "approved" | "held" {
+  if (phase !== "done" || !state.guarded.finished || state.guarded.status !== "approved" || state.fraudCard ||
+      state.verdicts.some((v) => v.action !== "approve_checkout" || v.error)) return "held";
+  add();
+  return "approved";
+}
+
+function WarehouseProductPage({ product, add, onBack }: { product: CatalogProduct; add: Cart["add"]; onBack: () => void }) {
+  const { state, phase, error, run, reset } = useAgentRun("protected", "live");
+  const [preparing, setPreparing] = useState(false);
+  const [outcome, setOutcome] = useState<"approved" | "held" | null>(null);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
+  const preparation = useRef<AbortController | null>(null);
+  const awaitingRun = useRef(false);
+  const galleryRef = useRef<HTMLDivElement>(null);
+  const busy = preparing || phase === "starting" || phase === "streaming";
+
+  useEffect(() => () => preparation.current?.abort(), []);
+
+  useEffect(() => {
+    if (!awaitingRun.current || (phase !== "done" && phase !== "error")) return;
+    awaitingRun.current = false;
+    setOutcome(completeWarehouseAdd({ phase, state }, () => {
+      add(product);
+      flyToCart(galleryRef.current);
+    }));
+  }, [phase, state, add, product]);
+
+  const addToCart = async () => {
+    const itemId = parseWarehouseId(product.id);
+    if (!itemId || !product.warehouse || preparation.current || awaitingRun.current) return;
+
+    const controller = new AbortController();
+    preparation.current = controller;
+    reset();
+    setOutcome(null);
+    setPreparationError(null);
+    setPreparing(true);
+    try {
+      const form = await warehouseRunForm(itemId, product.warehouse, controller.signal);
+      if (controller.signal.aborted) return;
+      const intent = parseIntent(String(form.get("request")), String(form.get("budget")));
+      awaitingRun.current = true;
+      run(form, intent, "benign");
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      awaitingRun.current = false;
+      setPreparationError(err instanceof Error ? err.message : "Safe Checkout couldn’t start.");
+      setOutcome("held");
+    } finally {
+      preparation.current = null;
+      if (!controller.signal.aborted) setPreparing(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 sm:gap-8">
+      <nav className="flex items-center gap-2 text-sm text-ink-3" aria-label="Breadcrumb">
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink">
+          <ArrowLeft className="size-4" /> Back
+        </button>
+        <span>/</span>
+        <span className="truncate">{product.title}</span>
+      </nav>
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
+        <div ref={galleryRef}>
+          <Gallery media={product.media.filter((m) => m.type !== "audio")} title={product.title} fallback={product} />
+          {product.media.filter((m) => m.type === "audio").map((m) => (
+            <audio key={m.url} src={m.url} controls preload="metadata" aria-label="Product audio" className="mt-3 w-full" />
+          ))}
+        </div>
+        <div className="flex min-w-0 flex-col items-start gap-4">
+          <Chip>Warehouse</Chip>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[32px]">{product.title}</h1>
+          <p className="tnum text-[28px] font-semibold tracking-tight">{money(product.price, false, product.currency)}</p>
+          <Button variant="primary" size="lg" disabled={busy} onClick={addToCart} icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}>
+            {busy ? "Checking with Safe Checkout…" : "Add to cart"}
+          </Button>
+          <div role="status" className="flex flex-col gap-1">
+            {outcome === "approved" && <p className="text-sm font-medium text-safe">Approved · Added to cart</p>}
+            {outcome === "held" && <p className="text-sm font-medium text-danger">Held by Safe Checkout</p>}
+            {(preparationError || error) && <p className="text-sm text-ink-2">{preparationError ?? error}</p>}
+          </div>
+          {(state.fraudCard || (state.verdict && state.guarded.status !== "approved")) && (
+            <FraudCard
+              className="w-full"
+              card={state.fraudCard}
+              verdict={state.verdict}
+              status={state.guarded.status}
+              attempted={state.guarded.attempted}
+              {...("evidence" in state ? { evidence: state.evidence } : {})}
+            />
+          )}
+          {product.description && (
+            <div className="card w-full p-5 sm:p-6">
+              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
+              <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{product.description}</p>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function ProductPage({
   id,
   seed,
@@ -718,7 +827,7 @@ export function ProductPage({
   }, [id]);
 
   useEffect(() => {
-    if (!product) return;
+    if (!product || product.source === "warehouse") return;
     const ctrl = new AbortController();
     const fallbackQuery = [product.type, similarQuery(product.title)].filter(Boolean).join(" ") || product.title;
     similarProducts(product.id, { limit: 16, signal: ctrl.signal, fallbackQuery })
@@ -752,6 +861,8 @@ export function ProductPage({
       </div>
     );
   }
+
+  if (product.source === "warehouse") return <WarehouseProductPage key={product.id} product={product} add={cart.add} onBack={onBack} />;
 
   const p = product;
   const offers = [...p.offers].sort((a, b) => (a.available === false ? 1 : 0) - (b.available === false ? 1 : 0) || (a.price ?? Infinity) - (b.price ?? Infinity));

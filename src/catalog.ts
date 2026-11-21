@@ -7,9 +7,11 @@
  *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
+import productTypes from "../eval/genprops/product_types.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 import { getCountry } from "./locale";
 import { DEMO_MODE } from "./config";
+import { fetchDataset, fileUrl, imageUrl, mediaToFetch, type DatasetItem, type WarehousePurchase } from "./lib/dataset";
 
 export interface MediaSource {
   url: string;
@@ -21,9 +23,9 @@ export interface MediaSource {
   size: number | null;
 }
 
-/** Shop MCP media: image, video (Shopify-hosted), external_video (YouTube/Vimeo embed) or model_3d (GLB/USDZ). */
+/** Product images, video, 3D models, and warehouse audio. */
 export interface MediaItem {
-  type: "image" | "video" | "external_video" | "model_3d";
+  type: "image" | "video" | "external_video" | "model_3d" | "audio";
   url: string;
   alt: string | null;
   width: number | null;
@@ -73,6 +75,8 @@ export interface Offer {
 
 export interface CatalogProduct {
   id: string;
+  source: "shopify" | "warehouse";
+  warehouse?: WarehousePurchase;
   /** featured variant: what cart/checkout line items reference */
   variantId: string | null;
   title: string;
@@ -120,6 +124,8 @@ export interface SearchOptions {
   signal?: AbortSignal;
   /** false skips network sources (offline rehearsal) */
   network?: boolean;
+  /** Storefront listings can route warehouse adds through the guarded product page. */
+  includeWarehouse?: boolean;
 }
 
 type Obj = Record<string, unknown>;
@@ -182,6 +188,7 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
 
   return {
     id,
+    source: "shopify",
     variantId: str(v.id),
     title,
     price,
@@ -217,7 +224,7 @@ function toMedia(m: Obj): MediaItem | null {
   const url = str(m.url) ?? str(obj(m.preview).url);
   if (!url) return null;
   const t = String(m.type ?? "image").toLowerCase();
-  const type: MediaItem["type"] = t.includes("external") ? "external_video" : t.includes("model") || t.includes("3d") ? "model_3d" : t.includes("video") ? "video" : "image";
+  const type: MediaItem["type"] = t === "audio" ? "audio" : t.includes("external") ? "external_video" : t.includes("model") || t.includes("3d") ? "model_3d" : t.includes("video") ? "video" : "image";
   const sources = Array.isArray(m.sources)
     ? (m.sources as Obj[])
         .map((x) => ({ url: str(x.url) ?? "", mime: str(x.mime_type) ?? str(x.mime), format: str(x.format), width: num(x.width), height: num(x.height), size: num(x.filesize ?? x.size) }))
@@ -269,6 +276,69 @@ const DEMO: CatalogProduct[] = (sample.products as unknown[]).map(normalizeProdu
 export const demoCatalog = () => DEMO;
 export const findDemo = (id: string) => DEMO.find((p) => p.id === id) ?? null;
 
+const WAREHOUSE_ID = /^wh:(type-(\d+)-(v\d+))$/;
+
+export function parseWarehouseId(id: string): string | null {
+  return WAREHOUSE_ID.exec(id)?.[1] ?? null;
+}
+
+const warehouseTypes = new Map(productTypes.map(({ n, type }) => [n, type]));
+
+function warehouseProduct(item: DatasetItem): CatalogProduct | null {
+  const id = `wh:${item.item_id}`;
+  const [, , typeNumber, variant] = WAREHOUSE_ID.exec(id) ?? [];
+  const productId = str(item.product?.product_id);
+  const title = str(item.product?.title);
+  if (!variant || !productId || !title) return null;
+
+  const image = imageUrl(item.item_id);
+  const product = normalizeProduct({
+    id,
+    title,
+    price: minorToMajor(item.product?.price_cents, "USD"),
+    shop_name: "Warehouse",
+    image,
+    product_type: item.product_type ?? item.product?.product_type ?? warehouseTypes.get(Number(typeNumber)),
+    media: mediaToFetch(item).map(({ kind, name }) => ({
+      type: kind, url: fileUrl(item.item_id, name), preview: kind === "video" ? { url: image } : undefined,
+    })),
+  });
+  return product && {
+    ...product,
+    source: "warehouse",
+    title: `${title} (Warehouse ${variant})`,
+    warehouse: { productId, files: item.files, request: item.request, budget: item.budget },
+  };
+}
+
+const words = (value: string) => value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+function matchesWarehouseQuery(product: CatalogProduct, terms: string[]): boolean {
+  const matches = (value: string) => {
+    const tokens = words(value);
+    return terms.every((term) => tokens.some((token) =>
+      token === term || token === `${term}s` || term === `${token}s`,
+    ));
+  };
+  return matches(str(product.raw.title) ?? "") || matches(product.type ?? "");
+}
+
+let datasetRequest: Promise<DatasetItem[]> | undefined;
+
+function warehouseDataset(): Promise<DatasetItem[]> {
+  datasetRequest ??= fetchDataset().catch(() => []).finally(() => { datasetRequest = undefined; });
+  return datasetRequest;
+}
+
+async function searchWarehouse(query: string, maxPrice: number | null): Promise<CatalogProduct[]> {
+  const terms = words(query);
+  if (!terms.length) return [];
+  const items = await warehouseDataset();
+  return items.map(warehouseProduct).filter((p): p is CatalogProduct =>
+    p != null && matchesWarehouseQuery(p, terms) && (maxPrice == null || (p.price ?? Infinity) <= maxPrice),
+  );
+}
+
 export function isUrl(q: string): boolean {
   return /^https?:\/\/\S+$/i.test(q.trim()) || /^[\w-]+(\.[\w-]+)+\/\S*$/.test(q.trim());
 }
@@ -305,12 +375,20 @@ const CACHE_TTL_MS = 2 * 60 * 1000;
 const cache = new Map<string, { at: number; value: Promise<SearchResult> }>();
 
 export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
-  const { maxPrice = null, limit = 12, cursor, network = true } = opts;
-  const key = JSON.stringify([q.trim().toLowerCase(), maxPrice, limit, cursor ?? null, network, getCountry().code]);
+  const { maxPrice = null, limit = 12, cursor, network = true, includeWarehouse = false } = opts;
+  const key = JSON.stringify([q.trim().toLowerCase(), maxPrice, limit, cursor ?? null, network, includeWarehouse, getCountry().code]);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return withAbort(hit.value, opts.signal);
   // The shared request is never tied to one caller's AbortSignal.
-  const value = searchUncached(q, { ...opts, signal: undefined });
+  const shopify = searchUncached(q, { ...opts, signal: undefined });
+  const value = includeWarehouse && network && !cursor
+    ? Promise.all([shopify, searchWarehouse(q, maxPrice)]).then(([result, warehouse]) => warehouse.length ? {
+        ...result,
+        items: [...result.items, ...warehouse],
+        error: undefined,
+        total: result.total == null ? undefined : result.total + warehouse.length,
+      } : result)
+    : shopify;
   cache.set(key, { at: Date.now(), value });
   value.then((r) => (r.source === "demo" || r.error) && cache.delete(key)).catch(() => cache.delete(key));
   if (cache.size > 60) cache.delete(cache.keys().next().value!);
@@ -408,7 +486,20 @@ async function searchUncached(q: string, opts: SearchOptions = {}): Promise<Sear
 
 const productCache = new Map<string, { product: CatalogProduct | null; source: CatalogSource }>();
 
-export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource }> {
+export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource | "warehouse" }> {
+  if (id.startsWith("wh:")) {
+    const itemId = parseWarehouseId(id);
+    if (!itemId || !network) return { product: null, source: "warehouse" };
+    const item = (await warehouseDataset()).find((row) => row.item_id === itemId);
+    const product = item ? warehouseProduct(item) : null;
+    if (product && item?.files?.includes("description.txt")) {
+      const description = await fetch(fileUrl(itemId, "description.txt"))
+        .then((r) => r.ok ? r.text() : null)
+        .catch(() => null);
+      return { product: { ...product, description }, source: "warehouse" };
+    }
+    return { product, source: "warehouse" };
+  }
   const demo = DEMO_MODE ? findDemo(id) : null;
   if (demo || !network) return { product: demo, source: "demo" };
   const hit = productCache.get(`${getCountry().code}:${id}`);

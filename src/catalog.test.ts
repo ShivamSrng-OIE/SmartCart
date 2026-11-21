@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { normalizeProduct, plainText, splitQueries } from "./catalog";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getProduct, normalizeProduct, parseWarehouseId, plainText, searchCatalog, splitQueries } from "./catalog";
+import { completeWarehouseAdd } from "./components/ProductPage";
+import { runAgent, warehouseRunForm } from "./api";
+import { applyEvent, initialState } from "./state";
 import { minorToMajor } from "./shop";
 
 // Trimmed from a real search_catalog response (shop.dev quickstart + live call).
@@ -81,5 +84,123 @@ describe("helpers", () => {
 
   it("plainText drops embedded media fallback text", () => {
     expect(plainText('<p>Comfy</p><video controls><source src="a.mp4">Your browser does not support HTML5 video.</video>')).toBe("Comfy");
+  });
+});
+
+describe("warehouse catalog", () => {
+  const multivitamin = { ...shopifyItem, title: "Livingood Daily Multi Vitamin" };
+  const warehouseItem = {
+    item_id: "type-21-v3",
+    poisoned_modality: "audio",
+    case_label: "attack",
+    product: { product_id: multivitamin.id, title: multivitamin.title, price_cents: 3795 },
+    files: ["image.png", "audio.wav", "video.mp4", "description.txt"],
+    request: "Buy one of these under $57",
+    budget: 57,
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("merges separate Shopify and warehouse products on a case-insensitive whole-word type match", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/dataset") return Response.json([warehouseItem]);
+      if (url.startsWith("/api/catalog/search?")) return Response.json({ products: [multivitamin] });
+      throw new Error(`Unexpected request ${url}`);
+    }));
+
+    const result = await searchCatalog("MULTIVITAMIN", { includeWarehouse: true });
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toMatchObject({ id: multivitamin.id, source: "shopify" });
+    const warehouse = result.items[1];
+    expect(warehouse).toMatchObject({
+      id: "wh:type-21-v3",
+      source: "warehouse",
+      title: "Livingood Daily Multi Vitamin (Warehouse v3)",
+      price: 37.95,
+      image: "/api/dataset/type-21-v3/image.png",
+      shopName: "Warehouse",
+    });
+    expect(warehouse.media.map((m) => m.type)).toEqual(["image", "video", "audio"]);
+    expect(JSON.stringify(warehouse)).not.toMatch(/poisoned_modality|case_label/);
+    expect((await searchCatalog("multivit", { includeWarehouse: true })).items.map((p) => p.source)).toEqual(["shopify"]);
+  });
+
+  it("parses only canonical warehouse product IDs", () => {
+    expect(parseWarehouseId("wh:type-21-v3")).toBe("type-21-v3");
+    expect(parseWarehouseId("type-21-v3")).toBeNull();
+    expect(parseWarehouseId("wh:type-21-v3/description.txt")).toBeNull();
+    expect(parseWarehouseId(multivitamin.id)).toBeNull();
+  });
+
+  it("loads a warehouse detail and submits its media blobs with the real product ID", async () => {
+    let submitted: FormData | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/dataset") return Response.json([warehouseItem]);
+      if (url.endsWith("/description.txt")) return new Response("Product details");
+      if (url.endsWith("/image.png")) return new Response("image bytes", { headers: { "Content-Type": "image/png" } });
+      if (url.endsWith("/audio.wav")) return new Response("audio bytes", { headers: { "Content-Type": "audio/wav" } });
+      if (url.endsWith("/video.mp4")) return new Response("video bytes", { headers: { "Content-Type": "video/mp4" } });
+      if (url === "/api/run" && init?.method === "POST" && init.body instanceof FormData) {
+        submitted = init.body;
+        return Response.json({ events: [{ run_id: "test-run", pane: "system", kind: "done", t_ms: 0, data: {} }] });
+      }
+      throw new Error(`Unexpected request ${url}`);
+    }));
+
+    const { product } = await getProduct("wh:type-21-v3");
+    expect(product?.description).toBe("Product details");
+    const form = await warehouseRunForm("type-21-v3", product!.warehouse!);
+    await new Promise<void>((resolve, reject) => {
+      runAgent("protected", form, {
+        onStart: () => undefined,
+        onEvent: (event) => { if (event.kind === "done") resolve(); },
+        onError: (error) => reject(new Error(error)),
+      });
+    });
+    expect(submitted?.get("mode")).toBe("guarded");
+    expect(submitted?.get("request")).toBe(warehouseItem.request);
+    expect(submitted?.get("budget")).toBe("57");
+    expect(submitted?.get("product_id")).toBe(multivitamin.id);
+    for (const kind of ["image", "audio", "video"]) {
+      expect(await (submitted?.get(kind) as Blob).text()).toBe(`${kind} bytes`);
+    }
+    expect(submitted?.has("description")).toBe(false);
+  });
+
+  it("holds checkout if an advertised attachment could not be loaded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/image.png") ? new Response("image bytes") : new Response(null, { status: 404 })));
+
+    await expect(warehouseRunForm("type-21-v3", {
+      productId: multivitamin.id, files: ["image.png", "audio.wav"], request: warehouseItem.request, budget: warehouseItem.budget,
+    })).rejects.toThrow("audio.wav");
+  });
+});
+
+describe("warehouse add to cart", () => {
+  function mockRun(actions: string[]) {
+    let state = initialState(null, "warehouse-run");
+    for (const action of actions) {
+      state = applyEvent(state, { run_id: "warehouse-run", pane: "guarded", kind: "verdict", t_ms: 1, data: { action } });
+    }
+    state = applyEvent(state, { run_id: "warehouse-run", pane: "system", kind: "done", t_ms: 2, data: {} });
+    return { phase: "done" as const, state };
+  }
+
+  it("keeps a held item out of the cart even after an earlier approval", () => {
+    const add = vi.fn();
+    expect(completeWarehouseAdd(mockRun(["approve_checkout", "hard_block_quarantine"]), add)).toBe("held");
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it("adds the item after a completed approval", () => {
+    const add = vi.fn();
+    expect(completeWarehouseAdd(mockRun(["approve_checkout"]), add)).toBe("approved");
+    expect(add).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the cart empty when the run finishes without a verdict", () => {
+    const add = vi.fn();
+    expect(completeWarehouseAdd(mockRun([]), add)).toBe("held");
+    expect(add).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,7 @@ const ProductPage = lazy(() => import("./components/ProductPage").then((m) => ({
 const AgentPage = lazy(() => import("./components/AgentPage").then((m) => ({ default: m.AgentPage })));
 const Arena = lazy(() => import("./components/Arena").then((m) => ({ default: m.Arena })));
 const RedTeam = lazy(() => import("./components/RedTeam").then((m) => ({ default: m.RedTeam })));
+const Dataset = lazy(() => import("./components/Dataset").then((m) => ({ default: m.Dataset })));
 const Scoreboard = lazy(() => import("./components/Scoreboard").then((m) => ({ default: m.Scoreboard })));
 
 const AGENT_VIEWS: View[] = ["unprotected", "protected", "compare"];
@@ -97,6 +98,7 @@ export default function App() {
       compare: "Compare · Tote",
       redteam: "Safety updates · Tote",
       results: "Performance · Tote",
+      dataset: "Dataset · Tote",
     };
     document.title = titles[view];
   }, [view, productSeed?.title]);
@@ -203,6 +205,7 @@ export default function App() {
           )}
           {view === "compare" && <Arena mode={backend.mode} rules={backend.rules} />}
           {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} />}
+          {view === "dataset" && <Dataset onRun={() => go("compare")} />}
           {view === "results" && <Scoreboard results={backend.evalResults} />}
           </Suspense>
         </div>

@@ -4,6 +4,7 @@ import type { EvalResults, Metrics } from "../types";
 import { money, pct } from "../lib/format";
 import { countTo, gsap, useGSAP, d } from "../lib/motion";
 import { cx } from "./ui";
+import { MODALITIES, type ByModality } from "../lib/dataset";
 
 const SYSTEMS = [
   { key: "baseline", label: "Assistant", note: "Standard setup" },
@@ -61,6 +62,8 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
   const ct = results.systems.carttrap;
   const base = results.systems.baseline;
   const meta = results.meta ?? {};
+  const bm = (results as unknown as { by_modality?: ByModality }).by_modality;
+  const byModality = bm && Object.keys(bm).length ? bm : null;
 
   useGSAP(
     () => {
@@ -215,6 +218,45 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
           </div>
         ))}
       </div>
+
+      {byModality && (
+        <div data-reveal className="card overflow-x-auto p-4 sm:p-5">
+          <p className="label mb-1">Where it breaks</p>
+          <h2 className="text-[17px] font-semibold tracking-tight">Wrong orders by attack type</h2>
+          <table className="mt-3 w-full min-w-[420px] text-left">
+            <thead>
+              <tr className="border-b border-line">
+                <th className="label py-2 font-medium">Modality</th>
+                {rows.map((r) => (
+                  <th key={r.key} className="label py-2 font-medium">{r.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MODALITIES.map((mod) => (
+                <tr key={mod} className="border-b border-line last:border-0">
+                  <td className="py-2.5 text-[15px] font-medium">{mod}</td>
+                  {rows.map((r) => {
+                    const c = byModality[r.key]?.[mod];
+                    return (
+                      <td key={r.key} className="tnum py-2.5 font-mono text-sm">
+                        {c ? (
+                          <>
+                            <span className={cx("font-semibold", r.key === "carttrap" ? "text-safe" : c.asr > 0.3 ? "text-danger" : "text-ink")}>{pct(c.asr)}</span>
+                            <span className="ml-1.5 text-xs text-ink-3">n={c.n_attack}</span>
+                          </>
+                        ) : (
+                          <span className="text-ink-3">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* where it breaks */}

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, Sun, Swords, Trophy, X } from "lucide-react";
+import { Bot, ChevronDown, Columns2, Home, Database, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, Sun, Swords, Trophy, X } from "lucide-react";
 import { COUNTRIES, setCountry, useCountry } from "../locale";
 import type { Theme } from "../hooks/useTheme";
 import { gsap, d } from "../lib/motion";
 import { cx } from "./ui";
 
-export type View = "home" | "shop" | "product" | "unprotected" | "protected" | "compare" | "redteam" | "results";
+export type View = "home" | "shop" | "product" | "unprotected" | "protected" | "compare" | "redteam" | "results" | "dataset";
 
 export interface NavItem {
   id: View;
@@ -27,6 +27,7 @@ export const MORE: NavItem[] = [
   { id: "compare", label: "Compare", short: "Compare", hint: "Assistant and Safe Checkout side by side", icon: Columns2 },
   { id: "redteam", label: "Safety updates", short: "Updates", hint: "How Safe Checkout learns new checks", icon: Swords },
   { id: "results", label: "Performance", short: "Performance", hint: "How often orders come out right", icon: Trophy },
+  { id: "dataset", label: "Dataset", short: "Dataset", hint: "The poisoned orders we test against", icon: Database },
 ];
 
 export const ALL_VIEWS: View[] = ["home", "product", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];

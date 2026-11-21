@@ -31,6 +31,9 @@ def _new_client(**kw):
     return genai.Client(api_key=config.GEMINI_API_KEY, **kw)
 
 
+# Created ONCE per process and reused: each client keeps its own HTTP connection pool, so
+# reusing it saves the TLS handshake on every firewall call. Never create a client per call.
+
 def client():
     global _client
     if _client is None:

@@ -8,11 +8,13 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend.firewall_decisions import warm_up
 from backend.guarded_shopper import run_guarded
 from backend.intent import parse_intent
 from backend.rules import RuleStore
@@ -43,7 +45,17 @@ async def guarded_pipeline(intent, media, product_ref, bus, run_id):
     await run_guarded(intent, media, product_ref, bus, run_id, shop=ShopMCP(), rules=RULES)
 
 
-app = FastAPI(title="CartTrap")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm the Decisions API connection in the background so the first firewall check doesn't
+    # pay for TLS + auth. warm_up() only logs on failure; startup never waits for it.
+    task = asyncio.create_task(warm_up())
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    yield
+
+
+app = FastAPI(title="CartTrap", lifespan=lifespan)
 app.state.bus = TraceBus()
 app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()

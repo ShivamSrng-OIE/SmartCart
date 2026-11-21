@@ -20,7 +20,7 @@ MODELS: dict[str, str] = {
         "firewall": "gemini-decision-1",
         "defender": "gemini-4-neon",
         "redteam": "gemini-4-carbon",
-        "imagegen": "nano-banana-2.1",
+        "imagegen": "gemini-nano-banana-2.1",
     }.items()
 }
 

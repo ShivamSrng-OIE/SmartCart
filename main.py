@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.schemas import Intent, Media
 from backend.trace import TraceBus
+from backend.victim_hydrogen import run_victim
 
 RUNS_DIR = Path("runs")
 
@@ -31,7 +32,8 @@ def make_fake(pane: str) -> Pipeline:
 
 app = FastAPI(title="CartTrap")
 app.state.bus = TraceBus()
-app.state.pipelines = {"victim": make_fake("victim"), "guarded": make_fake("guarded")}
+# TODO(Task 9): replace the guarded fake with Member 2's run_guarded.
+app.state.pipelines = {"victim": run_victim, "guarded": make_fake("guarded")}
 _tasks: set[asyncio.Task] = set()
 
 

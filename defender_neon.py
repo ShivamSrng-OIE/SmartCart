@@ -266,17 +266,30 @@ async def safe_swap(
 
 
 async def on_block(b: BlockContext) -> FraudCard | None:
-    """Explain the guarded block and offer a safe cart within one deadline."""
+    """Explain the guarded block and offer a safe cart within one deadline.
+
+    The template card is emitted first (no network), so the UI always shows a Fraud Card; the
+    safe cart and the Neon wording are added in a second fraud_card event when they arrive."""
+    try:
+        card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total)
+        b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
+    except Exception as exc:  # never break the guarded pane
+        log.warning("template fraud card failed: %s", type(exc).__name__)
+        b.bus.emit(b.run_id, "guarded", "log", {"level": "error", "event": "fraud_card",
+                                                "message": f"fraud card failed: {type(exc).__name__}"})
+        return None
+    safe_cart = None
     try:
         async with asyncio.timeout(ON_BLOCK_TIMEOUT_S):
             safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
             card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
             b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
-            return card
     except Exception as exc:
-        # Shop errors can contain access-keyed cart URLs.
+        # Shop errors can contain access-keyed cart URLs: log the type only.
         log.warning("Neon block handler failed: %s", type(exc).__name__)
-        return None
+        b.bus.emit(b.run_id, "guarded", "log", {"level": "warn", "event": "safe_swap",
+                                                "message": f"safe swap/Neon unavailable: {type(exc).__name__}"})
+    return card
 
 
 # ---------------------------------------------------------------- self-heal re-exports (ADR m4/0003)

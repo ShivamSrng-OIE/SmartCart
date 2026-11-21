@@ -21,7 +21,7 @@ from backend.schemas import Claims, Media
 
 log = logging.getLogger(__name__)
 EVIDENCE_DIR = Path("runs/evidence")
-TIMEOUT_S = 25.0  # video localization (agentic frame scrubbing) is the slow one
+TIMEOUT_S = 40.0  # video (agentic frame scrubbing) takes ~13 s alone and longer when Gemini is busy
 BUCKETS = 200
 RUN_ID = re.compile(r"[A-Za-z0-9_-]+")
 FILE_NAME = re.compile(r"(?:crop|frame|clip)_[0-9]+\.(?:jpg|wav)")
@@ -247,11 +247,14 @@ async def locate(media: list[Media], claims: Claims | None, run_id: str) -> list
             async def one(i: int, m: Media):
                 # One bad attachment (unreadable audio, a model error) must not discard the
                 # evidence found in the others.
-                try:
-                    return await _localize(i, m, hints, run_id)
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("evidence for %s #%d unavailable: %s", m.kind, i, type(exc).__name__)
-                    return None
+                for attempt in (1, 2):  # one retry: a transient Gemini error shouldn't lose the evidence
+                    try:
+                        return await _localize(i, m, hints, run_id)
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("evidence for %s #%d attempt %d failed: %s", m.kind, i, attempt, type(exc).__name__)
+                        if attempt == 1:
+                            await asyncio.sleep(0.5)
+                return None
 
             results = await asyncio.gather(*(one(i, m) for i, m in enumerate(media) if m.kind in FORMATS))
             artifacts = [r for r in results if r is not None]

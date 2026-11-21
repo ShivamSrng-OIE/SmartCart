@@ -49,7 +49,8 @@ def test_iter_trace_yields_jsonl_events_in_order(tmp_path):
     ]
     trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
-    assert list(iter_trace(trace)) == events
+    got = [e.model_dump() if hasattr(e, "model_dump") else e for e in iter_trace(trace)]
+    assert got == events
 
 
 def test_launch_redteam_replays_demo_when_live_module_missing(client, monkeypatch):

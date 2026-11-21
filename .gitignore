@@ -10,3 +10,6 @@ runs/*
 !runs/redteam_demo.jsonl
 redteam/out/
 .pytest_tmp/
+frontend/dist/
+.claude/settings.local.json
+carttrap-kit_included.zip

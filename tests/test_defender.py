@@ -252,3 +252,23 @@ def test_neon_prompt_does_not_resubstitute_untrusted_text():
         import pytest
         pytest.skip("verdict stub shape differs")
     assert "Mug <<PROBES>> <<INTENT>>" in text
+
+
+async def test_validate_probe_reexport_returns_bool(monkeypatch):
+    from backend import defender_neon, selfheal
+
+    async def fake(probe, exploit, benign, **kw):
+        return True, {"report": 1}
+
+    monkeypatch.setattr(selfheal, "validate_probe", fake)
+    assert await defender_neon.validate_probe(object(), {}, []) is True
+
+
+async def test_propose_probe_reexport_delegates(monkeypatch):
+    from backend import defender_neon, selfheal
+
+    async def fake(trace, **kw):
+        return "probe"
+
+    monkeypatch.setattr(selfheal, "propose_probe", fake)
+    assert await defender_neon.propose_probe([]) == "probe"

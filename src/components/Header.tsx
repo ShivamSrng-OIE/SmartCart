@@ -141,7 +141,7 @@ function MoreMenu({ view, onView }: { view: View; onView: (v: View) => void }) {
     };
   }, [open]);
   return (
-    <div ref={ref} className="relative hidden md:block">
+    <div ref={ref} className="relative hidden md:block short:block">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -202,12 +202,12 @@ export function Header({
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
-        <div className="mx-auto flex h-14 max-w-[2400px] items-center gap-3 px-3 sm:px-5 xl:px-8">
+        <div className="mx-auto flex h-14 max-w-[2400px] items-center gap-3 px-3 sm:px-5 xl:px-8 short:h-12 short:gap-2">
           <button onClick={() => onView("home")} className="shrink-0" aria-label="Tote home">
             <Logo />
           </button>
 
-          <nav className="mx-auto hidden md:flex" aria-label="Modes">
+          <nav className="mx-auto hidden md:flex short:flex" aria-label="Modes">
             <div className="flex items-center gap-0.5 rounded-[10px] bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]">
               {MODES.map((v) => {
                 const Icon = v.icon;
@@ -220,9 +220,10 @@ export function Header({
                     title={v.hint}
                     className={cx("inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all", on ? "bg-surface text-ink shadow-card" : "text-ink-2 hover:text-ink")}
                   >
-                    <span className={cx("flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold", on ? "bg-ink text-ink-inverse" : "bg-line text-ink-2")}>{v.key}</span>
-                    <Icon className="hidden size-4 lg:block" />
-                    {v.label}
+                    <span className={cx("flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold max-md:short:hidden", on ? "bg-ink text-ink-inverse" : "bg-line text-ink-2")}>{v.key}</span>
+                    <Icon className="hidden size-4 lg:block max-md:short:block" />
+                    <span className="max-md:short:hidden">{v.label}</span>
+                    <span className="hidden max-md:short:inline">{v.short}</span>
                   </button>
                 );
               })}
@@ -258,7 +259,7 @@ export function Header({
       </header>
 
       {/* phones: thumb-reach tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} aria-label="Modes">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md md:hidden short:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} aria-label="Modes">
         <div className="grid h-16 grid-cols-4">
           {MODES.map((v) => {
             const Icon = v.icon;

@@ -370,7 +370,7 @@ export function ShopYourself({
   }, [openCartTick]);
 
   return (
-    <div ref={root} className="grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px] 2xl:gap-6">
+    <div ref={root} className="grid grid-cols-1 w-full gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px] 2xl:gap-6">
       <div className="flex min-w-0 flex-col gap-4">
         {/* search */}
         <section className="card p-4 sm:p-5">
@@ -380,7 +380,7 @@ export function ShopYourself({
               ref={inputRef}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search Shopify, e.g. cold brew, ceramic mug"
+              placeholder="Search products"
               className="field h-12 rounded-xl! pr-20 pl-11 text-base sm:h-14 sm:text-[17px]"
               aria-label="Search products"
               type="search"
@@ -400,7 +400,7 @@ export function ShopYourself({
               )}
             </div>
           </div>
-          <p className="mt-2 text-xs text-ink-3">Separate several items with commas to search them all at once.</p>
+          <p className="mt-2 text-xs text-ink-3">Tip: separate items with commas to search several at once.</p>
           <div className="thin-scroll -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {SUGGESTIONS.map((s) => (
               <button
@@ -439,8 +439,10 @@ export function ShopYourself({
                 <span className="tnum font-medium">{groups ? items.length : total != null && total > sorted.length ? `${sorted.length} of ${total.toLocaleString()}` : sorted.length}</span>
                 <span className="text-ink-3">{!query ? (groups ? `products across ${groups.length} categories` : "products to start with") : groups ? `results for ${groups.length} items` : `results for “${terms[0] ?? query}”`}</span>
               </p>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex">
-                <Segmented size="sm" value={cap} onChange={setCap} options={PRICE_CAPS.map((c) => ({ value: c.value, label: c.label }))} className="w-full sm:w-auto" />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="-mx-3 overflow-x-auto px-3 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+                  <Segmented size="sm" value={cap} onChange={setCap} options={PRICE_CAPS.map((c) => ({ value: c.value, label: c.label }))} className="min-w-full sm:min-w-0" />
+                </div>
                 <label>
                   <span className="sr-only">Sort</span>
                   <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="field h-8 py-0 pr-8 text-[13px]">

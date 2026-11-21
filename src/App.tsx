@@ -145,7 +145,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <main id="main" ref={mainRef} className="mx-auto w-full max-w-[2400px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8 xl:px-8">
+      <main id="main" ref={mainRef} className="mx-auto w-full max-w-[2400px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8 xl:px-8 short:pt-3 short:pb-6">
         <div key={view} className="flex flex-col gap-4">
           <Suspense fallback={<PageLoading />}>
           {view === "home" && (

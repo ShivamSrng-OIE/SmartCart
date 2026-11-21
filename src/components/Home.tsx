@@ -104,10 +104,10 @@ export function HomePage({
   return (
     <div ref={root} className="flex w-full flex-col gap-8 py-1 sm:gap-10 sm:py-3">
       {/* hero: text + search on the left, live products on the right */}
-      <section className="grid items-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-16">
+      <section className="grid grid-cols-1 items-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-16">
         <div data-hero className="flex flex-col items-start gap-4 lg:py-6">
-          <h1 className="max-w-3xl text-[32px] leading-[1.08] font-semibold tracking-[-0.025em] sm:text-[44px] 2xl:text-[56px]">Shop independent stores, or let the assistant do it</h1>
-          <p className="max-w-xl text-[15px] text-ink-2 sm:text-lg">Thousands of Shopify merchants in one search. Tell the assistant what you need and it builds the cart for you.</p>
+          <h1 className="max-w-3xl text-[28px] leading-[1.1] font-semibold tracking-[-0.025em] sm:text-[44px] 2xl:text-[56px] short:text-[30px]">Shop independent stores, or let the assistant do it</h1>
+          <p className="max-w-xl text-[15px] leading-relaxed text-ink-2 sm:text-lg">Thousands of Shopify merchants in one search. Tell the assistant what you need and it builds the cart for you.</p>
           <form
             className="relative w-full max-w-2xl"
             onSubmit={async (e) => {
@@ -124,7 +124,7 @@ export function HomePage({
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search products, or ask: anything nice under $30"
+              placeholder="Search, or ask the assistant"
               className="field h-13 rounded-xl! pr-28 pl-12 text-base sm:h-14"
               aria-label="Search products"
               type="search"
@@ -162,9 +162,9 @@ export function HomePage({
               <>Type a product to search, or describe what you want bought.</>
             )}
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="-mx-3 flex w-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
             {BROWSE.slice(0, 5).map((c) => (
-              <button key={c} onClick={() => onSearch(c)} className="h-8 rounded-full border border-line px-3 text-[13px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+              <button key={c} onClick={() => onSearch(c)} className="h-8 shrink-0 rounded-full border border-line px-3 text-[13px] text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
                 {c}
               </button>
             ))}
@@ -191,18 +191,18 @@ export function HomePage({
       {/* ways to shop */}
       <section className="flex flex-col gap-3">
         <h2 className="text-[17px] font-semibold tracking-tight">Ways to shop</h2>
-        <div className="grid gap-3 md:grid-cols-3 md:gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
           {MODES.map((m) => {
             const Icon = m.icon;
             return (
-              <button key={m.id} data-way onClick={() => onView(m.id)} className="group card flex items-start gap-4 p-5 text-left transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_32px_-20px_rgb(0_0_0/0.35)]">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 shadow-[inset_0_0_0_1px_var(--line)]">
+              <button key={m.id} data-way onClick={() => onView(m.id)} className="group card flex items-start gap-3 p-4 text-left sm:gap-4 sm:p-5 transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_32px_-20px_rgb(0_0_0/0.35)]">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 shadow-[inset_0_0_0_1px_var(--line)] sm:size-10">
                   <Icon className="size-5 text-ink-2" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[16px] font-semibold tracking-tight">{m.label}</span>
-                  <span className="mt-0.5 block text-[14px] leading-relaxed text-ink-2">{WAYS[m.id]}</span>
-                  <span className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-semibold">
+                  <span className="flex items-center justify-between gap-2 text-[15px] font-semibold tracking-tight sm:text-[16px]">{m.label}<ArrowRight className="size-4 text-ink-3 sm:hidden" /></span>
+                  <span className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-ink-2 sm:line-clamp-none sm:text-[14px]">{WAYS[m.id]}</span>
+                  <span className="mt-2.5 hidden items-center gap-1.5 text-[13px] font-semibold sm:inline-flex">
                     {m.id === "shop" ? "Start browsing" : m.id === "unprotected" ? "Open the assistant" : "Shop with Safe Checkout"}
                     <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
                   </span>
@@ -216,11 +216,11 @@ export function HomePage({
       {/* categories */}
       <section className="flex flex-col gap-3">
         <h2 className="text-[17px] font-semibold tracking-tight">Shop by category</h2>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6">
           {(categories ?? BROWSE.map((name) => ({ name, items: [] as CatalogProduct[] }))).map((c) => {
             const cover = c.items.find((x) => x.image);
             return (
-              <button key={c.name} onClick={() => onSearch(c.name)} className="card group relative aspect-[5/4] overflow-hidden text-left">
+              <button key={c.name} onClick={() => onSearch(c.name)} className="card group relative aspect-[3/2] overflow-hidden text-left sm:aspect-[5/4]">
                 {cover ? <ProductThumb product={cover} fit="cover" className="rounded-none! shadow-none! transition-transform duration-700 group-hover:scale-[1.05]" sizes="(min-width: 1280px) 16vw, 33vw" /> : <div className="size-full animate-pulse bg-surface-2" />}
                 <span className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/70 via-black/25 to-transparent p-3 pt-10 text-white">
                   <span className="text-[14px] font-semibold">{c.name}</span>
@@ -256,7 +256,7 @@ export function HomePage({
       </section>
 
       {/* more */}
-      <section className="grid gap-2 border-t border-line pt-6 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-2 border-t border-line pt-6 sm:grid-cols-3">
         {MORE.map((m) => {
           const Icon = m.icon;
           return (

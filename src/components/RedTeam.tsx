@@ -140,7 +140,7 @@ export function RedTeam({
   const exploit = (validate?.data.exploit ?? null) as { p: number; fired: boolean } | null;
 
   return (
-    <div ref={root} className="mx-auto grid w-full max-w-[1800px] gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] 2xl:gap-6">
+    <div ref={root} className="mx-auto grid grid-cols-1 w-full max-w-[1800px] gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] 2xl:gap-6">
       {/* timeline */}
       <section className="card flex min-h-0 flex-col overflow-hidden">
         <header className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">

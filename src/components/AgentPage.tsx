@@ -282,7 +282,7 @@ export function AgentPage({
   return (
     <div className="w-full">
       <Intro className="mb-4 lg:hidden" />
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] 2xl:grid-cols-[440px_minmax(0,1fr)] 2xl:gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] 2xl:grid-cols-[440px_minmax(0,1fr)] 2xl:gap-6">
         <RequestPanel
           mode={mode}
           busy={busy}
@@ -290,7 +290,7 @@ export function AgentPage({
           onReset={reset}
           canReset={phase !== "idle"}
           runLabel={copy.run}
-          className="lg:sticky lg:top-[76px] lg:self-start"
+          className="lg:sticky lg:top-[76px] lg:self-start short:static"
         />
 
         <div ref={resultRef} className="flex min-w-0 scroll-mt-20 flex-col gap-4">

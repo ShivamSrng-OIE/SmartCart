@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------ tokens
+   Shopify-admin inspired (Polaris feel): neutral gray canvas, white cards, near-black
+   bevelled primary actions, one brand green. Color otherwise only carries meaning:
+   danger = hijack/block, safe = approved/honest (shares the brand green), warn = escalate. */
+:root {
+  --bg: #f1f1f1;
+  --surface: #ffffff;
+  --surface-2: #f7f7f7;
+  --sunken: #f3f3f3;
+  --line: #e3e3e3;
+  --line-strong: #cccccc;
+  --ink: #303030;
+  --ink-2: #616161;
+  --ink-3: #8a8a8a;
+  --ink-inverse: #ffffff;
+  --primary: #303030;
+  --primary-hover: #1a1a1a;
+
+  --brand: #008060;
+  --brand-ink: #ffffff;
+
+  --danger: #c70a24;
+  --danger-soft: #fee9e8;
+  --danger-line: #fdc8c3;
+  --safe: #008060;
+  --safe-soft: #e3f5ec;
+  --safe-line: #b4e1c9;
+  --warn: #8a6116;
+  --warn-soft: #fff1d6;
+  --warn-line: #f5d79a;
+
+  --shadow: 0 1px 0 0 rgb(26 26 26 / 0.07), 0 0 0 1px rgb(0 0 0 / 0.02);
+  --shadow-lg: 0 4px 6px -2px rgb(26 26 26 / 0.2);
+  --btn-bevel: inset 0 -1px 0 0 #000, inset 0 0 0 1px rgb(48 48 48), inset 0 0.5px 0 1.5px rgb(255 255 255 / 0.25);
+  --btn-bevel-2: inset 0 -1px 0 0 #b5b5b5, inset 0 0 0 1px rgb(0 0 0 / 0.1), inset 0 0.5px 0 1.5px #fff;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #141414;
+  --surface: #1e1e1e;
+  --surface-2: #262626;
+  --sunken: #181818;
+  --line: #2f2f2f;
+  --line-strong: #404040;
+  --ink: #e8e8e8;
+  --ink-2: #a8a8a8;
+  --ink-3: #7a7a7a;
+  --ink-inverse: #141414;
+  --primary: #f0f0f0;
+  --primary-hover: #ffffff;
+
+  --brand: #2fb985;
+  --brand-ink: #0b1f17;
+
+  --danger: #ff6b5e;
+  --danger-soft: #2c1513;
+  --danger-line: #51241f;
+  --safe: #3fc893;
+  --safe-soft: #10241b;
+  --safe-line: #1d4434;
+  --warn: #ffc453;
+  --warn-soft: #2a2110;
+  --warn-line: #4b3a17;
+
+  --shadow: 0 1px 0 0 rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-lg: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --btn-bevel: inset 0 -1px 0 0 #bdbdbd, inset 0 0.5px 0 1px #fff;
+  --btn-bevel-2: inset 0 -1px 0 0 #111, inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 0.5px 0 1px rgb(255 255 255 / 0.06);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-inverse: var(--ink-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-safe: var(--safe);
+  --color-safe-soft: var(--safe-soft);
+  --color-safe-line: var(--safe-line);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+/* ------------------------------------------------------------------- base */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-bg font-sans text-ink;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    letter-spacing: -0.006em;
+    min-height: 100dvh;
+  }
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition:
+      background-color 280ms ease,
+      border-color 280ms ease,
+      color 200ms ease,
+      fill 200ms ease !important;
+  }
+  ::selection {
+    background: var(--ink);
+    color: var(--ink-inverse);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+@layer components {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .card {
+    @apply rounded-xl bg-surface shadow-card;
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: var(--ink-inverse);
+    box-shadow: var(--btn-bevel);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--btn-bevel-2);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+  .btn-brand {
+    background: var(--brand);
+    color: var(--brand-ink);
+    box-shadow: inset 0 -1px 0 0 rgb(0 0 0 / 0.35), inset 0 0.5px 0 1.5px rgb(255 255 255 / 0.2);
+  }
+  .btn-brand:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+  .label {
+    @apply font-mono text-2xs font-medium tracking-[0.08em] text-ink-3 uppercase;
+  }
+  .field {
+    @apply w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-3 hover:border-ink-3 focus:border-ink focus:shadow-[0_0_0_1px_var(--ink)];
+  }
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .thin-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .thin-scroll::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+    border: 2px solid var(--surface);
+  }
+  .hairline-grid {
+    background-image:
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

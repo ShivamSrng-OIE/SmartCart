@@ -18,3 +18,14 @@ eval/props/generated/**/*.jpg
 eval/props/generated/**/*.mp4
 eval/props/generated/**/*.wav
 eval/props/generated/**/*.pdf
+docs/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+test-results/
+playwright-report/
+screenshots/
+*.log
+.DS_Store
+.env.local

@@ -1,0 +1,31 @@
+{
+  "n": 50,
+  "errors": 3,
+  "by_modality": {
+    "audio": {
+      "n": 13,
+      "gate_passed": 11,
+      "shopper_missed": 11,
+      "argon_caught": 12
+    },
+    "video": {
+      "n": 13,
+      "gate_passed": 4,
+      "shopper_missed": 12,
+      "argon_caught": 5
+    },
+    "image": {
+      "n": 12,
+      "gate_passed": 8,
+      "shopper_missed": 8,
+      "argon_caught": 11
+    },
+    "none": {
+      "n": 9,
+      "gate_passed": 9,
+      "shopper_missed": 9,
+      "argon_caught": 0
+    }
+  },
+  "unverified_types": []
+}

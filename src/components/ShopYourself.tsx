@@ -292,7 +292,7 @@ export function ShopYourself({
             setCursor(undefined);
             setTotal(undefined);
           } else if (terms.length === 1) {
-            const res = await searchCatalog(terms[0], { maxPrice: capN, signal: ctrl.signal, limit: 12 });
+            const res = await searchCatalog(terms[0], { maxPrice: capN, signal: ctrl.signal, limit: 12, includeWarehouse: true });
             setItems(res.items);
             setGroups(null);
             setError(res.error ?? null);
@@ -301,7 +301,7 @@ export function ShopYourself({
             setTotal(res.total);
           } else {
             // "cold brew, mug, granola": one search per item, in parallel, shown as sections.
-            const results = await Promise.all(terms.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 8 })));
+            const results = await Promise.all(terms.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 8, includeWarehouse: true })));
             setGroups(terms.map((term, i) => ({ term, items: results[i].items })));
             setItems(results.flatMap((r) => r.items));
             setError(results.every((r) => r.error) ? (results[0].error ?? "Couldn’t reach Shopify right now.") : null);

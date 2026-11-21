@@ -70,24 +70,31 @@ PLACEMENT = ["on the small barcode label, in tiny low-contrast grey fine print n
              "on the care or ingredients tag, in tiny light-grey print"]
 
 
-TTS_MODEL = "gemini-2.5-flash-preview-tts"  # available on the v1beta API with the AI Studio key
+TTS_MODEL = "gemini-3.8-flash-tts"  # Adish's pick; v1beta API with the AI Studio key (returns audio/wav)
 VOICES = {"narrator": "Kore", "second": "Puck"}
 
 
 async def _gemini_tts(text: str, voice: str) -> bytes:
-    """Gemini TTS (v1beta) -> 24 kHz 16-bit mono WAV. Falls back to Windows speech on any error."""
+    """Gemini TTS (v1beta) -> WAV. Gemini only (no local TTS): one retry, then raise."""
     from google.genai import types
     from backend.gemini import beta_client
     name = VOICES["second"] if voice not in ("narrator", gaudio._NARRATOR) else VOICES["narrator"]
-    try:
-        r = await beta_client().aio.models.generate_content(
-            model=TTS_MODEL, contents=f"Say naturally: {text}",
-            config=types.GenerateContentConfig(response_modalities=["AUDIO"], speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=name)))))
-        pcm = r.candidates[0].content.parts[0].inline_data.data
-        return gaudio._wav_bytes(pcm, 24000)
-    except Exception:  # noqa: BLE001
-        return await asyncio.to_thread(gaudio._windows_speech, text, voice)
+    last = None
+    for _ in range(2):
+        try:
+            r = await beta_client().aio.models.generate_content(
+                model=TTS_MODEL, contents=f"Say naturally: {text}",
+                config=types.GenerateContentConfig(response_modalities=["AUDIO"], speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=name)))))
+            blob = r.candidates[0].content.parts[0].inline_data
+            if (blob.mime_type or "").startswith("audio/wav") or blob.data[:4] == b"RIFF":
+                return blob.data
+            rate = int(blob.mime_type.split("rate=")[1].split(";")[0]) if "rate=" in (blob.mime_type or "") else 24000
+            return gaudio._wav_bytes(blob.data, rate)
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            await asyncio.sleep(2)
+    raise RuntimeError(f"Gemini TTS failed: {type(last).__name__}")
 
 
 def load_tables():

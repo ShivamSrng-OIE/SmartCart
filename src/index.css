@@ -1,0 +1,183 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------ tokens
+   Warm neutrals do almost all the work. Color only carries meaning:
+   danger = hijack/block, safe = approved/honest, warn = escalate/pending. */
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0efeb;
+  --sunken: #ebe9e4;
+  --line: #e4e2dc;
+  --line-strong: #d2cfc7;
+  --ink: #161615;
+  --ink-2: #55534e;
+  --ink-3: #8b8880;
+  --ink-inverse: #f6f5f2;
+
+  --danger: #d93a32;
+  --danger-soft: #fbeceb;
+  --danger-line: #f2c9c6;
+  --safe: #1d8456;
+  --safe-soft: #e8f4ee;
+  --safe-line: #bfe0cf;
+  --warn: #a86400;
+  --warn-soft: #fbf1e1;
+  --warn-line: #ecd3a8;
+
+  --shadow: 0 1px 0 rgb(22 22 21 / 0.03), 0 1px 2px rgb(22 22 21 / 0.04);
+  --shadow-lg: 0 1px 0 rgb(22 22 21 / 0.03), 0 12px 32px -12px rgb(22 22 21 / 0.16);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e0e0d;
+  --surface: #151514;
+  --surface-2: #1b1b1a;
+  --sunken: #111110;
+  --line: #262624;
+  --line-strong: #363532;
+  --ink: #f1f0eb;
+  --ink-2: #a9a79f;
+  --ink-3: #72706a;
+  --ink-inverse: #0e0e0d;
+
+  --danger: #ff5c52;
+  --danger-soft: #2a1514;
+  --danger-line: #4d2320;
+  --safe: #3ccf8e;
+  --safe-soft: #12231b;
+  --safe-line: #1f4433;
+  --warn: #f2a93b;
+  --warn-soft: #2a2010;
+  --warn-line: #4a3816;
+
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 1px 0 rgb(0 0 0 / 0.3), 0 16px 40px -16px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-inverse: var(--ink-inverse);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-safe: var(--safe);
+  --color-safe-soft: var(--safe-soft);
+  --color-safe-line: var(--safe-line);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+/* ------------------------------------------------------------------- base */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-bg font-sans text-ink;
+    font-feature-settings: "ss01", "cv11";
+    min-height: 100dvh;
+  }
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition:
+      background-color 280ms ease,
+      border-color 280ms ease,
+      color 200ms ease,
+      fill 200ms ease !important;
+  }
+  ::selection {
+    background: var(--ink);
+    color: var(--ink-inverse);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+  .label {
+    @apply font-mono text-2xs font-medium tracking-[0.08em] text-ink-3 uppercase;
+  }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface-2/60 px-3.5 py-2.5 text-[15px] text-ink outline-none transition-colors placeholder:text-ink-3 hover:border-line-strong focus:border-ink focus:bg-surface;
+  }
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .thin-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .thin-scroll::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+    border: 2px solid var(--surface);
+  }
+  .hairline-grid {
+    background-image:
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

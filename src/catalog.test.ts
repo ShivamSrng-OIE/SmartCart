@@ -78,4 +78,8 @@ describe("helpers", () => {
   it("plainText strips tags and scripts", () => {
     expect(plainText("<script>alert(1)</script><p>Hi &amp; bye</p>")).toBe("Hi & bye");
   });
+
+  it("plainText drops embedded media fallback text", () => {
+    expect(plainText('<p>Comfy</p><video controls><source src="a.mp4">Your browser does not support HTML5 video.</video>')).toBe("Comfy");
+  });
 });

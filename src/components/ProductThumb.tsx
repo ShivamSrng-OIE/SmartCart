@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { CatalogProduct, MediaItem } from "../catalog";
+import { videoSources, type CatalogProduct, type MediaItem } from "../catalog";
+import { Box, Play } from "lucide-react";
 import { sized, srcSet } from "../lib/img";
 import { reducedMotion } from "../lib/motion";
 import { cx } from "./ui";
@@ -39,7 +40,10 @@ export function ProductThumb({
   const images = (product.media ?? []).filter((m) => m.type === "image").map((m) => m.url);
   const gallery = images.length ? images : product.image ? [product.image] : [];
   const video = (product.media ?? []).find((m) => m.type === "video");
-  const canCycle = !small && gallery.length > 1 && !video;
+  const videoUrl = video ? videoSources(video).find((x) => /mp4/i.test(x.mime ?? x.format ?? x.url))?.url ?? null : null;
+  const has3d = (product.media ?? []).some((m) => m.type === "model_3d");
+  const hasVideo = !!video || (product.media ?? []).some((m) => m.type === "external_video");
+  const canCycle = !small && gallery.length > 1 && !videoUrl;
 
   useEffect(() => {
     if (active) setTouched(true);
@@ -48,7 +52,7 @@ export function ProductThumb({
       videoRef.current?.pause();
       return;
     }
-    if (video && videoRef.current) {
+    if (videoUrl && videoRef.current) {
       void videoRef.current.play().catch(() => undefined);
       return;
     }
@@ -56,7 +60,7 @@ export function ProductThumb({
     setIdx(1);
     const id = window.setInterval(() => setIdx((i) => (i + 1) % gallery.length), CYCLE_MS);
     return () => window.clearInterval(id);
-  }, [active, canCycle, gallery.length, video]);
+  }, [active, canCycle, gallery.length, videoUrl]);
 
   const initials = (product.vendor ?? product.title)
     .replace(/[^A-Za-z0-9 &]/g, " ")
@@ -104,17 +108,31 @@ export function ProductThumb({
                 className={cx("absolute inset-0 size-full transition-opacity duration-500", fitCls, idx === k + 1 ? "opacity-100" : "opacity-0")}
               />
             ))}
-          {video && touched && !small && (
+          {videoUrl && touched && !small && (
             <video
               ref={videoRef}
-              src={video.url}
-              poster={video.poster ?? undefined}
+              src={videoUrl}
+              poster={video?.poster ?? undefined}
               muted
               loop
               playsInline
               preload="metadata"
               className={cx("absolute inset-0 size-full object-cover transition-opacity duration-300", active ? "opacity-100" : "opacity-0")}
             />
+          )}
+          {!small && (has3d || hasVideo) && (
+            <span className="absolute top-2 left-2 flex gap-1">
+              {has3d && (
+                <span className="inline-flex items-center gap-0.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <Box className="size-3" /> 3D
+                </span>
+              )}
+              {hasVideo && (
+                <span className="inline-flex items-center gap-0.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <Play className="size-2.5 fill-white" /> Video
+                </span>
+              )}
+            </span>
           )}
           {canCycle && active && (
             <span className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1">

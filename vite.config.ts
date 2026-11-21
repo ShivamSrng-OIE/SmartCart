@@ -34,6 +34,8 @@ export default defineConfig({
   server: { port: 5173, proxy },
   // allowedHosts: lets a Cloudflare quick tunnel (https://*.trycloudflare.com) reach the preview server.
   preview: { port: 4173, proxy, allowedHosts: [".trycloudflare.com"] },
+  // The 3D viewer (<model-viewer>, ~1 MB) is its own chunk, fetched only when someone opens a 3D model.
+  build: { chunkSizeWarningLimit: 1100 },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, ShieldCheck, Star, Store } from "lucide-react";
-import { getProduct, refFromProduct, similarProducts, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
+import { ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Play, Plus, ShieldCheck, Star, Store } from "lucide-react";
+import { getProduct, mediaSummary, modelSources, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
+import { ModelViewerModal } from "./ModelViewerModal";
+import { AutoRail } from "./AutoRail";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
-import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
+import { flyToCart, gsap, reducedMotion, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, cx } from "./ui";
 
@@ -45,19 +47,120 @@ function offerAsProduct(p: CatalogProduct, o: Offer): CatalogProduct {
 
 /* --------------------------------------------------------------- gallery */
 
+const AUTOPLAY_MS = 4500;
+
+function Slide({ m, title, first, onPlay, onOpen3D }: { m: MediaItem; title: string; first: boolean; onPlay: (playing: boolean) => void; onOpen3D: () => void }) {
+  const [embed, setEmbed] = useState(false);
+  if (m.type === "video") {
+    return (
+      <video poster={m.poster ?? undefined} controls playsInline preload="metadata" onPlay={() => onPlay(true)} onPause={() => onPlay(false)} onEnded={() => onPlay(false)} className="size-full bg-black object-contain">
+        {videoSources(m).map((src) => (
+          <source key={src.url} src={src.url} type={src.mime ?? undefined} />
+        ))}
+      </video>
+    );
+  }
+  if (m.type === "external_video") {
+    if (embed) {
+      const sep = m.url.includes("?") ? "&" : "?";
+      return (
+        <iframe
+          src={`${m.url}${sep}autoplay=1&rel=0`}
+          title={m.alt ?? title}
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          className="size-full border-0 bg-black"
+        />
+      );
+    }
+    return (
+      <button
+        onClick={() => {
+          setEmbed(true);
+          onPlay(true);
+        }}
+        className="group relative size-full"
+        aria-label={`Play video: ${m.alt ?? title}`}
+      >
+        {m.poster && <img src={sized(m.poster, 1000)} alt="" decoding="async" referrerPolicy="no-referrer" className="size-full object-cover" />}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/15 transition-colors group-hover:bg-black/25">
+          <span className="flex size-16 items-center justify-center rounded-full bg-white/95 shadow-float transition-transform group-hover:scale-105">
+            <Play className="ml-1 size-7 fill-black text-black" />
+          </span>
+        </span>
+      </button>
+    );
+  }
+  if (m.type === "model_3d") {
+    const { glb } = modelSources(m);
+    return (
+      <button onClick={onOpen3D} className="group relative flex size-full items-center justify-center bg-white" aria-label={`View ${title} in 3D`}>
+        {m.poster && <img src={sized(m.poster, 1000)} alt="" decoding="async" referrerPolicy="no-referrer" className="size-full object-contain p-[6%] transition-transform duration-700 group-hover:scale-[1.03]" />}
+        <span className="absolute inset-x-0 bottom-6 flex justify-center">
+          <span className="btn-primary inline-flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold shadow-float">
+            <Box className="size-4" /> View in 3D
+            {glb?.size ? <span className="font-normal opacity-70">· {(glb.size / 1_048_576).toFixed(0)} MB</span> : null}
+          </span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <img
+      src={sized(m.url, 1000)}
+      srcSet={srcSet(m.url, [400, 700, 1000, 1400])}
+      sizes="(min-width: 1024px) 50vw, 100vw"
+      alt={m.alt ?? title}
+      fetchPriority={first ? "high" : "auto"}
+      loading={first ? "eager" : "lazy"}
+      decoding="async"
+      referrerPolicy="no-referrer"
+      draggable={false}
+      className="size-full object-contain p-[4%]"
+    />
+  );
+}
+
+/**
+ * Product media carousel: glides between slides, advances on its own every few seconds,
+ * and pauses on hover, while a video plays, or while the 3D viewer is open.
+ */
 function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string; fallback: CatalogProduct }) {
   const [i, setI] = useState(0);
-  const mainRef = useRef<HTMLDivElement>(null);
-  const items = media.length ? media : [];
-  const cur = items[Math.min(i, items.length - 1)];
+  const [hover, setHover] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [model, setModel] = useState<MediaItem | null>(null);
+  const track = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLSpanElement>(null);
+  const thumbs = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; t: number } | null>(null);
+  const items = media;
+  const n = items.length;
+  const summary = mediaSummary(items);
 
-  const go = (n: number) => {
-    if (!items.length) return;
-    setI((n + items.length) % items.length);
-    gsap.fromTo(mainRef.current, { opacity: 0.4 }, { opacity: 1, duration: d(0.3), ease: "power2.out" });
+  const go = (next: number) => {
+    if (!n) return;
+    const k = (next + n) % n;
+    setI(k);
+    gsap.to(track.current, { xPercent: -100 * k, duration: d(0.6), ease: "power3.inOut" });
+    const t = thumbs.current?.children[k] as HTMLElement | undefined;
+    t?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   };
 
-  if (!cur) {
+  // Autoplay with a visible progress line; it pauses whenever someone is looking closely.
+  const active = n > 1 && !hover && !playing && !model && !reducedMotion();
+  useEffect(() => {
+    if (!active || !bar.current) return;
+    const tween = gsap.fromTo(bar.current, { scaleX: 0 }, { scaleX: 1, duration: AUTOPLAY_MS / 1000, ease: "none", onComplete: () => go(i + 1) });
+    const onVis = () => (document.hidden ? tween.pause() : tween.resume());
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      tween.kill();
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [active, i]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!n) {
     return (
       <div className="card aspect-square">
         <ProductThumb product={fallback} size="lg" priority />
@@ -65,39 +168,43 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
     );
   }
 
+  const cur = items[i];
   return (
     <div className="flex flex-col gap-2.5">
       <div
-        className="card relative aspect-square overflow-hidden bg-surface"
+        className="card relative aspect-square touch-pan-y overflow-hidden bg-white select-none"
         tabIndex={0}
+        role="region"
         aria-roledescription="carousel"
-        aria-label={`${title}, media ${i + 1} of ${items.length}`}
+        aria-label={`${title}, ${i + 1} of ${n}`}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
         onKeyDown={(e) => {
           if (e.key === "ArrowRight") go(i + 1);
           if (e.key === "ArrowLeft") go(i - 1);
         }}
+        onPointerDown={(e) => {
+          if (e.pointerType !== "mouse") drag.current = { x: e.clientX, t: performance.now() };
+        }}
+        onPointerUp={(e) => {
+          const s = drag.current;
+          drag.current = null;
+          if (!s) return;
+          const dx = e.clientX - s.x;
+          if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1));
+        }}
       >
-        <div ref={mainRef} className="absolute inset-0">
-          {cur.type === "video" ? (
-            <video src={cur.url} poster={cur.poster ?? undefined} controls playsInline preload="metadata" className="size-full bg-black object-contain" />
-          ) : cur.type === "image" ? (
-            <img
-              src={sized(cur.url, 1000)}
-              srcSet={srcSet(cur.url, [400, 700, 1000, 1400])}
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              alt={cur.alt ?? title}
-              fetchPriority={i === 0 ? "high" : "auto"}
-              decoding="async"
-              referrerPolicy="no-referrer"
-              className="size-full object-contain"
-            />
-          ) : (
-            <a href={cur.url} target="_blank" rel="noopener noreferrer" className="flex size-full items-center justify-center gap-2 text-sm text-ink-2 hover:text-ink">
-              View 3D / external media <ExternalLink className="size-4" />
-            </a>
-          )}
+        <div ref={track} className="flex size-full will-change-transform">
+          {items.map((m, k) => (
+            <div key={m.url + k} className="relative size-full shrink-0" aria-hidden={k !== i}>
+              {Math.abs(k - i) <= 1 || k === 0 ? (
+                <Slide m={m} title={title} first={k === 0} onPlay={setPlaying} onOpen3D={() => setModel(m)} />
+              ) : null}
+            </div>
+          ))}
         </div>
-        {items.length > 1 && (
+
+        {n > 1 && (
           <>
             <button onClick={() => go(i - 1)} aria-label="Previous" className="btn-secondary absolute top-1/2 left-3 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full">
               <ChevronLeft className="size-4" />
@@ -105,32 +212,64 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
             <button onClick={() => go(i + 1)} aria-label="Next" className="btn-secondary absolute top-1/2 right-3 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full">
               <ChevronRight className="size-4" />
             </button>
-            <span className="tnum absolute right-3 bottom-3 rounded-md bg-black/55 px-2 py-0.5 text-[11px] text-white">
-              {i + 1} / {items.length}
+            <span className="tnum absolute top-3 right-3 rounded-md bg-black/55 px-2 py-0.5 text-[11px] text-white">
+              {i + 1} / {n}
+            </span>
+            <span className="absolute inset-x-0 bottom-0 h-[3px] bg-black/5">
+              <span ref={bar} className="block h-full origin-left scale-x-0 bg-brand" />
             </span>
           </>
         )}
+        {cur.type === "model_3d" && (
+          <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-md bg-black/55 px-2 py-0.5 text-[11px] text-white">
+            <Box className="size-3" /> 3D
+          </span>
+        )}
       </div>
-      {items.length > 1 && (
-        <div className="thin-scroll flex gap-2 overflow-x-auto pb-1">
-          {items.map((m, k) => (
-            <button
-              key={m.url + k}
-              onClick={() => go(k)}
-              aria-label={`Show media ${k + 1}`}
-              aria-current={k === i}
-              className={cx("relative size-16 shrink-0 overflow-hidden rounded-lg bg-surface shadow-[inset_0_0_0_1px_var(--line)] transition-shadow sm:size-[72px]", k === i && "shadow-[inset_0_0_0_2px_var(--ink)]")}
-            >
-              {m.type === "image" || m.poster ? (
-                <img src={sized(m.type === "image" ? m.url : m.poster, 160)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-cover" />
-              ) : (
-                <span className="flex size-full items-center justify-center text-[10px] text-ink-3 uppercase">{m.type}</span>
-              )}
-              {m.type === "video" && <span className="absolute inset-x-0 bottom-0 bg-black/55 text-center text-[9px] text-white">video</span>}
-            </button>
-          ))}
+
+      {n > 1 && (
+        <div ref={thumbs} className="thin-scroll flex gap-2 overflow-x-auto scroll-smooth pb-1">
+          {items.map((m, k) => {
+            const poster = m.type === "image" ? m.url : m.poster;
+            return (
+              <button
+                key={m.url + k}
+                onClick={() => go(k)}
+                aria-label={`Show ${m.type === "model_3d" ? "3D model" : m.type.includes("video") ? "video" : "photo"} ${k + 1}`}
+                aria-current={k === i}
+                className={cx("relative size-16 shrink-0 overflow-hidden rounded-lg bg-white shadow-[inset_0_0_0_1px_var(--line)] transition-shadow sm:size-[72px]", k === i && "shadow-[inset_0_0_0_2px_var(--ink)]")}
+              >
+                {poster ? (
+                  <img src={sized(poster, 160)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-contain p-1" />
+                ) : (
+                  <span className="flex size-full items-center justify-center text-[10px] text-ink-3 uppercase">{m.type}</span>
+                )}
+                {m.type !== "image" && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                    {m.type === "model_3d" ? <Box className="size-5 text-white" /> : <Play className="ml-0.5 size-5 fill-white text-white" />}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
+
+      <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3">
+        {summary.images > 0 && <span>{summary.images} photo{summary.images === 1 ? "" : "s"}</span>}
+        {summary.videos > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <Play className="size-3" /> {summary.videos} video{summary.videos === 1 ? "" : "s"}
+          </span>
+        )}
+        {summary.models > 0 && (
+          <button onClick={() => setModel(items.find((m) => m.type === "model_3d") ?? null)} className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink">
+            <Box className="size-3" /> 3D model · view in your space
+          </button>
+        )}
+      </p>
+
+      {model && <ModelViewerModal media={model} title={title} onClose={() => setModel(null)} />}
     </div>
   );
 }
@@ -262,7 +401,7 @@ function niceStep(raw: number): number {
 function SimilarTile({ s, onOpen }: { s: CatalogProduct; onOpen: () => void }) {
   const [hover, setHover] = useState(false);
   return (
-    <button onClick={onOpen} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} className="card group flex flex-col overflow-hidden text-left">
+    <button onClick={onOpen} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} className="card group flex h-full w-full flex-col overflow-hidden text-left">
       <div className="aspect-square w-full border-b border-line">
         <ProductThumb product={s} active={hover} className="rounded-none! shadow-none!" />
       </div>
@@ -602,11 +741,11 @@ export function ProductPage({
             ))}
           </div>
         ) : similar.length ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
+          <AutoRail label="Similar products" speed={26}>
             {similar.slice(0, 12).map((s) => (
               <SimilarTile key={s.id} s={s} onOpen={() => onOpen(s)} />
             ))}
-          </div>
+          </AutoRail>
         ) : (
           <p className="text-sm text-ink-3">No similar products found.</p>
         )}

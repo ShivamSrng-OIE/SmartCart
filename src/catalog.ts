@@ -11,13 +11,48 @@ import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMess
 import { getCountry } from "./locale";
 import { DEMO_MODE } from "./config";
 
+export interface MediaSource {
+  url: string;
+  mime: string | null;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+  /** bytes, when Shopify reports it (3D models) */
+  size: number | null;
+}
+
+/** Shop MCP media: image, video (Shopify-hosted), external_video (YouTube/Vimeo embed) or model_3d (GLB/USDZ). */
 export interface MediaItem {
-  type: "image" | "video" | "model" | "external";
+  type: "image" | "video" | "external_video" | "model_3d";
   url: string;
   alt: string | null;
   width: number | null;
   height: number | null;
   poster: string | null;
+  sources: MediaSource[];
+  duration: number | null;
+}
+
+/** Best playable file for <video>: MP4 everywhere, HLS (.m3u8) only as a fallback for Safari. */
+export function videoSources(m: MediaItem): MediaSource[] {
+  const list = m.sources.length ? m.sources : [{ url: m.url, mime: null, format: null, width: null, height: null, size: null }];
+  const rank = (x: MediaSource) => (/mp4/i.test(x.mime ?? x.format ?? x.url) ? 0 : /m3u8|mpegurl/i.test(x.mime ?? x.format ?? x.url) ? 2 : 1);
+  return [...list].sort((a, b) => rank(a) - rank(b) || (a.height ?? 0) - (b.height ?? 0));
+}
+
+/** GLB for the web viewer, USDZ for iOS Quick Look AR. */
+export function modelSources(m: MediaItem): { glb: MediaSource | null; usdz: MediaSource | null } {
+  const find = (re: RegExp) => m.sources.find((x) => re.test(`${x.format ?? ""} ${x.mime ?? ""} ${x.url}`)) ?? null;
+  const glb = find(/glb|gltf/i) ?? (/\.glb($|\?)/i.test(m.url) ? { url: m.url, mime: "model/gltf-binary", format: "glb", width: null, height: null, size: null } : null);
+  return { glb, usdz: find(/usdz/i) };
+}
+
+export function mediaSummary(media: MediaItem[]): { images: number; videos: number; models: number } {
+  return {
+    images: media.filter((m) => m.type === "image").length,
+    videos: media.filter((m) => m.type === "video" || m.type === "external_video").length,
+    models: media.filter((m) => m.type === "model_3d").length,
+  };
 }
 
 /** One store's offer for this product (get_product returns the same item from several sellers). */
@@ -99,7 +134,7 @@ const num = (v: unknown): number | null => {
 export function plainText(html: string | null): string | null {
   if (!html) return null;
   const text = html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(script|style|video|audio|iframe|object|noscript|template)[\s\S]*?<\/\1>/gi, " ")
     .replace(/<\/(p|li|div|h\d)>/gi, "\n")
     .replace(/<li[^>]*>/gi, "• ")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -182,8 +217,22 @@ function toMedia(m: Obj): MediaItem | null {
   const url = str(m.url) ?? str(obj(m.preview).url);
   if (!url) return null;
   const t = String(m.type ?? "image").toLowerCase();
-  const type: MediaItem["type"] = t.includes("video") ? "video" : t.includes("model") ? "model" : t.includes("external") ? "external" : "image";
-  return { type, url, alt: str(m.alt_text) ?? str(m.alt), width: num(m.width), height: num(m.height), poster: type === "image" ? null : str(obj(m.preview).url) };
+  const type: MediaItem["type"] = t.includes("external") ? "external_video" : t.includes("model") || t.includes("3d") ? "model_3d" : t.includes("video") ? "video" : "image";
+  const sources = Array.isArray(m.sources)
+    ? (m.sources as Obj[])
+        .map((x) => ({ url: str(x.url) ?? "", mime: str(x.mime_type) ?? str(x.mime), format: str(x.format), width: num(x.width), height: num(x.height), size: num(x.filesize ?? x.size) }))
+        .filter((x) => x.url)
+    : [];
+  return {
+    type,
+    url,
+    alt: str(m.alt_text) ?? str(m.alt),
+    width: num(m.width),
+    height: num(m.height),
+    poster: type === "image" ? null : str(obj(m.preview).url),
+    sources,
+    duration: num(m.duration),
+  };
 }
 
 function toOffer(v: Obj, fallbackCurrency: string): Offer | null {

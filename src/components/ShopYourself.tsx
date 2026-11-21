@@ -8,6 +8,7 @@ import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
+import { AutoRail } from "./AutoRail";
 import { Button, Kbd, Segmented, cx } from "./ui";
 
 const SUGGESTIONS = ["cold brew", "sparkling water", "ceramic mug", "flash drive", "granola", "insulated bottle"];
@@ -494,14 +495,12 @@ export function ShopYourself({
                           ))}
                         </div>
                       ) : (
-                        // Browse rows: one line of cards that fills any width and scrolls sideways.
-                        <div className="thin-scroll -mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 sm:gap-3">
+                        // Browse rows: a gently auto-scrolling rail that pauses on hover.
+                        <AutoRail label={`${g.term} products`} speed={24 + (g.term.length % 3) * 4}>
                           {sortItems(g.items, sort).map((p) => (
-                            <div key={p.id} className="w-[46%] shrink-0 snap-start sm:w-[31.5%] lg:w-[24%] 2xl:w-[19.3%] min-[1900px]:w-[16.1%]">
-                              <ProductCard p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
-                            </div>
+                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
                           ))}
-                        </div>
+                        </AutoRail>
                       )
                     ) : (
                       <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-ink-3">Nothing found for “{g.term}”.</p>

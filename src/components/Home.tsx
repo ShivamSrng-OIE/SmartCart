@@ -7,6 +7,7 @@ import { searchCatalog, type CatalogProduct } from "../catalog";
 import { money } from "../lib/format";
 import { gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
+import { AutoRail } from "./AutoRail";
 
 const WAYS: Record<string, string> = {
   shop: "Search products from independent Shopify stores and check out on each store’s site.",
@@ -27,7 +28,7 @@ function ProductTile({ p, onOpen }: { p: CatalogProduct; onOpen: () => void }) {
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      className="card group flex flex-col overflow-hidden text-left transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]"
+      className="card group flex h-full w-full flex-col overflow-hidden text-left transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]"
     >
       <div className="aspect-square w-full border-b border-line">
         <ProductThumb product={p} active={hover} className="rounded-none! shadow-none!" sizes="(min-width: 1900px) 16vw, (min-width: 1536px) 19vw, (min-width: 1024px) 24vw, (min-width: 640px) 31vw, 46vw" />
@@ -239,11 +240,19 @@ export function HomePage({
             See all <ArrowRight className="size-3.5" />
           </button>
         </div>
-        <div className={GRID}>
-          {popular === null
-            ? Array.from({ length: 12 }, (_, i) => <div key={i} className="card aspect-[4/5] animate-pulse" />)
-            : popular.map((p) => <ProductTile key={p.id} p={p} onOpen={() => onOpenProduct(p)} />)}
-        </div>
+        {popular === null ? (
+          <div className={GRID}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="card aspect-[4/5] animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <AutoRail label="Popular products" speed={30}>
+            {popular.map((p) => (
+              <ProductTile key={p.id} p={p} onOpen={() => onOpenProduct(p)} />
+            ))}
+          </AutoRail>
+        )}
       </section>
 
       {/* more */}

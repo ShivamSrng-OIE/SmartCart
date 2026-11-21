@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 import json
 from pathlib import Path
+import re
 import time
 from typing import Literal, Protocol
 
@@ -15,6 +16,42 @@ from backend.selfheal import RuleSet, RuleStore, SelfHealError, TraceEvent
 
 
 GOLDEN = Path(__file__).resolve().parents[1] / "eval" / "golden"
+RECORDED_STEPS = (
+    "fixture_loaded", "verdict", "blocked", "bypass", "probe_proposed", "validation",
+    "probe_published", "reblocked", "redteam_error", "done",
+)
+FIREWALL_ACTIONS = ("approve_checkout", "escalate_to_neon_swap", "hard_block_quarantine")
+
+
+def record_round(events: Iterable[TraceEvent | dict], path: str | Path = "runs/redteam_demo.jsonl") -> None:
+    """Append replay envelopes with public decision telemetry only.
+
+    Arbitrary text (including nested tool results and model output) can contain
+    credentials even when its field name appears harmless.
+    """
+    lines = []
+    for item in events:
+        event = TraceEvent.model_validate(item)
+        data = event.data
+        public = {}
+        if data.get("step") in RECORDED_STEPS:
+            public["step"] = data["step"]
+        if data.get("action") in FIREWALL_ACTIONS:
+            public["action"] = data["action"]
+        for key in ("round", "version", "severity", "latency_ms"):
+            if type(data.get(key)) is int:
+                public[key] = data[key]
+        for key in ("accepted", "reblocked"):
+            if type(data.get(key)) is bool:
+                public[key] = data[key]
+        # The launch route assigns rt_<8 hex digits>. Replay remaps run_id.
+        run_id = event.run_id if re.fullmatch(r"rt_[0-9a-f]{8}", event.run_id) else "redteam_demo"
+        safe = event.model_copy(update={"run_id": run_id, "data": public})
+        lines.append(safe.model_dump_json() + "\n")
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("a", encoding="utf-8") as recording:
+        recording.write("".join(lines))
 
 
 class ManifestEntry(BaseModel):
@@ -73,9 +110,7 @@ async def launch_redteam(product_id: str | None, rounds: int, bus: EventBus, run
 
     async def inspect(fixture):
         result = await evaluate(fixture, store.current())
-        if result.get("error") or result["action"] not in {
-            "approve_checkout", "escalate_to_neon_swap", "hard_block_quarantine"
-        }:
+        if result.get("error") or result["action"] not in FIREWALL_ACTIONS:
             raise SelfHealError("firewall evaluation unavailable")
         bus.emit(event("verdict", "verdict", **result))
         return result
@@ -125,13 +160,14 @@ async def launch_redteam(product_id: str | None, rounds: int, bus: EventBus, run
             if any(row.p is None for row in report.fixtures):
                 raise SelfHealError("fixture scoring failed")
             if accepted:
+                bus.emit(event("log", "probe_published", probe_id=probe.id, version=report.version))
                 operation = "verify_published_rule"
                 after = await inspect(fixture)
-                if after["action"] == "approve_checkout" or not any(
+                reblocked = after["action"] != "approve_checkout" and any(
                     p["id"] == probe.id and p["fired"] for p in after["probes"]
-                ):
-                    raise SelfHealError("published rule did not block the recorded decision")
-                bus.emit(event("log", "reblocked", probe_id=probe.id, version=report.version))
+                )
+                bus.emit(event("log", "reblocked", reblocked=reblocked, probe_id=probe.id,
+                               version=report.version))
             break
     except Exception as exc:
         # External exceptions may contain credentials or recorded media text.

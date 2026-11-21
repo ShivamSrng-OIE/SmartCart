@@ -8,7 +8,8 @@ every state-changing Shop call goes through the firewall first.
 
 Flow:
 - Argon perception starts as a task at once, so it runs while the shopper does its first
-  search. It is awaited before the first firewall check.
+  search. The firewall never waits for it: if Argon hasn't finished when a decision is needed,
+  decide() gets claims=None and judges the raw media itself.
 - Argon's Claims are emitted as a "perception" log event the moment perception finishes.
 - With no product_ref and an image attached, camera product matching (product_match.py) also
   starts in the background, after Argon.
@@ -128,7 +129,8 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
     match_task: asyncio.Task | None = None
     if not product_ref and any(m.kind == "image" for m in media):
         async def _match() -> ProductMatch | None:
-            return await match_product(media, await perception, shop)
+            # shield: cancelling the match (run end) must not cancel Argon, which is shared
+            return await match_product(media, await asyncio.shield(perception), shop)
         match_task = asyncio.create_task(_match())
     await asyncio.sleep(0)  # let Argon start before the shopper's first model call
 
@@ -137,10 +139,13 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
     state: dict = {"claims": None, "match": None, "match_logged": False,
                    "product_json": None, "last_cart_total": 0.0, "ctx": None}
 
-    async def claims() -> Claims:
-        c = await perception  # the "perception" event was already emitted when Argon finished
-        state["claims"] = c
-        return c
+    def claims_if_ready() -> Claims | None:
+        """Argon's Claims only if perception already finished. The firewall NEVER waits for Argon:
+        with None it judges the raw image itself (all golden tuning ran with Argon off). The
+        "perception" event is still emitted whenever Argon finishes."""
+        if perception.done() and not perception.cancelled() and perception.exception() is None:
+            state["claims"] = perception.result()
+        return state["claims"]
 
     def _log_match(m: ProductMatch | None) -> None:
         if m is not None and not state["match_logged"]:
@@ -196,7 +201,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
 
     async def guard(call: ToolCall, ctx: ShopperContext) -> dict:
         state["ctx"] = ctx
-        c = await claims()
+        c = claims_if_ready()
         product_json = await product_for(call, ctx)
         cart_total = attempted_spend(call, ctx.variants) or (
             state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
@@ -227,7 +232,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         hook = on_block or after_block
         try:
             await hook(BlockContext(intent=intent, media=media, call=b.call, verdict=b.verdict,
-                                    claims=state["claims"], product_json=state["product_json"],
+                                    claims=claims_if_ready(), product_json=state["product_json"],
                                     cart_total=attempted_spend(b.call, state["ctx"].variants),
                                     ctx=state["ctx"], bus=bus, run_id=run_id))
         except Exception as exc:  # noqa: BLE001 - a Task 10 failure must not lose the block result

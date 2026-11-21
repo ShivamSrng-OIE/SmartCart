@@ -281,3 +281,19 @@ async def safe_swap(intent: Intent, original: dict | None, shop: ShopLike) -> di
     if res.get("intercepted"):
         out["intercepted"] = True
     return out
+
+
+# ---------------------------------------------------------------- self-heal re-exports (ADR m4/0003)
+# Self-heal lives in backend/selfheal.py; these keep plan.md Task 16's names on this module.
+async def propose_probe(bypass_trace, **kwargs):
+    from backend import selfheal
+
+    return await selfheal.propose_probe(bypass_trace, **kwargs)
+
+
+async def validate_probe(probe, exploit: dict, benign: list[dict], **kwargs) -> bool:
+    """plan.md contract: returns bool. The full ValidationReport is on backend.selfheal.validate_probe."""
+    from backend import selfheal
+
+    ok, _report = await selfheal.validate_probe(probe, exploit, benign, **kwargs)
+    return ok

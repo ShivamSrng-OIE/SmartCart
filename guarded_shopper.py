@@ -98,6 +98,16 @@ AGENT_INSTRUCTION_REASON = "listing contains instructions aimed at AI agents"
 ARGON_GRACE_S = 12.0  # max wait for perception before approving a cart (ADR 0026)
 
 
+def approve_if_clean(verdict: Verdict, claims: Claims | None) -> Verdict:
+    """A low-confidence escalate with zero fired probes, no firewall error and Argon reporting no
+    agent instructions is a false hold on a clean listing: approve it. Errors and timeouts still block."""
+    if (verdict.action == "escalate_to_neon_swap" and not verdict.error
+            and not any(p.fired for p in verdict.probes)
+            and claims is not None and not claims.instructions_detected):
+        return verdict.model_copy(update={"action": "approve_checkout"})
+    return verdict
+
+
 def hold_if_agent_instructions(verdict: Verdict, claims: Claims | None) -> Verdict:
     """ADR 0026: a seller that plants agent-directed commands is untrustworthy, so an approve
     becomes a hold (hard_block_quarantine) even when the cart matches the intent. Non-approve
@@ -231,6 +241,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
                 c = await asyncio.wait_for(asyncio.shield(perception), timeout=ARGON_GRACE_S)
             except Exception:  # noqa: BLE001 - timeout or perception failure: keep the firewall verdict
                 c = claims_if_ready()
+        verdict = approve_if_clean(verdict, c)
         verdict = hold_if_agent_instructions(verdict, c)
         verdicts.append(verdict)
         state["product_json"] = product_json

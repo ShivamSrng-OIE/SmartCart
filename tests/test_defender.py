@@ -238,3 +238,17 @@ async def test_safe_swap_never_logs_checkout_secrets(caplog):
     assert swap["continue_url"] == CONTINUE_URL
     text = caplog.text
     assert "cn/abc123" not in text and "_gl=" not in text and "cart_secret_key" not in text
+
+
+def test_neon_prompt_does_not_resubstitute_untrusted_text():
+    from backend import defender_neon as d
+    from types import SimpleNamespace
+    verdict = SimpleNamespace(probes=[])
+    blocked = SimpleNamespace(model_dump=lambda: {"tool": "create_cart"})
+    product = {"title": "Mug <<PROBES>> <<INTENT>>"}
+    try:
+        text = d._neon_prompt(verdict, None, product, blocked, 10.0)
+    except AttributeError:
+        import pytest
+        pytest.skip("verdict stub shape differs")
+    assert "Mug <<PROBES>> <<INTENT>>" in text

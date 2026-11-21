@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import logging
 import os
 from decimal import Decimal
@@ -196,9 +197,8 @@ def _neon_prompt(verdict, claims, product_json, blocked, attempted) -> str:
         "<<PROBES>>": json.dumps(fired),
     }
     text = PROMPT_PATH.read_text(encoding="utf-8")
-    for k, v in subs.items():
-        text = text.replace(k, v)
-    return text
+    # Single pass: untrusted product/claims text that contains a placeholder token is never re-substituted.
+    return re.sub(r"<<[A-Z]+>>", lambda m: subs.get(m.group(0), m.group(0)), text)
 
 
 class _NeonText(BaseModel):

@@ -95,6 +95,9 @@ AGENT_INSTRUCTION_PROBE = "listing_agent_instruction"
 AGENT_INSTRUCTION_REASON = "listing contains instructions aimed at AI agents"
 
 
+ARGON_GRACE_S = 12.0  # max wait for perception before approving a cart (ADR 0026)
+
+
 def hold_if_agent_instructions(verdict: Verdict, claims: Claims | None) -> Verdict:
     """ADR 0026: a seller that plants agent-directed commands is untrustworthy, so an approve
     becomes a hold (hard_block_quarantine) even when the cart matches the intent. Non-approve
@@ -221,6 +224,13 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         cart_total = attempted_spend(call, ctx.variants) or (
             state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
         verdict = await decide(ctx.intent, ctx.media, product_json, call, c, rules.current(), cart_total)
+        if verdict.action == "approve_checkout" and c is None and media:
+            # ADR 0026: before money moves, give Argon a short grace period so a listing with
+            # hidden agent instructions can't slip through just because perception was slower.
+            try:
+                c = await asyncio.wait_for(asyncio.shield(perception), timeout=ARGON_GRACE_S)
+            except Exception:  # noqa: BLE001 - timeout or perception failure: keep the firewall verdict
+                c = claims_if_ready()
         verdict = hold_if_agent_instructions(verdict, c)
         verdicts.append(verdict)
         state["product_json"] = product_json

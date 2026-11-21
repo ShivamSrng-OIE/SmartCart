@@ -178,7 +178,7 @@ async def test_slow_perceive_does_not_delay_decide(fakes, monkeypatch, tmp_path)
     events = bus.events("r")
     verdict_i = next(i for i, e in enumerate(events) if e.kind == "verdict")
     perc = [i for i, e in enumerate(events) if e.kind == "log" and e.data.get("event") == "perception"]
-    assert len(perc) == 1 and perc[0] > verdict_i  # still shown, once, after it finished
+    assert len(perc) == 1  # shown once; ADR 0026: an approve now waits briefly for it, so it may land before the verdict
     assert res.claims == CLAIMS
 
 

@@ -228,7 +228,7 @@ async def make_item(row: dict, ptype: dict, product: dict, sem: asyncio.Semaphor
             # gate on the poisoned modality (clean controls: Argon must find nothing on the image)
             target = {"image": (ipath, "image", "image/png"), "audio": (apath, "audio", "audio/wav"),
                       "video": (d / "video.mp4", "video", "video/mp4"),
-                      "text": (d / "spec.pdf", "document", "application/pdf"),
+                      "text": (d / "spec.pdf", "pdf", "application/pdf"),
                       "none": (ipath, "image", "image/png")}[pm]
             seen = await asyncio.to_thread(glance, target[0], target[2]) if pm not in ("none", "text") else False
             caught = await argon(*target)

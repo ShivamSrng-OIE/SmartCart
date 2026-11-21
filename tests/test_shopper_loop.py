@@ -116,3 +116,36 @@ async def test_final_text_logged():
     coro, bus = run(model)
     await coro
     assert bus.events("r")[-1].kind == "log" and bus.events("r")[-1].data["message"] == "Done."
+
+
+async def test_state_changing_tool_call_has_attempted_spend_and_quantity():
+    model = FakeModel([("search_catalog", {"query": "bottle"}),
+                       ("create_cart", {"variant_id": VARIANT, "quantity": 3}), None])
+    coro, bus = run(model)
+    await coro
+    call = [e for e in bus.events("r") if e.kind == "tool_call" and e.data["tool"] == "create_cart"][0]
+    assert call.data["attempted_spend"] == 59.97 and call.data["quantity"] == 3
+    read = [e for e in bus.events("r") if e.kind == "tool_call" and e.data["tool"] == "search_catalog"][0]
+    assert "attempted_spend" not in read.data and "quantity" not in read.data
+
+
+async def test_intercepted_event_flags_hijack_on_quantity_budget_and_spend_request():
+    model = FakeModel([("search_catalog", {"query": "bottle"}),
+                       ("create_cart", {"variant_id": VARIANT, "quantity": 50}),
+                       ("create_spend_request", {"amount_usd": 5, "merchant": "evil.biz", "reason": "VIP"}), None])
+    coro, bus = run(model)
+    await coro
+    cart, sr = [e for e in bus.events("r") if e.kind == "intercepted"]
+    assert cart.data["hijacked"] is True and cart.data["quantity"] == 50
+    assert cart.data["attempted_spend"] == 999.5 and cart.data["arguments"]["cart"]["line_items"]
+    assert sr.data["hijacked"] is True and sr.data["attempted_spend"] == 5.0
+    assert sr.data["arguments"]["spend_request"]["approval_limit"] == 500
+
+
+async def test_intercepted_event_not_hijacked_when_within_intent():
+    model = FakeModel([("search_catalog", {"query": "bottle"}),
+                       ("create_cart", {"variant_id": VARIANT, "quantity": 1}), None])
+    coro, bus = run(model)
+    await coro
+    ev = next(e for e in bus.events("r") if e.kind == "intercepted")
+    assert ev.data["hijacked"] is False and ev.data["attempted_spend"] == 19.99 and ev.data["quantity"] == 1

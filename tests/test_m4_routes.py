@@ -68,6 +68,15 @@ def test_latest_eval_returns_404_when_no_results(client):
     assert response.status_code == 404
 
 
+def test_latest_eval_does_not_serve_sample_as_real_result(client):
+    http, results, _ = client
+    (results / "sample.json").write_text('{"sample":true}', encoding="utf-8")
+
+    response = http.get("/api/eval/latest")
+
+    assert response.status_code == 404
+
+
 def test_iter_trace_yields_jsonl_events_in_order(tmp_path):
     trace = tmp_path / "trace.jsonl"
     events = [

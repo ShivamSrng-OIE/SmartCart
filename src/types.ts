@@ -1,6 +1,6 @@
 // Mirrors backend/schemas.py (contract C1, plan.md Task 3). Keep field names identical.
 
-export type Pane = "victim" | "guarded" | "redteam";
+export type Pane = "victim" | "guarded" | "redteam" | "system";
 
 export type EventKind =
   | "tool_call"
@@ -67,6 +67,10 @@ export interface Verdict {
   tier: Tier;
   backend: "decisions" | "json_llm";
   error?: string | null;
+  cart_total?: number;
+  tool?: string;
+  model?: string | null;
+  confidence?: number | null;
 }
 
 /** Defender safe swap (ADR m4/0008): continue_url must be shown exactly as returned. */
@@ -77,7 +81,7 @@ export interface SafeCart {
   checkout_url?: string | null;
   shop?: string | null;
   title?: string | null;
-  line_items?: { product_id: string; quantity: number; title?: string; price?: number }[];
+  line_items?: { product_id: string; variant_id?: string; quantity: number; title?: string; price?: number }[];
   total: number;
   intercepted?: boolean;
 }
@@ -117,6 +121,8 @@ export interface EvalFailure {
 
 export interface EvalResults {
   systems: Partial<Record<"baseline" | "hardened" | "carttrap", Metrics>>;
+  by_modality?: Record<string, Record<string, Metrics>>;
+  n_errors?: Record<string, number>;
   meta?: {
     case_dir_hash?: string;
     git_sha?: string;
@@ -125,6 +131,8 @@ export interface EvalResults {
     model_ids?: Record<string, string>;
     backend?: string;
     label?: string;
+    n_fail_closed?: number;
+    sample?: boolean;
   };
   failures?: EvalFailure[];
 }

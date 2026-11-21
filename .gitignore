@@ -13,3 +13,8 @@ redteam/out/
 frontend/dist/
 .claude/settings.local.json
 carttrap-kit_included.zip
+eval/props/generated/**/*.png
+eval/props/generated/**/*.jpg
+eval/props/generated/**/*.mp4
+eval/props/generated/**/*.wav
+eval/props/generated/**/*.pdf

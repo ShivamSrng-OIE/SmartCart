@@ -711,6 +711,22 @@ function WarehouseProductPage({ product, add, onBack }: { product: CatalogProduc
     }));
   }, [phase, state, add, product]);
 
+  // "+ Add" on a search card opens this page and asks for the same Safe Checkout run.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current || !product.warehouse) return;
+    let wanted: string | null = null;
+    try { wanted = sessionStorage.getItem("carttrap:autocheck"); } catch { /* ignore */ }
+    if (wanted !== product.id) return;
+    // Deferred so React StrictMode's mount/unmount/remount can't abort the run before it starts.
+    const timer = window.setTimeout(() => {
+      autoChecked.current = true;
+      try { sessionStorage.removeItem("carttrap:autocheck"); } catch { /* ignore */ }
+      void addToCart();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  });
+
   const addToCart = async () => {
     const itemId = parseWarehouseId(product.id);
     if (!itemId || !product.warehouse || preparation.current || awaitingRun.current) return;

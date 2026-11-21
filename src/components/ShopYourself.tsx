@@ -360,6 +360,12 @@ export function ShopYourself({
   );
 
   const add = (p: CatalogProduct, from?: Element | null) => {
+    if (p.source === "warehouse") {
+      // Warehouse items must pass Safe Checkout: open the product page and run the check there.
+      try { sessionStorage.setItem("carttrap:autocheck", p.id); } catch { /* storage blocked: user clicks Add there */ }
+      onOpenProduct(p);
+      return;
+    }
     cart.add(p);
     flyToCart(from);
   };

@@ -46,10 +46,12 @@ _ids = count(1)
 
 
 class ShopMCP:
-    def __init__(self, url: str = config.SHOP_MCP_URL, dry_run: bool = False, timeout: float = 30.0):
+    def __init__(self, url: str = config.SHOP_MCP_URL, dry_run: bool = False, timeout: float = 30.0,
+                 transport: httpx.AsyncBaseTransport | None = None):
         self.url = url
         self.dry_run = dry_run
         self.timeout = timeout
+        self.transport = transport  # tests inject httpx.MockTransport
 
     async def call(self, tool: str, args: dict) -> dict:
         if tool in FORBIDDEN:
@@ -72,7 +74,7 @@ class ShopMCP:
             "io.modelcontextprotocol/clientCapabilities": {},
         }}
         payload = {"jsonrpc": "2.0", "id": next(_ids), "method": method, "params": params}
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             r = await client.post(self.url, headers=headers, json=payload)
         body = r.json()
         if "error" in body:

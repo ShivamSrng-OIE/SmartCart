@@ -52,39 +52,65 @@ function Waveform({ peaks, seg }: { peaks: number[]; seg: [number, number] }) {
   );
 }
 
+function Annotated({ src, caption, alt }: { src: string; caption: string; alt: string }) {
+  return (
+    <figure className="flex flex-col gap-1.5">
+      <a href={src} target="_blank" rel="noopener noreferrer" title="Open full size">
+        <img src={src} alt={alt} className="max-h-[420px] w-full cursor-zoom-in rounded-lg border border-danger-line bg-black object-contain" />
+      </a>
+      <figcaption className="text-[13px] font-medium text-ink-2">{caption}</figcaption>
+    </figure>
+  );
+}
+
+function Callout({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <p className="flex gap-2 rounded-lg border-2 border-danger bg-danger/10 px-3 py-2 text-ink">
+      <Quote className="mt-1 size-3.5 shrink-0 text-danger" aria-hidden />
+      <span className="font-mono text-[14px] leading-snug font-semibold text-danger">&ldquo;{text}&rdquo;</span>
+    </p>
+  );
+}
+
 function Item({ item, photoUrl }: { item: EvidenceItem; photoUrl?: string }) {
   if (item.modality === "image") {
+    if (item.crop_url) {
+      return (
+        <div className="flex flex-col gap-2.5">
+          <Annotated src={item.crop_url} caption="Hidden instruction found in the product photo" alt="Product photo with the hidden instruction boxed in red and zoomed" />
+          <Callout text={item.text} />
+        </div>
+      );
+    }
     const full = item.source_url ?? photoUrl;
     return (
       <div className="flex flex-col gap-2.5">
-        <img src={item.crop_url} alt="Zoomed crop containing the hidden text" className="max-h-40 max-w-full self-start rounded-lg border border-danger-line" />
         {full && <Located src={full} box={item.box} alt="Full image with the hidden text outlined" />}
         <Said text={item.text} />
       </div>
     );
   }
   if (item.modality === "video") {
+    const t = item.t_s.toFixed(1);
     return (
       <div className="flex flex-col gap-2.5">
-        <p className="label">frame at {item.t_s.toFixed(1)} s</p>
-        <Located src={item.frame_url} box={item.box} alt={`Video frame at ${item.t_s.toFixed(1)} seconds with the hidden text outlined`} />
-        <Said text={item.text} />
+        <Annotated src={item.frame_url} caption={`Frame at ${t}s of the product video`} alt={`Video frame at ${t} seconds with the hidden instruction boxed in red`} />
+        <Callout text={item.text} />
       </div>
     );
   }
   const [i0, i1] = item.seg;
-  const words = item.transcript;
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="label">
-        audio {item.start_s.toFixed(1)} s to {item.end_s.toFixed(1)} s
-      </p>
       <Waveform peaks={item.peaks} seg={[i0, i1]} />
-      <audio controls src={item.clip_url} className="w-full" aria-label="Audio clip with the hidden instruction" />
-      <p className="flex gap-2 text-[14px] text-ink">
-        <Quote className="mt-1 size-3 shrink-0 text-danger" aria-hidden />
-        <em className="font-mono text-[13px] leading-snug font-semibold text-danger not-italic">{words}</em>
-      </p>
+      <div className="flex flex-col gap-1">
+        <p className="text-[13px] font-semibold text-danger">
+          Hear the hidden part ({item.start_s.toFixed(1)}&ndash;{item.end_s.toFixed(1)}s)
+        </p>
+        <audio controls src={item.clip_url} className="h-12 w-full" aria-label="Audio clip with the hidden instruction" />
+      </div>
+      <Callout text={item.transcript} />
     </div>
   );
 }

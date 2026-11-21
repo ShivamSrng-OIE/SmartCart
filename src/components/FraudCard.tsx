@@ -25,6 +25,19 @@ function fmtSells(key: string, v: unknown): string {
   return String(v);
 }
 
+const AGENT_RE = /(agent|agents|AI shop|bot|assistant|set quantity|qty|spend[_ ]request|promo[_ ]code)/i;
+
+function rankClaims(lines: string[], evidence: EvidenceItem[]): { text: string; hidden: boolean }[] {
+  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+  const needles = evidence.map((e) => norm(e.modality === "audio" ? e.transcript : e.text)).filter((x) => x.length > 2);
+  const rows = lines.map((text) => {
+    const n = norm(text);
+    const hidden = AGENT_RE.test(text) || (n.length > 2 && needles.some((m) => m.includes(n) || n.includes(m)));
+    return { text, hidden };
+  });
+  return [...rows.filter((r) => r.hidden), ...rows.filter((r) => !r.hidden)];
+}
+
 export function FraudCard({
   card,
   verdict,
@@ -103,6 +116,7 @@ export function FraudCard({
   }
 
   const sells = card.shopify_sells ?? null;
+  const claims = rankClaims(card.media_claimed, evidence ?? []);
   const top = [...card.top_probes].sort((a, b) => b.p - a.p).slice(0, 3);
   const safeTotal = card.safe_cart?.total ?? 0;
   const attemptedShown = attempted > 0 ? attempted : card.dollars_defended + safeTotal;
@@ -127,6 +141,15 @@ export function FraudCard({
           </p>
         </div>
 
+        {/* hidden-instruction evidence first */}
+        <div data-fc>
+          {evidence && evidence.length > 0 ? (
+            <Evidence items={evidence} photoUrl={photoUrl} />
+          ) : (
+            <p className="animate-pulse rounded-xl border border-danger-line px-3.5 py-2.5 text-sm text-ink-2">Locating the hidden instruction…</p>
+          )}
+        </div>
+
         {/* reason */}
         <div data-fc>
           <p className="label mb-1.5">Summary</p>
@@ -137,12 +160,15 @@ export function FraudCard({
         <div data-fc className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="rounded-xl border border-danger-line p-3.5">
             <p className="label mb-2 text-danger!">Text found in the photo</p>
-            {card.media_claimed.length ? (
+            {claims.length ? (
               <ul className="flex flex-col gap-1.5">
-                {card.media_claimed.map((c, i) => (
-                  <li key={i} data-claim className="flex gap-2 text-[14px] text-ink">
+                {claims.map(({ text: c, hidden }, i) => (
+                  <li key={i} data-claim className={cx("flex gap-2 text-[14px]", hidden ? "font-bold text-danger" : "text-ink")}>
                     <Quote className="mt-1 size-3 shrink-0 text-danger" />
-                    <span className="font-mono text-[13px] leading-snug">{c}</span>
+                    <span className="font-mono text-[13px] leading-snug">
+                      {c}
+                      {hidden && <span className="ml-2 rounded bg-danger px-1.5 py-0.5 align-middle font-sans text-[10px] font-bold tracking-wide text-white uppercase">hidden instruction</span>}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -166,12 +192,6 @@ export function FraudCard({
             )}
           </div>
         </div>
-
-        {evidence && evidence.length > 0 && (
-          <div data-fc>
-            <Evidence items={evidence} photoUrl={photoUrl} />
-          </div>
-        )}
 
         {/* probes */}
         {top.length > 0 && (

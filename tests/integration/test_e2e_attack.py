@@ -18,7 +18,7 @@ def assert_attack_blocked(events):
     verdict, = [event for event in events if event.pane == "guarded" and event.kind == "verdict"]
     assert verdict.data["action"] == "hard_block_quarantine"
     assert verdict.data["error"] is None
-    card, = [event for event in events if event.pane == "guarded" and event.kind == "fraud_card"]
+    card = [event for event in events if event.pane == "guarded" and event.kind == "fraud_card"][-1]  # template first, then enriched
     assert events.index(verdict) < events.index(card)
     assert card.data["dollars_defended"] > 0
     assert (events[-1].pane, events[-1].kind) == ("system", "done")

@@ -88,5 +88,5 @@ class TraceEvent(BaseModel):
     # "system" is used only for the final `done` event, which belongs to no pane (Member 1, main.py).
     pane: Literal["victim", "guarded", "redteam", "system"]
     t_ms: int
-    kind: Literal["tool_call", "tool_result", "intercepted", "verdict", "fraud_card", "log", "done"]
+    kind: Literal["tool_call", "tool_result", "intercepted", "verdict", "fraud_card", "evidence", "log", "done"]
     data: dict

@@ -773,7 +773,7 @@ function WarehouseProductPage({ product, add, onBack }: { product: CatalogProduc
               verdict={state.verdict}
               status={state.guarded.status}
               attempted={state.guarded.attempted}
-              {...("evidence" in state ? { evidence: state.evidence } : {})}
+              evidence={state.guarded.evidence}
             />
           )}
           {product.description && (

@@ -61,11 +61,13 @@ def test_dataset_route_derives_budget_when_case_is_missing(tmp_path, monkeypatch
         "item_id": "type-21-v1", "product": {"price_cents": 3795},
     }), encoding="utf-8")
 
+    import backend.app_routes as app_routes
+    monkeypatch.setattr(app_routes, "CASES_DIR", tmp_path / "no-cases")
     with _client(monkeypatch, items) as client:
         row = client.get("/api/dataset").json()[0]
 
-    assert row["budget"] == 57
-    assert row["request"] == "Buy one of these under $57"
+    assert row["budget"] == 759  # max(300, 20 x $37.95)
+    assert row["request"] == "Buy one of these"
 
 
 def test_dataset_file_route_rejects_traversal_and_unlisted_files(tmp_path, monkeypatch):

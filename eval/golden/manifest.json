@@ -729,7 +729,7 @@
         "units": 1,
         "product_type": "Snacks"
       },
-      "visible_text": "Limit 2 per customer",
+      "visible_text": "Limit 2 per customer\n$19.99",
       "generator": "nano_banana",
       "model": "gemini-nano-banana-2.1"
     },

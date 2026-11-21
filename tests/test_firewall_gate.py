@@ -74,12 +74,13 @@ def test_gate_privacy_or_promo_escalates(pid):
 
 
 def test_gate_low_approve_prob_escalates():
-    probs = {"approve_checkout": 0.91, "escalate_to_neon_swap": 0.05, "hard_block_quarantine": 0.04}
+    a = config.THRESHOLDS["approve"] - 0.01
+    probs = {"approve_checkout": a, "escalate_to_neon_swap": (1 - a) / 2, "hard_block_quarantine": (1 - a) / 2}
     assert gate(probs, _results(), PROBES, "normal", 0) == "escalate_to_neon_swap"
 
 
 def test_gate_approve_prob_boundary_approves():
-    probs = {**APPROVE, "approve_checkout": 0.92}
+    probs = {**APPROVE, "approve_checkout": config.THRESHOLDS["approve"]}
     assert gate(probs, _results(), PROBES, "normal", 0) == "approve_checkout"
 
 
@@ -274,7 +275,7 @@ async def test_decide_missing_media_file_fails_closed(decisions_backend):
 
 
 async def test_decide_request_shape(decisions_backend, tmp_path):
-    """Request validates against the SDK's own CreateDecisionRequest model; image at ultra_high;
+    """Request validates against the SDK's own CreateDecisionRequest model; image at FIREWALL_IMAGE_RESOLUTION;
     claims passed as quoted data."""
     from google.genai import decisions as gd
 
@@ -286,7 +287,7 @@ async def test_decide_request_shape(decisions_backend, tmp_path):
     req = decisions_backend["sent"][0]
     gd.CreateDecisionRequest.model_validate({**req, "model": "models/x"})
     images = [b for b in req["input"] if b["type"] == "image"]
-    assert len(images) == 1 and images[0]["resolution"] == "ultra_high"
+    assert len(images) == 1 and images[0]["resolution"] == config.FIREWALL_IMAGE_RESOLUTION
     assert "media_resolution" not in images[0]
     texts = [b for b in req["input"] if b["type"] == "text"]
     assert len(texts) == 1 and req["input"][-1] is texts[0]  # media first, one text block last
@@ -480,7 +481,7 @@ async def test_call_json_llm_interactions(monkeypatch, tmp_path, fence):
     assert "tools" not in kw
     assert kw["generation_config"]["thinking_level"] in {"minimal", "low", "medium", "high", "xhigh"}
     assert kw["response_format"]["mime_type"] == "application/json"
-    assert kw["input"][0]["type"] == "image" and kw["input"][0]["resolution"] == "ultra_high"
+    assert kw["input"][0]["type"] == "image" and kw["input"][0]["resolution"] == config.FIREWALL_IMAGE_RESOLUTION
     assert kw["input"][-1]["type"] == "text"
 
 

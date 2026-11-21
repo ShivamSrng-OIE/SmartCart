@@ -73,6 +73,9 @@ async def run_case(case: dict, rules, use_argon: bool) -> dict:
         "ideal": case["ideal"], "action": v.action, "ok": ok, "ideal_hit": v.action == case["ideal"],
         "tier": v.tier, "severity": v.severity, "latency_ms": v.latency_ms, "error": v.error,
         "p_approve": v.action_probs.get("approve_checkout"),
+        "action_probs": v.action_probs, "confidence": v.confidence,
+        # every probe that was sent, so scripts/sweep_thresholds.py can replay the gate offline
+        "all_probes": {r.id: r.p for r in v.probes},
         "fired": [{"id": r.id, "p": round(r.p, 3)} for r in fired],
         "top_probes": [{"id": r.id, "p": round(r.p, 3)} for r in sorted(v.probes, key=lambda r: -r.p)[:5]],
         "cart_total": total, "argon_ms": argon_ms,
@@ -138,6 +141,9 @@ async def main() -> None:
     out = GOLDEN / f"results_{time.strftime('%Y%m%d_%H%M%S')}.json"
     out.write_text(json.dumps({"summary": summary, "backend": config.FIREWALL_BACKEND,
                                "rules_version": rules.current().version, "argon": args.argon,
+                               "thresholds": dict(config.THRESHOLDS),
+                               "image_resolution": config.FIREWALL_IMAGE_RESOLUTION,
+                               "image_max_px": config.FIREWALL_IMAGE_MAX_PX,
                                "results": results}, indent=2), encoding="utf-8")
     print(f"\nsaved {out.relative_to(ROOT)}")
 

@@ -67,7 +67,7 @@ async def test_match_picks_confident_winner(decisions, img):
     gd.CreateDecisionRequest.model_validate({**req, "model": "x"})  # valid for the real SDK
     q = req["questions"]["product_in_photo"]
     assert q["type"] == "choice" and set(q["criteria"]) == {"p0", "p1", "p2", "p3", "p4", "other"}  # top 5 + other
-    assert req["input"][0]["type"] == "image" and req["input"][0]["resolution"] == "ultra_high"
+    assert req["input"][0]["type"] == "image" and req["input"][0]["resolution"] == config.FIREWALL_IMAGE_RESOLUTION
     assert req["input"][-1]["type"] == "text" and "Bottle 4" in req["input"][-1]["text"]
 
 

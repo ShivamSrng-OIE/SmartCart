@@ -46,7 +46,7 @@ Your endpoint can answer in whichever shape is easiest. `src/lib/gemini.ts` turn
 3. **A `streamGenerateContent` stream** (`text/event-stream` or NDJSON), chunk by chunk.
 4. Any of the above with CartTrap extras next to `candidates`: `verdict`, `fraud_card`, `intercepted`, or `events: TraceEvent[]`.
 
-If the API isn't reachable, the page says so and offers **Demo**, which plays scripted sample runs. Demo data is labelled "Demo data · scripted" everywhere it appears; it is not a recording of a real run.
+If an API isn't reachable, the page says it's temporarily unavailable and offers **Try again**. Production never shows scripted runs, placeholder products or placeholder scores. For rehearsals, `VITE_DEMO_MODE=true` (dev server only, never in a build) plays the scripted runs in `src/fixtures/`.
 
 ## Landing search router (Gemini Decisions API)
 
@@ -77,7 +77,7 @@ Product search and details use **Shopify's Shop MCP** (`https://mcp.shop.com/`, 
 - Prices arrive in minor units and are converted per currency. Product and checkout links are used exactly as returned, never rebuilt or logged. Merchant descriptions are shown as plain text only. Shopify `warning` messages and `rate_limited` errors (with `retry_after`) are shown to the user.
 - Type several items separated by commas (`cold brew, ceramic mug`) to search them all at once.
 
-If a team backend route exists (`GET /api/catalog/search`, `GET /api/catalog/products/{id}`), it is used first. If neither it nor Shopify is reachable, search falls back to a small bundled demo catalog and says so.
+If a team backend route exists (`GET /api/catalog/search`, `GET /api/catalog/products/{id}`), it is used first. If neither it nor Shopify is reachable, the page shows "Couldn't reach Shopify" with a retry.
 
 ## Team API contract
 
@@ -85,12 +85,12 @@ Routes follow `docs/architecture.md` §5 on the `dev` branch. Every one has a fa
 
 | Route | Used by | If it's missing |
 |---|---|---|
-| `GET /health` → `{ok: true}` | Live/Demo switch | Switches to Demo and explains why |
-| `POST /api/run` (`mode=victim\|guarded\|both`) → `{run_id}` | Modes 2 and 3, Side by side | Error with "Use demo data instead" |
+| `GET /health` → `{ok: true}` (`VITE_HEALTH_URL`) | Assistant pages | "Temporarily unavailable" banner with Try again |
+| `POST /api/run` (`mode=victim\|guarded\|both`) → `{run_id}` | Assistant, Safe Checkout, Compare | "The assistant didn't respond" with Try again |
 | `GET /api/runs/{id}/stream` (SSE) | same | same; reconnects are safe because the bus replays from the start |
-| `GET /api/rules` → `{version, probes}` | The 50 checks | Bundled sample rule set, tagged "sample" |
-| `GET /api/eval/latest` → `{systems: {baseline, hardened, carttrap}: Metrics, meta?, failures?}` | Results | Sample numbers with a "not a real run yet" badge |
-| `POST /api/redteam/launch` `{product_id?, rounds}` → `{run_id}` | Self-healing | "Use demo data instead" |
+| `GET /api/rules` → `{version, probes}` | The 50 checks | The default rule set shipped with the site |
+| `GET /api/eval/latest` → `{systems: {baseline, hardened, carttrap}: Metrics, meta?, failures?}` | Performance | "Results will appear here after the next evaluation run" |
+| `POST /api/redteam/launch` `{product_id?, rounds}` → `{run_id}` | Safety updates | "Couldn't start a test run" with Try again |
 
 `TraceEvent` matches `backend/schemas.py`: `{run_id, pane: victim|guarded|redteam, t_ms, kind, data}`. The full list of event kinds and the red-team `data.stage` values (`launch, attack, blocked, mutate, bypass, diagnose, probe_proposed, validate, patched, reblocked`) is in `src/state.ts` and `src/fixtures/redteam_demo.jsonl`.
 

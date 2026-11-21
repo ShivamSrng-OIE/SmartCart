@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Bot, Check, Info, Loader2, Minus, PackageSearch, Plus, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
-import { demoCatalog, isUrl, searchCatalog, splitQueries, type CatalogProduct, type CatalogSource, type ProductRef } from "../catalog";
+import { isUrl, searchCatalog, splitQueries, type CatalogProduct, type ProductRef } from "../catalog";
 import { createCheckoutMcp, type ShopMessage } from "../shop";
 import { useCountry } from "../locale";
 import type { Mode } from "../hooks/useBackend";
@@ -8,7 +8,7 @@ import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
-import { Button, Chip, Kbd, Segmented, cx } from "./ui";
+import { Button, Kbd, Segmented, cx } from "./ui";
 
 const SUGGESTIONS = ["cold brew", "sparkling water", "ceramic mug", "flash drive", "granola", "insulated bottle"];
 import { BROWSE } from "../config";
@@ -259,11 +259,11 @@ export function ShopYourself({
   const [q, setQ] = useState(initialQuery);
   const [cap, setCap] = useState("any");
   const [sort, setSort] = useState<Sort>("relevance");
-  const [items, setItems] = useState<CatalogProduct[]>(demoCatalog());
+  const [items, setItems] = useState<CatalogProduct[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [groups, setGroups] = useState<{ term: string; items: CatalogProduct[] }[] | null>(null);
-  const [source, setSource] = useState<CatalogSource>("demo");
   const [warnings, setWarnings] = useState<ShopMessage[]>([]);
-  const [note, setNote] = useState<string | undefined>();
   const [cursor, setCursor] = useState<string | undefined>();
   const [total, setTotal] = useState<number | undefined>();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -284,27 +284,18 @@ export function ShopYourself({
         try {
           if (!terms.length) {
             const results = await Promise.all(BROWSE.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 6 })));
-            const live = results.some((r) => r.source !== "demo");
-            if (live) {
-              setGroups(BROWSE.map((term, i) => ({ term, items: results[i].items.slice(0, 6) })).filter((g) => g.items.length));
-              setItems(results.flatMap((r) => r.items));
-              setSource(results.find((r) => r.source !== "demo")!.source);
-            } else {
-              setGroups(null);
-              setItems(demoCatalog().filter((p) => capN == null || (p.price ?? 0) <= capN));
-              setSource("demo");
-            }
+            setGroups(BROWSE.map((term, i) => ({ term, items: results[i].items.slice(0, 6) })).filter((g) => g.items.length));
+            setItems(results.flatMap((r) => r.items));
+            setError(results.every((r) => r.error) ? (results[0].error ?? "Couldn’t reach Shopify right now.") : null);
             setWarnings([]);
-            setNote(results.find((r) => r.note)?.note);
             setCursor(undefined);
             setTotal(undefined);
           } else if (terms.length === 1) {
             const res = await searchCatalog(terms[0], { maxPrice: capN, signal: ctrl.signal, limit: 12 });
             setItems(res.items);
             setGroups(null);
-            setSource(res.source);
+            setError(res.error ?? null);
             setWarnings(res.messages ?? []);
-            setNote(res.note);
             setCursor(res.cursor);
             setTotal(res.total);
           } else {
@@ -312,9 +303,8 @@ export function ShopYourself({
             const results = await Promise.all(terms.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 8 })));
             setGroups(terms.map((term, i) => ({ term, items: results[i].items })));
             setItems(results.flatMap((r) => r.items));
-            setSource(results.some((r) => r.source !== "demo") ? results.find((r) => r.source !== "demo")!.source : "demo");
+            setError(results.every((r) => r.error) ? (results[0].error ?? "Couldn’t reach Shopify right now.") : null);
             setWarnings(results.flatMap((r) => r.messages ?? []));
-            setNote(results.find((r) => r.note)?.note);
             setCursor(undefined);
             setTotal(undefined);
           }
@@ -330,7 +320,7 @@ export function ShopYourself({
       ctrl.abort();
       window.clearTimeout(t);
     };
-  }, [terms, capN, urlQuery, query, country.code]);
+  }, [terms, capN, urlQuery, query, country.code, retry]);
 
   const loadMore = async () => {
     if (!cursor || terms.length !== 1) return;
@@ -447,9 +437,6 @@ export function ShopYourself({
               <p className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="tnum font-medium">{groups ? items.length : total != null && total > sorted.length ? `${sorted.length} of ${total.toLocaleString()}` : sorted.length}</span>
                 <span className="text-ink-3">{!query ? (groups ? `products across ${groups.length} categories` : "products to start with") : groups ? `results for ${groups.length} items` : `results for “${terms[0] ?? query}”`}</span>
-                <Chip tone={source === "demo" ? "neutral" : "safe"} className="h-5 text-[10px]">
-                  {source === "demo" ? "demo products" : "live from Shopify"}
-                </Chip>
               </p>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex">
                 <Segmented size="sm" value={cap} onChange={setCap} options={PRICE_CAPS.map((c) => ({ value: c.value, label: c.label }))} className="w-full sm:w-auto" />
@@ -463,10 +450,15 @@ export function ShopYourself({
                 </label>
               </div>
             </div>
-            {query && source === "demo" && (
-              <p className="-mt-2 flex items-start gap-1.5 text-xs text-ink-3">
-                <Info className="mt-px size-3.5 shrink-0" /> Shopify search isn’t reachable{note ? ` (${note})` : ""}, so these come from the demo products.
-              </p>
+            {error && (
+              <div className="card flex flex-col items-center gap-2 px-6 py-12 text-center">
+                <PackageSearch className="size-7 text-ink-3" />
+                <p className="text-[15px] font-medium">Couldn’t reach Shopify right now</p>
+                <p className="max-w-sm text-sm text-ink-3">Check your connection and try again.</p>
+                <Button size="sm" className="mt-2" onClick={() => setRetry((n) => n + 1)}>
+                  Try again
+                </Button>
+              </div>
             )}
             {warnings.map((w, i) => (
               <p key={i} className="-mt-2 flex items-start gap-1.5 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
@@ -517,7 +509,7 @@ export function ShopYourself({
                   </section>
                 ))}
               </div>
-            ) : sorted.length ? (
+            ) : error ? null : sorted.length ? (
               <>
                 <div className={cx("grid transition-opacity grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6", loading && "opacity-60")}>
                   {sorted.map((p) => (

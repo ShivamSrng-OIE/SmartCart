@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, Sun, Swords, Trophy, X } from "lucide-react";
-import type { Mode } from "../hooks/useBackend";
 import { COUNTRIES, setCountry, useCountry } from "../locale";
 import type { Theme } from "../hooks/useTheme";
 import { gsap, d } from "../lib/motion";
-import { Dot, cx } from "./ui";
+import { cx } from "./ui";
 
 export type View = "home" | "shop" | "product" | "unprotected" | "protected" | "compare" | "redteam" | "results";
 
@@ -123,26 +122,6 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
   );
 }
 
-function ModeSwitch({ mode, online, onChange }: { mode: Mode; online: boolean | null; onChange: (m: Mode) => void }) {
-  return (
-    <div className="flex items-center rounded-lg bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]" role="radiogroup" aria-label="Assistant: live or sample data">
-      {(["live", "replay"] as Mode[]).map((m) => (
-        <button
-          key={m}
-          role="radio"
-          aria-checked={mode === m}
-          onClick={() => onChange(m)}
-          title={m === "live" ? (online ? "The assistant is connected" : "The assistant service isn’t reachable right now") : "The assistant uses sample data. Product search stays live."}
-          className={cx("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all", mode === m ? "bg-surface text-ink shadow-card" : "text-ink-3 hover:text-ink")}
-        >
-          {m === "live" && <Dot tone={online ? "safe" : online === false ? "danger" : "neutral"} pulse={!!online && mode === "live"} />}
-          {m === "live" ? "Live" : "Sample"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function MoreMenu({ view, onView }: { view: View; onView: (v: View) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -203,9 +182,6 @@ export function Header({
   onView,
   theme,
   onTheme,
-  mode,
-  online,
-  onMode,
   cartCount,
   onCart,
 }: {
@@ -215,9 +191,6 @@ export function Header({
   onView: (v: View) => void;
   theme: Theme;
   onTheme: () => void;
-  mode: Mode;
-  online: boolean | null;
-  onMode: (m: Mode) => void;
 }) {
   const [sheet, setSheet] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -260,7 +233,6 @@ export function Header({
               <CountryPicker />
             </span>
             <MoreMenu view={view} onView={onView} />
-            <ModeSwitch mode={mode} online={online} onChange={onMode} />
             <ThemeToggle theme={theme} onToggle={onTheme} />
             <button
               data-cart-target

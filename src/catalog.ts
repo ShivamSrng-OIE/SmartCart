@@ -4,11 +4,12 @@
  * Source order for every call:
  *   1. team backend route, if it exists (GET /api/catalog/search, GET /api/catalog/products/{id})
  *   2. Shopify Shop MCP directly, through the /shop-mcp proxy (search_catalog / get_product)
- *   3. the bundled demo catalog, clearly labelled
+ *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 import { getCountry } from "./locale";
+import { DEMO_MODE } from "./config";
 
 export interface MediaItem {
   type: "image" | "video" | "model" | "external";
@@ -69,6 +70,8 @@ export type CatalogSource = "live" | "shopify" | "demo";
 export interface SearchResult {
   items: CatalogProduct[];
   source: CatalogSource;
+  /** set when no source could answer; the UI shows a retry */
+  error?: string;
   note?: string;
   messages?: ShopMessage[];
   cursor?: string;
@@ -260,7 +263,7 @@ export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<Sear
   // The shared request is never tied to one caller's AbortSignal.
   const value = searchUncached(q, { ...opts, signal: undefined });
   cache.set(key, { at: Date.now(), value });
-  value.then((r) => r.source === "demo" && cache.delete(key)).catch(() => cache.delete(key));
+  value.then((r) => (r.source === "demo" || r.error) && cache.delete(key)).catch(() => cache.delete(key));
   if (cache.size > 60) cache.delete(cache.keys().next().value!);
   return withAbort(value, opts.signal);
 }
@@ -350,13 +353,14 @@ async function searchUncached(q: string, opts: SearchOptions = {}): Promise<Sear
     }
   }
 
-  return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "demo", note: notes[0] };
+  if (DEMO_MODE) return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "demo", note: notes[0] };
+  return { items: [], source: "shopify", error: notes[0] ?? "Couldn’t reach Shopify right now." };
 }
 
 const productCache = new Map<string, { product: CatalogProduct | null; source: CatalogSource }>();
 
 export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource }> {
-  const demo = findDemo(id);
+  const demo = DEMO_MODE ? findDemo(id) : null;
   if (demo || !network) return { product: demo, source: "demo" };
   const hit = productCache.get(`${getCountry().code}:${id}`);
   if (hit) return hit;

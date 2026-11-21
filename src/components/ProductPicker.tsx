@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronsUpDown, Link2, Loader2, Search, Sparkle, X } from "lucide-react";
-import { demoCatalog, isUrl, refFromProduct, searchCatalog, type CatalogProduct, type ProductRef } from "../catalog";
+import { isUrl, refFromProduct, searchCatalog, type CatalogProduct, type ProductRef } from "../catalog";
 import { money } from "../lib/format";
 import { gsap, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
@@ -13,7 +13,7 @@ type Option = { kind: "none" } | { kind: "url"; url: string } | { kind: "product
 export function ProductPicker({ value, onChange }: { value: ProductRef | null; onChange: (v: ProductRef | null) => void; live?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<CatalogProduct[]>(demoCatalog().slice(0, 6));
+  const [items, setItems] = useState<CatalogProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);

@@ -170,15 +170,11 @@ export function AgentPage({
   kind,
   mode,
   rules,
-  rulesLive,
-  onSwitchToReplay,
   onOtherMode,
 }: {
   kind: AgentKind;
   mode: Mode;
   rules: RuleSet;
-  rulesLive: boolean;
-  onSwitchToReplay: () => void;
   onOtherMode: () => void;
 }) {
   const copy = COPY[kind];
@@ -222,7 +218,9 @@ export function AgentPage({
 
   /* ---------------------------------------------------------- the headline */
   let result: Parameters<typeof ResultCard>[0];
-  if (kind === "unprotected") {
+  if (phase === "error") {
+    result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "No order yet", body: "The assistant didn’t respond, so nothing was ordered. Try again in a moment." };
+  } else if (kind === "unprotected") {
     const last = [...p.steps].reverse().find((s) => s.kind === "intercepted");
     const call = describeCall(last, state.products);
     if (phase === "idle") result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "What can I find for you?", body: "Describe what you need on the left. You’ll see each step the assistant takes and the order it puts together." };
@@ -303,11 +301,11 @@ export function AgentPage({
               <p className="flex items-start gap-2 text-sm text-danger">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  <span className="font-semibold">The assistant isn’t responding.</span> {error}
+                  <span className="font-semibold">The assistant didn’t respond.</span> Please try again in a moment.
                 </span>
               </p>
-              <Button size="sm" onClick={onSwitchToReplay}>
-                Use sample data
+              <Button size="sm" onClick={() => run(toForm(), intent, fixture)}>
+                Try again
               </Button>
             </div>
           )}
@@ -316,7 +314,7 @@ export function AgentPage({
           <ResultCard {...result} aside={orderStep ? <OrderCard step={orderStep} products={state.products} held={held} /> : undefined} />
 
           {/* 2. one details card with tabs */}
-          {phase !== "idle" && (
+          {phase !== "idle" && !(phase === "error" && steps === 0) && (
             <section className="card flex min-h-0 flex-col overflow-hidden" aria-label="Details">
               <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5 sm:px-5">
                 {kind === "protected" ? (
@@ -345,7 +343,7 @@ export function AgentPage({
                 ) : tab === "checks" ? (
                   <div className="flex flex-col gap-5">
                     <VerdictBanner verdict={verdict} checking={checking} size="md" />
-                    <Seismograph rules={rules} rulesLive={rulesLive} verdict={verdict} checking={checking} />
+                    <Seismograph rules={rules} verdict={verdict} checking={checking} />
                   </div>
                 ) : (
                   <FraudCard card={state.fraudCard} verdict={verdict} status={state.guarded.status} attempted={state.victim.attempted} bare />

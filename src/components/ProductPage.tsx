@@ -295,7 +295,6 @@ export function ProductPage({
   const root = useRef<HTMLDivElement>(null);
   const [product, setProduct] = useState<CatalogProduct | null>(seed ?? null);
   const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState<string>("");
   const [similar, setSimilar] = useState<CatalogProduct[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
@@ -306,10 +305,9 @@ export function ProductPage({
     let alive = true;
     setLoading(true);
     setSimilar(null);
-    getProduct(id).then(({ product: p, source: s }) => {
+    getProduct(id).then(({ product: p }) => {
       if (!alive) return;
       if (p) setProduct(p);
-      setSource(s);
       setLoading(false);
     });
     return () => {
@@ -620,7 +618,7 @@ export function ProductPage({
           <span>
             <span className="block text-[15px] font-semibold">All product data</span>
             <span className="block text-xs text-ink-3">
-              Everything Shopify returned for this item{source === "demo" ? " (sample product)" : ""}
+              Everything Shopify returned for this item
             </span>
           </span>
           <ChevronDown className={cx("size-4 shrink-0 transition-transform", showRaw && "rotate-180")} />

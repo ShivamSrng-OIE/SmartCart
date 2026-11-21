@@ -1,10 +1,9 @@
 import { useRef } from "react";
-import { ArrowRight, TriangleAlert } from "lucide-react";
+import { ArrowRight, BarChart3 } from "lucide-react";
 import type { EvalResults, Metrics } from "../types";
-import type { Source } from "../hooks/useBackend";
 import { money, pct } from "../lib/format";
 import { countTo, gsap, useGSAP, d } from "../lib/motion";
-import { Chip, cx } from "./ui";
+import { cx } from "./ui";
 
 const SYSTEMS = [
   { key: "baseline", label: "Assistant", note: "Standard setup" },
@@ -37,13 +36,31 @@ const moneyFmt = (n: number) => money(n, true);
 const msFmt = (n: number) => (n ? `${Math.round(n)}` : "—");
 const FORMATS: Record<string, (n: number) => string> = { pct: pctFmt, money: moneyFmt, ms: msFmt };
 
-export function Scoreboard({ results, source }: { results: EvalResults; source: Source }) {
+export function Scoreboard({ results }: { results: EvalResults | null }) {
+  if (!results || !Object.keys(results.systems).length) {
+    return (
+      <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
+        <div>
+          <p className="label mb-1">Performance</p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Accuracy on test orders</h1>
+        </div>
+        <div className="card flex flex-col items-center gap-2 px-6 py-16 text-center">
+          <BarChart3 className="size-7 text-ink-3" />
+          <p className="text-[15px] font-medium">Results will appear here after the next evaluation run</p>
+          <p className="max-w-md text-sm text-ink-3">Each run compares the regular assistant and Safe Checkout on the same set of everyday and tricky orders.</p>
+        </div>
+      </div>
+    );
+  }
+  return <ScoreboardBody results={results} />;
+}
+
+function ScoreboardBody({ results }: { results: EvalResults }) {
   const root = useRef<HTMLDivElement>(null);
   const rows = SYSTEMS.filter((s) => results.systems[s.key]).map((s) => ({ ...s, m: results.systems[s.key] as Metrics }));
   const ct = results.systems.carttrap;
   const base = results.systems.baseline;
   const meta = results.meta ?? {};
-  const sample = source === "sample" || meta.label === "sample";
 
   useGSAP(
     () => {
@@ -71,15 +88,6 @@ export function Scoreboard({ results, source }: { results: EvalResults; source: 
             {ct?.n_attack ?? 30} tricky orders and {ct?.n_benign ?? 20} everyday ones, compared across three setups.
           </p>
         </div>
-        {sample ? (
-          <Chip tone="warn" className="h-7">
-            <TriangleAlert className="size-3.5" /> Sample numbers
-          </Chip>
-        ) : (
-          <Chip tone="safe" className="h-7">
-            Real results
-          </Chip>
-        )}
       </div>
 
       {/* headline: ASR falls */}

@@ -3,7 +3,7 @@ import { parseJsonl } from "./state";
 import attackJsonl from "./fixtures/run_attack.jsonl?raw";
 import benignJsonl from "./fixtures/run_benign.jsonl?raw";
 import redteamJsonl from "./fixtures/redteam_demo.jsonl?raw";
-import rulesSample from "./fixtures/rules.sample.json";
+import defaultRulesJson from "./fixtures/rules.sample.json";
 import evalSample from "./fixtures/eval.sample.json";
 import { ENDPOINTS, streamUrl, type AgentKind, type FixtureName } from "./config";
 import { looksLikeGemini, toEvents } from "./lib/gemini";
@@ -12,10 +12,11 @@ import { looksLikeGemini, toEvents } from "./lib/gemini";
 // Routes from docs/architecture.md §5 (owned by Member 1). Send changes to M1.
 
 export async function health(timeoutMs = 1200): Promise<boolean> {
+  if (!ENDPOINTS.health) return true;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const r = await fetch("/health", { signal: ctrl.signal });
+    const r = await fetch(ENDPOINTS.health, { signal: ctrl.signal });
     clearTimeout(t);
     if (!r.ok) return false;
     const j = await r.json().catch(() => null);
@@ -255,8 +256,10 @@ const FIXTURES: Record<FixtureName | "redteam", string> = {
 };
 
 export const fixtureEvents = (name: FixtureName | "redteam"): TraceEvent[] => parseJsonl(FIXTURES[name]);
-export const sampleRules = (): RuleSet => normalizeRules(rulesSample);
-export const sampleEval = (): EvalResults => normalizeEval(evalSample);
+/** Default rule set shipped with the site, used until GET /api/rules answers. */
+export const defaultRules = (): RuleSet => normalizeRules(defaultRulesJson);
+/** Rehearsal-only (DEMO_MODE) results. */
+export const rehearsalEval = (): EvalResults => normalizeEval(evalSample);
 
 /** Play events on their recorded t_ms clock. Returns a cancel function. */
 export function replay(events: TraceEvent[], onEvent: (e: TraceEvent) => void, speed = 1, onDone?: () => void): () => void {

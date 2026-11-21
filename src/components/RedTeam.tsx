@@ -48,12 +48,10 @@ export function RedTeam({
   mode,
   rulesVersion,
   onPatched,
-  onSwitchToReplay,
 }: {
   mode: Mode;
   rulesVersion: number;
   onPatched: (v: number) => void;
-  onSwitchToReplay: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const versionRef = useRef<HTMLSpanElement>(null);
@@ -179,10 +177,10 @@ export function RedTeam({
           {error && (
             <div className="mb-3 flex flex-col gap-2 rounded-lg border border-danger-line bg-danger-soft px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-danger">
-                <span className="font-semibold">Couldn’t launch live.</span> {error}
+                <span className="font-semibold">Couldn’t start a test run.</span> Please try again in a moment.
               </p>
-              <Button size="sm" onClick={onSwitchToReplay}>
-                Use sample data
+              <Button size="sm" onClick={launch}>
+                Try again
               </Button>
             </div>
           )}
@@ -191,7 +189,7 @@ export function RedTeam({
               <Bug className="size-6 text-ink-3" />
               <p className="text-[15px] font-medium">Start a test run</p>
               <p className="max-w-sm text-sm text-ink-3">
-                {mode === "replay" ? "Sample data: plays an example run in about 15 seconds." : "Runs up to 3 test rounds."}
+                Runs up to 3 test rounds.
               </p>
             </div>
           ) : (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { AudioLines, Camera, FileText, Film, ImagePlus, Mic, Package, Paperclip, Play, RotateCcw, Square, TriangleAlert, Video, X } from "lucide-react";
+import { AudioLines, Camera, FileText, Film, ImagePlus, Mic, Package, Paperclip, Play, RotateCcw, Square, Video, X } from "lucide-react";
 import { useCamera, useRecorder, useSpeech } from "../hooks/useMedia";
 import { SCENARIOS } from "../config";
 import { useDraft, type Attached, type MediaKind } from "../draft";
@@ -8,7 +8,7 @@ import { isOpenEnded, parseItems } from "../lib/intent";
 import { gsap, d } from "../lib/motion";
 import type { Mode } from "../hooks/useBackend";
 import { ProductPicker } from "./ProductPicker";
-import { Button, Chip, Dot, IconButton, Kbd, cx } from "./ui";
+import { Button, IconButton, Kbd, cx } from "./ui";
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const KIND_ICON: Record<MediaKind, typeof Camera> = { image: Camera, audio: AudioLines, video: Film, pdf: FileText };
@@ -19,18 +19,6 @@ function kindOf(file: File): MediaKind | null {
   if (file.type.startsWith("video/")) return "video";
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) return "pdf";
   return null;
-}
-
-export function ModeBadge({ mode }: { mode: Mode }) {
-  return mode === "replay" ? (
-    <Chip tone="warn" className="h-6" mono={false}>
-      <TriangleAlert className="size-3" /> Sample data
-    </Chip>
-  ) : (
-    <Chip tone="safe" className="h-6" mono={false}>
-      <Dot tone="safe" pulse /> Live
-    </Chip>
-  );
 }
 
 export function RequestPanel({
@@ -372,7 +360,6 @@ export function RequestPanel({
       <section ref={root} className={cx("card flex flex-col overflow-hidden lg:max-h-[calc(100dvh-96px)]", className)} aria-label={title}>
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h2 className="text-[15px] font-semibold tracking-tight">What do you need?</h2>
-          <ModeBadge mode={mode} />
         </div>
         <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
           <div className="relative">
@@ -495,7 +482,6 @@ export function RequestPanel({
     <section ref={root} className={cx("card p-4", className)} aria-label={title}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-        <ModeBadge mode={mode} />
       </div>
 
       <div className="flex flex-col gap-3">

@@ -45,13 +45,9 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
 export function Arena({
   mode,
   rules,
-  rulesLive,
-  onSwitchToReplay,
 }: {
   mode: Mode;
   rules: RuleSet;
-  rulesLive: boolean;
-  onSwitchToReplay: () => void;
 }) {
   const { intent, fixture, toForm } = useDraft();
   const { state, phase, error, startedAt, run, reset } = useArena(mode);
@@ -80,11 +76,11 @@ export function Arena({
           <p className="flex items-start gap-2 text-sm text-danger">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             <span>
-              <span className="font-semibold">Couldn’t run live.</span> {error}
+              <span className="font-semibold">The assistant didn’t respond.</span> Please try again in a moment.
             </span>
           </p>
-          <Button size="sm" onClick={onSwitchToReplay}>
-            Use sample data
+          <Button size="sm" onClick={() => run({ form: toForm(), intent, fixture })}>
+            Try again
           </Button>
         </div>
       )}
@@ -133,7 +129,7 @@ export function Arena({
                 />
               </div>
               {tab === "checks" ? (
-                <Seismograph rules={rules} rulesLive={rulesLive} verdict={state.verdict} checking={checking} />
+                <Seismograph rules={rules} verdict={state.verdict} checking={checking} />
               ) : (
                 <TracePane variant="guarded" pane={state.guarded} products={state.products} bare className="-mx-1" />
               )}

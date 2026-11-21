@@ -58,7 +58,7 @@ export const SCENARIOS: Scenario[] = [
 /** Categories the storefront browses before you search: one live Shopify search each. */
 export const BROWSE = ["Coffee", "Mugs & cups", "Water bottles", "Snacks", "Tech accessories", "Home & kitchen"];
 
-/** Replay speed for demo runs (1 = real time). */
+/** Replay speed for rehearsal runs (1 = real time). */
 export const REPLAY_SPEED = 1;
 
 // ---------------------------------------------------------------- endpoints
@@ -87,6 +87,14 @@ export const ENDPOINTS = {
   stream: env.VITE_STREAM_URL ?? "/api/runs/{id}/stream",
   /** landing-search router (Gemini Decisions API on the backend); empty string disables it */
   router: env.VITE_ROUTER_URL ?? "/api/route",
+  /** service health check; empty string turns the "temporarily unavailable" banner off */
+  health: env.VITE_HEALTH_URL ?? "/health",
 };
+
+/**
+ * Developer-only rehearsal switch: with VITE_DEMO_MODE=true on the dev server, the assistant
+ * pages play the scripted runs in src/fixtures instead of calling the APIs. Never on in a build.
+ */
+export const DEMO_MODE = import.meta.env.DEV && env.VITE_DEMO_MODE === "true";
 
 export const streamUrl = (runId: string) => ENDPOINTS.stream.replace("{id}", encodeURIComponent(runId));

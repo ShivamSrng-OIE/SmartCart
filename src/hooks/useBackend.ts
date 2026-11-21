@@ -1,57 +1,39 @@
 import { useCallback, useEffect, useState } from "react";
-import { getEvalLatest, getRules, health, sampleEval, sampleRules } from "../api";
+import { defaultRules, getEvalLatest, getRules, health, rehearsalEval } from "../api";
+import { DEMO_MODE } from "../config";
 import type { EvalResults, RuleSet } from "../types";
 
 export type Mode = "live" | "replay";
-export type Source = "live" | "sample";
 
 export interface Backend {
   mode: Mode;
-  setMode: (m: Mode) => void;
   online: boolean | null;
   rules: RuleSet;
-  rulesSource: Source;
-  evalResults: EvalResults;
-  evalSource: Source;
+  evalResults: EvalResults | null;
   refresh: () => void;
   bumpRules: (version: number) => void;
 }
 
 /**
- * Decides live vs replay. Live when the backend answers /health; the user can force replay
- * (rehearsal, venue Wi-Fi down). Rules and eval fall back to bundled samples, clearly labelled.
+ * Live APIs only. The rule set starts from the default shipped with the site and is replaced
+ * by GET /api/rules; eval results only ever come from GET /api/eval/latest.
  */
 export function useBackend(): Backend {
   const [online, setOnline] = useState<boolean | null>(null);
-  const [mode, setModeState] = useState<Mode>("replay");
-  const [userPicked, setUserPicked] = useState(false);
-  const [rules, setRules] = useState<RuleSet>(sampleRules);
-  const [rulesSource, setRulesSource] = useState<Source>("sample");
-  const [evalResults, setEval] = useState<EvalResults>(sampleEval);
-  const [evalSource, setEvalSource] = useState<Source>("sample");
+  const [rules, setRules] = useState<RuleSet>(defaultRules);
+  const [evalResults, setEval] = useState<EvalResults | null>(() => (DEMO_MODE ? rehearsalEval() : null));
 
   const load = useCallback(async () => {
     const ok = await health();
     setOnline(ok);
-    if (!userPicked) setModeState(ok ? "live" : "replay");
     if (!ok) return;
     getRules()
-      .then((r) => {
-        if (r.probes.length) {
-          setRules(r);
-          setRulesSource("live");
-        }
-      })
+      .then((r) => r.probes.length && setRules(r))
       .catch(() => undefined);
     getEvalLatest()
-      .then((e) => {
-        if (Object.keys(e.systems).length) {
-          setEval(e);
-          setEvalSource("live");
-        }
-      })
+      .then((e) => Object.keys(e.systems).length && setEval(e))
       .catch(() => undefined);
-  }, [userPicked]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -59,12 +41,7 @@ export function useBackend(): Backend {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const setMode = useCallback((m: Mode) => {
-    setUserPicked(true);
-    setModeState(m);
-  }, []);
-
   const bumpRules = useCallback((version: number) => setRules((r) => ({ ...r, version: Math.max(r.version, version) })), []);
 
-  return { mode, setMode, online, rules, rulesSource, evalResults, evalSource, refresh: () => void load(), bumpRules };
+  return { mode: DEMO_MODE ? "replay" : "live", online, rules, evalResults, refresh: () => void load(), bumpRules };
 }

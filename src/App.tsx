@@ -110,7 +110,6 @@ export default function App() {
     { dependencies: [view], scope: mainRef },
   );
 
-  const toReplay = () => backend.setMode("replay");
   const showOffline = backend.mode === "live" && backend.online === false && AGENT_VIEWS.includes(view);
 
   return (
@@ -123,9 +122,6 @@ export default function App() {
         onView={go}
         theme={theme}
         onTheme={toggle}
-        mode={backend.mode}
-        online={backend.online}
-        onMode={backend.setMode}
         cartCount={cart.count}
         onCart={() => {
           go("shop");
@@ -138,15 +134,12 @@ export default function App() {
             <p className="flex items-center gap-2 text-[13px] text-warn">
               <WifiOff className="size-4 shrink-0" />
               <span>
-                <span className="font-semibold">The assistant isn’t connected.</span> Use sample data for now, or retry.
+                <span className="font-semibold">The assistant is temporarily unavailable.</span> Please try again in a moment.
               </span>
             </p>
             <div className="flex items-center gap-1.5">
-              <button onClick={backend.refresh} className="btn-secondary h-7 rounded-md px-2.5 text-xs font-medium">
-                Retry
-              </button>
-              <button onClick={toReplay} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
-                Use sample data
+              <button onClick={backend.refresh} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
+                Try again
               </button>
             </div>
           </div>
@@ -203,14 +196,14 @@ export default function App() {
             />
           )}
           {view === "unprotected" && (
-            <AgentPage kind="unprotected" mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} onOtherMode={() => go("protected")} />
+            <AgentPage kind="unprotected" mode={backend.mode} rules={backend.rules} onOtherMode={() => go("protected")} />
           )}
           {view === "protected" && (
-            <AgentPage kind="protected" mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} onOtherMode={() => go("unprotected")} />
+            <AgentPage kind="protected" mode={backend.mode} rules={backend.rules} onOtherMode={() => go("unprotected")} />
           )}
-          {view === "compare" && <Arena mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} />}
-          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} onSwitchToReplay={toReplay} />}
-          {view === "results" && <Scoreboard results={backend.evalResults} source={backend.evalSource} />}
+          {view === "compare" && <Arena mode={backend.mode} rules={backend.rules} />}
+          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} />}
+          {view === "results" && <Scoreboard results={backend.evalResults} />}
           </Suspense>
         </div>
       </main>

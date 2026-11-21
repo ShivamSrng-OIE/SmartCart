@@ -1,5 +1,7 @@
 """Task 8: Argon perception. Unit tests mock the single private API call."""
+import base64
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -68,31 +70,39 @@ async def test_perceive_no_media_skips_call(monkeypatch):
 
 
 async def test_argon_request_has_no_tools(monkeypatch, img):
-    """The real _call_argon sends structured output with the Claims schema and no tools."""
+    """The real _call_argon uses the Interactions API: Claims JSON schema, no tools, image at ultra_high."""
     calls = []
 
-    class FakeResp:
-        text = Claims(**GOOD).model_dump_json()
-
-    class FakeModels:
-        async def generate_content(self, **kw):
+    class FakeInteractions:
+        async def create(self, **kw):
             calls.append(kw)
-            return FakeResp()
+            return SimpleNamespace(output_text="```json\n" + Claims(**GOOD).model_dump_json() + "\n```")
 
-    class FakeClient:
-        class aio:
-            models = FakeModels()
-
-    monkeypatch.setattr(argon.gemini, "client", lambda: FakeClient)
+    monkeypatch.setattr(argon.gemini, "client",
+                        lambda: SimpleNamespace(aio=SimpleNamespace(interactions=FakeInteractions())))
     c = await perceive([img])
-    assert c.instructions_detected is True
+    assert c == Claims(**GOOD)
     kw = calls[0]
-    cfg = kw["config"]
     assert kw["model"] == config.MODELS["perception"]
-    assert not cfg.tools and cfg.tool_config is None
-    assert cfg.response_mime_type == "application/json" and cfg.response_schema is Claims
-    assert "untrusted" in cfg.system_instruction.lower()
-    assert kw["contents"][0].inline_data.data == b"\x89PNG fake"
+    assert "tools" not in kw
+    assert "untrusted" in kw["system_instruction"].lower()
+    assert kw["response_format"]["mime_type"] == "application/json"
+    assert set(kw["response_format"]["schema"]["properties"]) == set(Claims.model_fields)
+    assert kw["generation_config"]["thinking_level"] in {"minimal", "low", "medium", "high", "xhigh"}
+    block = kw["input"][0]
+    assert block["type"] == "image" and block["resolution"] == "ultra_high"
+    assert base64.b64decode(block["data"]) == b"\x89PNG fake"
+    assert kw["input"][-1]["type"] == "text"
+
+
+async def test_argon_empty_output_returns_error_claims(monkeypatch, img):
+    class FakeInteractions:
+        async def create(self, **kw):
+            return SimpleNamespace(output_text="")
+
+    monkeypatch.setattr(argon.gemini, "client",
+                        lambda: SimpleNamespace(aio=SimpleNamespace(interactions=FakeInteractions())))
+    _assert_error_claims(await perceive([img]))
 
 
 def test_argon_prompt_file():

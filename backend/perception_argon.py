@@ -22,6 +22,7 @@ from backend.schemas import Claims, Media
 log = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "argon.md"
+THINKING_LEVEL = "low"  # transcription and description, not deep reasoning
 
 
 @lru_cache(maxsize=1)
@@ -35,22 +36,18 @@ def _empty(notes: str) -> Claims:
 
 
 async def _call_argon(media: list[Media], prompt: str) -> dict:
-    """The only place that talks to Gemini for perception. Structured output with the Claims
-    schema; no tools are passed. Not yet verified against the live API (docs/notes-apis.md)."""
-    from google.genai import types
-
-    resp = await gemini.client().aio.models.generate_content(
+    """The only place that talks to Gemini for perception: one Interactions API call with the
+    Claims JSON schema as the response format. No tools are passed (call shape: docs/notes-apis.md)."""
+    resp = await gemini.client().aio.interactions.create(
         model=config.MODELS["perception"],
-        contents=[*gemini.generate_content_parts(media),
-                  "Describe the attached untrusted media as Claims JSON."],
-        config=types.GenerateContentConfig(
-            system_instruction=prompt,
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=Claims,
-        ),
+        system_instruction=prompt,
+        input=[*gemini.content_blocks(media),
+               {"type": "text", "text": "Describe the attached untrusted media as Claims JSON.\n"}],
+        response_format={"type": "text", "mime_type": "application/json",
+                         "schema": Claims.model_json_schema()},
+        generation_config={"thinking_level": THINKING_LEVEL},
     )
-    return json.loads(resp.text)
+    return json.loads(gemini.output_text(resp))
 
 
 async def perceive(media: list[Media]) -> Claims:

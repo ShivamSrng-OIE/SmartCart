@@ -346,7 +346,7 @@ export function AgentPage({
                     <Seismograph rules={rules} verdict={verdict} checking={checking} />
                   </div>
                 ) : (
-                  <FraudCard card={state.fraudCard} evidence={state.guarded.evidence} verdict={verdict} status={state.guarded.status} attempted={state.victim.attempted} bare />
+                  <FraudCard card={state.fraudCard} evidence={state.guarded.evidence} finished={state.guarded.finished} verdict={verdict} status={state.guarded.status} attempted={state.victim.attempted} bare />
                 )}
               </div>
             </section>

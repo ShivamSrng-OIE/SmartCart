@@ -73,6 +73,15 @@ function Callout({ text }: { text: string }) {
   );
 }
 
+/** Waveform bars holding the hidden part; falls back to the timestamps if `segment` is missing. */
+function audioSegment(item: Extract<EvidenceItem, { modality: "audio" }>, bars: number): [number, number] {
+  const seg = item.segment;
+  if (Array.isArray(seg) && seg.length === 2 && seg.every(Number.isFinite)) return [seg[0], seg[1]];
+  const total = item.duration_s && item.duration_s > 0 ? item.duration_s : item.end_s;
+  if (!bars || !(total > 0)) return [0, -1];
+  return [Math.floor((item.start_s / total) * bars), Math.ceil((item.end_s / total) * bars)];
+}
+
 function Item({ item, photoUrl }: { item: EvidenceItem; photoUrl?: string }) {
   if (item.modality === "image") {
     if (item.crop_url) {
@@ -100,10 +109,11 @@ function Item({ item, photoUrl }: { item: EvidenceItem; photoUrl?: string }) {
       </div>
     );
   }
-  const [i0, i1] = item.seg;
+  const peaks = Array.isArray(item.peaks) ? item.peaks : [];
+  const [i0, i1] = audioSegment(item, peaks.length);
   return (
     <div className="flex flex-col gap-2.5">
-      <Waveform peaks={item.peaks} seg={[i0, i1]} />
+      <Waveform peaks={peaks} seg={[i0, i1]} />
       <div className="flex flex-col gap-1">
         <p className="text-[13px] font-semibold text-danger">
           Hear the hidden part ({item.start_s.toFixed(1)}&ndash;{item.end_s.toFixed(1)}s)

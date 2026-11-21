@@ -347,11 +347,14 @@ async def test_on_block_emits_fraud_card_on_real_tracebus(monkeypatch):
     assert card.safe_cart["continue_url"] == CONTINUE_URL
     assert card.dollars_defended == 981.00
     events = [e for e in block.bus.events(block.run_id) if e.kind == "fraud_card"]
-    assert len(events) == 2  # template card first, then the card with the safe cart
+    # template card first, then the card with the safe cart (template wording), then Neon's wording
+    assert len(events) == 3
     event = events[-1]
     assert (event.run_id, event.pane, event.kind) == (block.run_id, "guarded", "fraud_card")
     assert event.data == card.model_dump()
     assert events[0].data["safe_cart"] is None
+    assert events[1].data["safe_cart"]["continue_url"] == CONTINUE_URL and events[1].data["reason"] != "Shopify lists one bottle."
+    assert events[2].data["reason"] == "Shopify lists one bottle."
 
 
 @pytest.mark.asyncio
@@ -376,9 +379,10 @@ async def test_on_block_caps_the_full_operation(monkeypatch):
     monkeypatch.setattr(dn, "ON_BLOCK_TIMEOUT_S", 0.01, raising=False)
     monkeypatch.setattr(dn, "build_fraud_card", hang)
     card = await asyncio.wait_for(dn.on_block(block), timeout=1)
-    assert card is not None and card.safe_cart is None
+    # the safe cart was already built and shown; only Neon's wording timed out
+    assert card is not None and card.safe_cart is not None
     kinds = [e.kind for e in block.bus.events(block.run_id)]
-    assert kinds == ["fraud_card", "log"]  # template card, then a note that the safe swap timed out
+    assert kinds == ["fraud_card", "fraud_card", "log"]  # template, template + safe cart, then the timeout note
 
 
 async def test_validate_probe_reexport_returns_bool(monkeypatch):

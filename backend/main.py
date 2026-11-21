@@ -22,6 +22,7 @@ from backend.firewall_decisions import warm_up
 from backend.guarded_shopper import run_guarded
 from backend.intent import parse_intent
 from backend.m4_routes import m4_router
+from backend.media_prep import to_wav
 from backend.rules import RuleStore
 from backend.schemas import Intent, Media
 from backend.shop_mcp import ShopMCP
@@ -82,7 +83,14 @@ async def _save(upload: UploadFile | None, kind: str, run_dir: Path) -> Media | 
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / f"{kind}{Path(upload.filename).suffix}"
     path.write_bytes(await upload.read())
-    return Media(kind=kind, path=str(path), mime=upload.content_type or "application/octet-stream")
+    mime = upload.content_type or "application/octet-stream"
+    if kind == "pdf":
+        mime = "application/pdf"
+    if kind == "audio":  # webm/ogg/mp3 -> PCM WAV so Gemini and the audio evidence both read it
+        converted = await to_wav(path)
+        if converted != path:
+            path, mime = converted, "audio/wav"
+    return Media(kind=kind, path=str(path), mime=mime)
 
 
 async def _run_all(bus: TraceBus, run_id: str, panes: list[str], intent: Intent, media: list[Media], product_ref: str | None):
@@ -115,9 +123,7 @@ async def start_run(
     run_id = f"r_{uuid.uuid4().hex[:8]}"
     run_dir = RUNS_DIR / run_id
     media = [m for m in [await _save(image, "image", run_dir), await _save(audio, "audio", run_dir),
-                         await _save(video, "video", run_dir)] if m]
-    if pdf is not None and pdf.filename:
-        log.warning("Skipping PDF upload because Media.kind does not support 'document'")
+                         await _save(video, "video", run_dir), await _save(pdf, "pdf", run_dir)] if m]
     intent = parse_intent(request, budget)  # budget field wins; else budget/qty parsed from the request text
     bus: TraceBus = app.state.bus
     bus.start(run_id)

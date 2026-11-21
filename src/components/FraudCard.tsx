@@ -47,8 +47,11 @@ export function FraudCard({
   bare,
   evidence,
   photoUrl,
+  finished,
 }: {
   evidence?: EvidenceItem[];
+  /** the run has ended: stop saying we're still looking for the evidence */
+  finished?: boolean;
   /** the run's attached photo, used when an image item has no source_url */
   photoUrl?: string;
   /** no card chrome or header (inside the Assistant page's Review tab) */
@@ -116,7 +119,11 @@ export function FraudCard({
   }
 
   const sells = card.shopify_sells ?? null;
-  const claims = rankClaims(card.media_claimed, evidence ?? []);
+  // Perception can finish after the order is checked; the located evidence is the same text, so use it.
+  const found = card.media_claimed.length
+    ? card.media_claimed
+    : (evidence ?? []).map((e) => (e.modality === "audio" ? e.transcript : e.text)).filter(Boolean);
+  const claims = rankClaims(found, evidence ?? []);
   const top = [...card.top_probes].sort((a, b) => b.p - a.p).slice(0, 3);
   const safeTotal = card.safe_cart?.total ?? 0;
   const attemptedShown = attempted > 0 ? attempted : card.dollars_defended + safeTotal;
@@ -145,6 +152,10 @@ export function FraudCard({
         <div data-fc>
           {evidence && evidence.length > 0 ? (
             <Evidence items={evidence} photoUrl={photoUrl} />
+          ) : finished ? (
+            <p className="rounded-xl border border-line px-3.5 py-2.5 text-sm text-ink-2">
+              We couldn&rsquo;t pinpoint the exact spot in the file. The order was still held because of the checks below.
+            </p>
           ) : (
             <p className="animate-pulse rounded-xl border border-danger-line px-3.5 py-2.5 text-sm text-ink-2">Locating the hidden instruction…</p>
           )}
@@ -159,7 +170,7 @@ export function FraudCard({
         {/* evidence */}
         <div data-fc className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="rounded-xl border border-danger-line p-3.5">
-            <p className="label mb-2 text-danger!">Text found in the photo</p>
+            <p className="label mb-2 text-danger!">Text found in your files</p>
             {claims.length ? (
               <ul className="flex flex-col gap-1.5">
                 {claims.map(({ text: c, hidden }, i) => (
@@ -173,7 +184,7 @@ export function FraudCard({
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-ink-3">No readable text.</p>
+              <p className="text-sm text-ink-3">No readable text or speech.</p>
             )}
           </div>
           <div className="rounded-xl border border-line p-3.5">

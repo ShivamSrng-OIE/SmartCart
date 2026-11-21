@@ -21,7 +21,7 @@ from backend.schemas import Claims, Media
 
 log = logging.getLogger(__name__)
 EVIDENCE_DIR = Path("runs/evidence")
-TIMEOUT_S = 12.0
+TIMEOUT_S = 25.0  # video localization (agentic frame scrubbing) is the slow one
 BUCKETS = 200
 RUN_ID = re.compile(r"[A-Za-z0-9_-]+")
 FILE_NAME = re.compile(r"(?:crop|frame|clip)_[0-9]+\.(?:jpg|wav)")
@@ -82,7 +82,8 @@ def _annotate(image, box: list[int]) -> tuple[bytes, list[float]]:
     image = image.convert("RGB")
     top, left, bottom, right = box
     w, h = image.size
-    dx, dy = (right - left) * 0.15, (bottom - top) * 0.15
+    # 15% breathing room, but never less than ~1.5% of the picture so thin text lines aren't clipped
+    dx, dy = max((right - left) * 0.15, 15), max((bottom - top) * 0.15, 15)
     x0 = max(0, math.floor((left - dx) * w / 1000))
     y0 = max(0, math.floor((top - dy) * h / 1000))
     x1 = min(w, math.ceil((right + dx) * w / 1000))
@@ -162,10 +163,14 @@ def _peaks(raw: bytes, width: int, channels: int, frames: int) -> list[float]:
 def _clip(path: str, location: AudioLocation) -> tuple[bytes, dict]:
     with wave.open(path, "rb") as source:
         channels, width, rate, frames = source.getparams()[:4]
-        if not (0 <= location.start_s < location.end_s <= frames / rate):
+        duration = frames / rate
+        # The model's timestamps are approximate and often overshoot the file by a fraction of a
+        # second, so clamp to the recording. Only a segment with nothing left inside it is invalid.
+        start_s, end_s = max(0.0, location.start_s), min(duration, location.end_s)
+        if not start_s < end_s:
             raise ValueError("segment outside recording")
-        first = math.floor(location.start_s * rate)
-        last = min(frames, math.ceil(location.end_s * rate))
+        first = math.floor(start_s * rate)
+        last = min(frames, math.ceil(end_s * rate))
         raw = source.readframes(frames)
     stride = channels * width
     if len(raw) != frames * stride:
@@ -175,6 +180,7 @@ def _clip(path: str, location: AudioLocation) -> tuple[bytes, dict]:
         clip.setparams((channels, width, rate, 0, "NONE", "not compressed"))
         clip.writeframes(raw[first * stride:last * stride])
     return output.getvalue(), {
+        "start_s": round(start_s, 2), "end_s": round(end_s, 2),
         "peaks": _peaks(raw, width, channels, frames),
         "segment": [first * BUCKETS // frames, (last - 1) * BUCKETS // frames + 1],
         "duration_s": frames / rate,
@@ -238,10 +244,17 @@ async def locate(media: list[Media], claims: Claims | None, run_id: str) -> list
         async with asyncio.timeout(TIMEOUT_S):
             directory = run_directory(run_id)
             hints = claims.model_dump_json() if claims is not None else "null"
-            async with asyncio.TaskGroup() as group:
-                tasks = [group.create_task(_localize(i, m, hints, run_id))
-                         for i, m in enumerate(media) if m.kind in FORMATS]
-            artifacts = [task.result() for task in tasks if task.result() is not None]
+            async def one(i: int, m: Media):
+                # One bad attachment (unreadable audio, a model error) must not discard the
+                # evidence found in the others.
+                try:
+                    return await _localize(i, m, hints, run_id)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("evidence for %s #%d unavailable: %s", m.kind, i, type(exc).__name__)
+                    return None
+
+            results = await asyncio.gather(*(one(i, m) for i, m in enumerate(media) if m.kind in FORMATS))
+            artifacts = [r for r in results if r is not None]
             if not artifacts:
                 return []
             staging = await asyncio.to_thread(_stage, directory, artifacts)

@@ -140,6 +140,7 @@ export function Arena({
           <FraudCard
             card={state.fraudCard}
             evidence={state.guarded.evidence}
+            finished={state.guarded.finished}
             verdict={state.verdict}
             status={state.guarded.status}
             attempted={state.victim.attempted}

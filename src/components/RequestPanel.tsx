@@ -357,7 +357,7 @@ export function RequestPanel({
       </button>
     );
     return (
-      <section ref={root} className={cx("card flex flex-col overflow-hidden lg:max-h-[calc(100dvh-96px)]", className)} aria-label={title}>
+      <section ref={root} className={cx("card flex flex-col overflow-hidden lg:max-h-[calc(100dvh-96px)] short:max-h-none", className)} aria-label={title}>
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h2 className="text-[15px] font-semibold tracking-tight">What do you need?</h2>
         </div>
@@ -486,7 +486,7 @@ export function RequestPanel({
 
       <div className="flex flex-col gap-3">
           {scenarios}
-          <div className="grid gap-3 border-t border-line pt-3 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_380px_200px]">
+          <div className="grid grid-cols-1 gap-3 border-t border-line pt-3 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_380px_200px]">
             {photo}
             {request}
             <div className="flex min-w-0 flex-col gap-3">

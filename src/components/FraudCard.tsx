@@ -128,7 +128,7 @@ export function FraudCard({
         </div>
 
         {/* evidence */}
-        <div data-fc className="grid gap-2.5 sm:grid-cols-2">
+        <div data-fc className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="rounded-xl border border-danger-line p-3.5">
             <p className="label mb-2 text-danger!">Text found in the photo</p>
             {card.media_claimed.length ? (

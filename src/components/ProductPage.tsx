@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Minus, Play, Plus, ShieldCheck, Star, Store, TrendingDown, TrendingUp } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowDown, ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Minus, Play, Plus, ShieldCheck, Star, Store, TrendingDown, TrendingUp, X } from "lucide-react";
 import { getProduct, mediaSummary, modelSources, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
 import { ModelViewerModal } from "./ModelViewerModal";
 import { AutoRail } from "./AutoRail";
@@ -121,37 +122,171 @@ function Slide({ m, title, first, onPlay, onOpen3D }: { m: MediaItem; title: str
   );
 }
 
+/** Full-screen photo viewer: arrows / swipe / keys to move, tap or click to zoom (follows the pointer). */
+function Lightbox({ images, start, title, onClose }: { images: MediaItem[]; start: number; title: string; onClose: () => void }) {
+  const [i, setI] = useState(start);
+  const [zoom, setZoom] = useState(false);
+  const [origin, setOrigin] = useState("50% 50%");
+  const root = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const sw = useRef<number | null>(null);
+  const n = images.length;
+  const go = (k: number) => {
+    setZoom(false);
+    setI((k + n) % n);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") go(i + 1);
+      if (e.key === "ArrowLeft") go(i - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  useGSAP(() => {
+    gsap.fromTo(root.current, { opacity: 0 }, { opacity: 1, duration: d(0.2) });
+  });
+  useGSAP(() => {
+    gsap.fromTo(imgRef.current, { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: d(0.35), ease: "power2.out" });
+  }, { dependencies: [i] });
+  const m = images[i];
+  return createPortal(
+    <div ref={root} className="fixed inset-0 z-[70] flex flex-col bg-[#0b0b0b] text-white" role="dialog" aria-modal="true" aria-label={`${title} photos`}>
+      <div className="flex items-center justify-between gap-3 px-4 py-3 short:py-1.5">
+        <span className="tnum text-sm opacity-80">
+          {i + 1} / {n}
+        </span>
+        <span className="hidden truncate text-sm opacity-70 sm:block">{title}</span>
+        <button onClick={onClose} aria-label="Close" className="inline-flex size-10 items-center justify-center rounded-full hover:bg-white/10">
+          <X className="size-5" />
+        </button>
+      </div>
+      <div
+        className={cx("relative flex min-h-0 flex-1 items-center justify-center overflow-hidden", zoom ? "cursor-zoom-out" : "cursor-zoom-in")}
+        onPointerDown={(e) => (sw.current = e.clientX)}
+        onPointerUp={(e) => {
+          const s0 = sw.current;
+          sw.current = null;
+          if (s0 != null && Math.abs(e.clientX - s0) > 50 && !zoom) go(i + (e.clientX < s0 ? 1 : -1));
+        }}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setOrigin(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`);
+          setZoom((z) => !z);
+        }}
+        onMouseMove={(e) => {
+          if (!zoom) return;
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setOrigin(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`);
+        }}
+      >
+        <img
+          ref={imgRef}
+          key={m.url}
+          src={sized(m.url, 1800)}
+          alt={m.alt ?? title}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          style={{ transformOrigin: origin }}
+          className={cx("max-h-full max-w-full object-contain transition-transform duration-300 ease-out", zoom ? "scale-[2.2]" : "scale-100")}
+        />
+        {n > 1 && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                go(i - 1);
+              }}
+              aria-label="Previous photo"
+              className="absolute left-3 inline-flex size-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                go(i + 1);
+              }}
+              aria-label="Next photo"
+              className="absolute right-3 inline-flex size-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </>
+        )}
+      </div>
+      {n > 1 && (
+        <div className="flex justify-center gap-2 overflow-x-auto px-4 py-3 [scrollbar-width:none] short:hidden">
+          {images.map((x, k) => (
+            <button key={x.url + k} onClick={() => go(k)} aria-label={`Photo ${k + 1}`} className={cx("size-12 shrink-0 overflow-hidden rounded-md bg-white transition-opacity", k === i ? "opacity-100 ring-2 ring-white" : "opacity-50 hover:opacity-80")}>
+              <img src={sized(x.url, 120)} alt="" loading="lazy" referrerPolicy="no-referrer" className="size-full object-contain p-0.5" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
 /**
- * Product media carousel: glides between slides, advances on its own every few seconds,
- * and pauses on hover, while a video plays, or while the 3D viewer is open.
+ * Product media carousel.
+ * - drag or swipe: the slide follows your finger and snaps; tap a photo to open the zoomable viewer
+ * - advances on its own every few seconds (dot fills as a timer); waits 8 s after you touch it,
+ *   and pauses on hover, while a video plays or while the 3D viewer is open
  */
 function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string; fallback: CatalogProduct }) {
   const [i, setI] = useState(0);
   const [hover, setHover] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [model, setModel] = useState<MediaItem | null>(null);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [touchedAt, setTouchedAt] = useState(0);
+  const frame = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
-  const bar = useRef<HTMLSpanElement>(null);
+  const fill = useRef<HTMLSpanElement>(null);
   const thumbs = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; t: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; t: number; dx: number; axis: "x" | "y" | null } | null>(null);
   const items = media;
   const n = items.length;
+  const images = items.filter((m) => m.type === "image");
   const summary = mediaSummary(items);
 
-  const go = (next: number) => {
+  const go = (next: number, user = true) => {
     if (!n) return;
     const k = (next + n) % n;
     setI(k);
-    gsap.to(track.current, { xPercent: -100 * k, duration: d(0.6), ease: "power3.inOut" });
+    if (user) setTouchedAt(performance.now());
+    gsap.to(track.current, { xPercent: -100 * k, x: 0, duration: d(0.55), ease: "expo.out" });
     const t = thumbs.current?.children[k] as HTMLElement | undefined;
     t?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   };
 
-  // Autoplay with a visible progress line; it pauses whenever someone is looking closely.
-  const active = n > 1 && !hover && !playing && !model && !reducedMotion();
+  // Re-arm autoplay 8 s after the last interaction.
+  const [, force] = useState(0);
   useEffect(() => {
-    if (!active || !bar.current) return;
-    const tween = gsap.fromTo(bar.current, { scaleX: 0 }, { scaleX: 1, duration: AUTOPLAY_MS / 1000, ease: "none", onComplete: () => go(i + 1) });
+    if (!touchedAt) return;
+    const t = window.setTimeout(() => force((x) => x + 1), 8000);
+    return () => window.clearTimeout(t);
+  }, [touchedAt]);
+  const idle = performance.now() - touchedAt > 8000;
+  const active = n > 1 && idle && !hover && !playing && !model && lightbox === null && !reducedMotion();
+
+  useEffect(() => {
+    const el = fill.current;
+    if (!el) return;
+    if (!active) {
+      gsap.set(el, { scaleX: 0 });
+      return;
+    }
+    const tween = gsap.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: AUTOPLAY_MS / 1000, ease: "none", onComplete: () => go(i + 1, false) });
     const onVis = () => (document.hidden ? tween.pause() : tween.resume());
     document.addEventListener("visibilitychange", onVis);
     return () => {
@@ -162,17 +297,20 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
 
   if (!n) {
     return (
-      <div className="card aspect-square">
+      <div className="card aspect-[4/3] sm:aspect-[16/11] lg:aspect-square short:aspect-auto short:h-[72svh]">
         <ProductThumb product={fallback} size="lg" priority />
       </div>
     );
   }
 
   const cur = items[i];
+  const draggable = (el: EventTarget) => !(el as HTMLElement).closest("video, iframe, [data-nodrag]");
+
   return (
     <div className="flex flex-col gap-2.5">
       <div
-        className="card relative aspect-square touch-pan-y overflow-hidden bg-white select-none"
+        ref={frame}
+        className="group/gal card relative aspect-[4/3] touch-pan-y overflow-hidden bg-white select-none sm:aspect-[16/11] lg:aspect-square short:aspect-auto short:h-[72svh]"
         tabIndex={0}
         role="region"
         aria-roledescription="carousel"
@@ -184,20 +322,44 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
           if (e.key === "ArrowLeft") go(i - 1);
         }}
         onPointerDown={(e) => {
-          if (e.pointerType !== "mouse") drag.current = { x: e.clientX, t: performance.now() };
+          if (n < 2 || !draggable(e.target)) return;
+          drag.current = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, axis: null };
+        }}
+        onPointerMove={(e) => {
+          const g = drag.current;
+          if (!g) return;
+          const dx = e.clientX - g.x;
+          const dy = e.clientY - g.y;
+          if (!g.axis && Math.hypot(dx, dy) > 6) g.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          if (g.axis !== "x") return;
+          g.dx = dx;
+          // rubber-band at the ends
+          const edge = (i === 0 && dx > 0) || (i === n - 1 && dx < 0);
+          gsap.set(track.current, { x: edge ? dx * 0.35 : dx });
         }}
         onPointerUp={(e) => {
-          const s = drag.current;
+          const g = drag.current;
           drag.current = null;
-          if (!s) return;
-          const dx = e.clientX - s.x;
-          if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1));
+          if (!g) return;
+          const w = frame.current?.clientWidth ?? 1;
+          const v = g.dx / Math.max(1, performance.now() - g.t); // px per ms
+          if (g.axis === "x" && (Math.abs(g.dx) > w * 0.18 || Math.abs(v) > 0.5)) {
+            go(i + (g.dx < 0 ? 1 : -1));
+          } else if (g.axis === "x") {
+            gsap.to(track.current, { x: 0, duration: d(0.4), ease: "expo.out" });
+          } else if (!g.axis && cur.type === "image" && draggable(e.target)) {
+            setLightbox(images.indexOf(cur));
+          }
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+          gsap.to(track.current, { x: 0, duration: d(0.3) });
         }}
       >
         <div ref={track} className="flex size-full will-change-transform">
           {items.map((m, k) => (
             <div key={m.url + k} className="relative size-full shrink-0" aria-hidden={k !== i}>
-              {Math.abs(k - i) <= 1 || k === 0 ? (
+              {Math.abs(k - i) <= 1 || k === 0 || (i === 0 && k === n - 1) ? (
                 <Slide m={m} title={title} first={k === 0} onPlay={setPlaying} onOpen3D={() => setModel(m)} />
               ) : null}
             </div>
@@ -206,18 +368,44 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
 
         {n > 1 && (
           <>
-            <button onClick={() => go(i - 1)} aria-label="Previous" className="btn-secondary absolute top-1/2 left-3 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full">
+            <button
+              data-nodrag
+              onClick={() => go(i - 1)}
+              aria-label="Previous"
+              className="btn-secondary absolute top-1/2 left-3 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full opacity-0 shadow-float transition-opacity group-hover/gal:opacity-100 md:inline-flex"
+            >
               <ChevronLeft className="size-4" />
             </button>
-            <button onClick={() => go(i + 1)} aria-label="Next" className="btn-secondary absolute top-1/2 right-3 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full">
+            <button
+              data-nodrag
+              onClick={() => go(i + 1)}
+              aria-label="Next"
+              className="btn-secondary absolute top-1/2 right-3 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full opacity-0 shadow-float transition-opacity group-hover/gal:opacity-100 md:inline-flex"
+            >
               <ChevronRight className="size-4" />
             </button>
-            <span className="tnum absolute top-3 right-3 rounded-md bg-black/55 px-2 py-0.5 text-[11px] text-white">
-              {i + 1} / {n}
-            </span>
-            <span className="absolute inset-x-0 bottom-0 h-[3px] bg-black/5">
-              <span ref={bar} className="block h-full origin-left scale-x-0 bg-brand" />
-            </span>
+            {/* dots: the active one stretches and fills as the autoplay timer runs */}
+            <div data-nodrag className="absolute inset-x-0 bottom-3 flex justify-center">
+              {n <= 14 ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-1.5 backdrop-blur-sm">
+                  {items.map((_, k) => (
+                    <button
+                      key={k}
+                      onClick={() => go(k)}
+                      aria-label={`Go to ${k + 1}`}
+                      className={cx("relative h-1.5 overflow-hidden rounded-full transition-all duration-300", k === i ? "w-6 bg-white/40" : "w-1.5 bg-white/60 hover:bg-white")}
+                    >
+                      {k === i && <span ref={fill} className="absolute inset-0 origin-left scale-x-0 rounded-full bg-white" />}
+                    </button>
+                  ))}
+                </span>
+              ) : (
+                <span className="tnum rounded-full bg-black/55 px-2.5 py-1 text-[11px] text-white">
+                  {i + 1} / {n}
+                  <span ref={fill} className="hidden" />
+                </span>
+              )}
+            </div>
           </>
         )}
         {cur.type === "model_3d" && (
@@ -225,10 +413,15 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
             <Box className="size-3" /> 3D
           </span>
         )}
+        {cur.type === "image" && (
+          <span className="pointer-events-none absolute top-3 right-3 hidden rounded-md bg-black/45 px-2 py-0.5 text-[11px] text-white opacity-0 transition-opacity group-hover/gal:opacity-100 md:block">
+            Click to zoom
+          </span>
+        )}
       </div>
 
       {n > 1 && (
-        <div ref={thumbs} className="thin-scroll flex gap-2 overflow-x-auto scroll-smooth pb-1">
+        <div ref={thumbs} className="flex gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {items.map((m, k) => {
             const poster = m.type === "image" ? m.url : m.poster;
             return (
@@ -237,7 +430,10 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
                 onClick={() => go(k)}
                 aria-label={`Show ${m.type === "model_3d" ? "3D model" : m.type.includes("video") ? "video" : "photo"} ${k + 1}`}
                 aria-current={k === i}
-                className={cx("relative size-16 shrink-0 overflow-hidden rounded-lg bg-white shadow-[inset_0_0_0_1px_var(--line)] transition-shadow sm:size-[72px]", k === i && "shadow-[inset_0_0_0_2px_var(--ink)]")}
+                className={cx(
+                  "relative size-14 shrink-0 overflow-hidden rounded-lg bg-white transition-all duration-200 sm:size-[68px]",
+                  k === i ? "shadow-[inset_0_0_0_2px_var(--ink)]" : "opacity-70 shadow-[inset_0_0_0_1px_var(--line)] hover:opacity-100",
+                )}
               >
                 {poster ? (
                   <img src={sized(poster, 160)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-contain p-1" />
@@ -270,6 +466,7 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
       </p>
 
       {model && <ModelViewerModal media={model} title={title} onClose={() => setModel(null)} />}
+      {lightbox !== null && images.length > 0 && <Lightbox images={images} start={Math.max(0, lightbox)} title={title} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
@@ -600,7 +797,7 @@ export function ProductPage({
       </nav>
 
       {/* hero */}
-      <section data-sec className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-14">
+      <section data-sec className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-14 short:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] short:gap-5">
         <div ref={galleryRef}>
           <Gallery media={p.media} title={p.title} fallback={p} />
         </div>
@@ -680,7 +877,7 @@ export function ProductPage({
               <span className="tnum text-xl font-semibold">{money(best?.price ?? p.price, false, currency)}</span>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="primary" size="lg" className="flex-1" disabled={best?.available === false} onClick={() => addOffer(best)} icon={added === (best?.variantId ?? p.id) ? <Check className="size-4" /> : <Plus className="size-4" />}>
+              <Button variant="primary" size="lg" className="w-full sm:w-auto sm:flex-1" disabled={best?.available === false} onClick={() => addOffer(best)} icon={added === (best?.variantId ?? p.id) ? <Check className="size-4" /> : <Plus className="size-4" />}>
                 {added === (best?.variantId ?? p.id) ? "Added" : "Add to cart"}
               </Button>
               {(best?.checkoutUrl ?? best?.url ?? p.url) && (
@@ -709,7 +906,7 @@ export function ProductPage({
         </div>
         {!verdict && <p className="mt-1 text-sm text-ink-2">{similar === null ? "Looking up similar items…" : "Prices from each store selling this item."}</p>}
         {verdict && bestPrice != null && rangeLow != null && rangeHigh != null && (
-          <div className="mt-4 grid gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-10">
+          <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-10">
             {(() => {
               const V = VERDICT_STYLE[verdict.tone];
               return (
@@ -812,7 +1009,7 @@ export function ProductPage({
 
       {/* about */}
       {(p.description || p.features.length > 0) && (
-        <section data-sec className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section data-sec className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           {p.description && (
             <div className="card p-5 sm:p-6">
               <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>

@@ -80,7 +80,7 @@ export function ModelViewerModal({ media, title, onClose }: { media: MediaItem; 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={`3D view of ${title}`}>
       <div ref={scrim} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
-      <div ref={panel} className="relative flex h-[88dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-surface shadow-float sm:h-[82dvh] sm:rounded-2xl">
+      <div ref={panel} className="relative flex h-[88dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-surface shadow-float sm:h-[82dvh] sm:rounded-2xl short:h-[96dvh]">
         <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Box className="size-4 shrink-0 text-ink-2" />

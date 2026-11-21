@@ -69,7 +69,7 @@ export function OutcomeStrip({ state, phase }: { state: ArenaState; phase: "idle
       { icon: Columns2, title: "Compare", body: "Left is the regular assistant. Right uses Safe Checkout." },
     ];
     return (
-      <div ref={root} className="card grid gap-3 p-3.5 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-line sm:p-0">
+      <div ref={root} className="card grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-line sm:p-0">
         {steps.map((s, i) => {
           const Icon = s.icon;
           return (

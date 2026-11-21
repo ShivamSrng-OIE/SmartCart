@@ -92,7 +92,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
 
       {/* headline: ASR falls */}
       {base && ct && (
-        <div data-reveal className="card grid gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div data-reveal className="card grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
           <div>
             <p className="label">Wrong orders placed</p>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -216,7 +216,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* where it breaks */}
         <div data-reveal className="card p-4 sm:p-5">
           <p className="label mb-1">Known issues</p>

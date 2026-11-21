@@ -148,8 +148,58 @@ async def test_argon_runs_concurrently(fakes, monkeypatch, tmp_path):
     _, s0, s1 = shop.sent[0]
     assert shop.sent[0][0] == "search_catalog"
     assert p0 < s1 and s0 < p1                       # perception and the first search overlap in time
-    assert fakes["decide_calls"][0]["claims"] == CLAIMS  # awaited before the first decide
+    # Argon (0.2 s) was still running at the first decide: the firewall did not wait for it
+    assert fakes["decide_calls"][0]["claims"] is None
     assert res.claims == CLAIMS
+
+
+async def test_slow_perceive_does_not_delay_decide(fakes, monkeypatch, tmp_path):
+    """The firewall never waits for Argon: decide() runs with claims=None while perception is
+    still going, and Argon's perception event is still emitted when it finishes."""
+    t = {}
+
+    async def slow_perceive(media):
+        await asyncio.sleep(0.5)
+        t["perceive_done"] = time.perf_counter()
+        return CLAIMS
+
+    orig = gs.decide
+
+    async def timed_decide(*a, **kw):
+        t.setdefault("decide_at", time.perf_counter())
+        return await orig(*a, **kw)
+
+    monkeypatch.setattr(gs, "perceive", slow_perceive)
+    monkeypatch.setattr(gs, "decide", timed_decide)
+    t0 = time.perf_counter()
+    res, bus = await _run(CountingModel([SEARCH, CART, None]), LiveFakeShop(), media=_img(tmp_path))
+    assert t["decide_at"] - t0 < 0.25 and t["decide_at"] < t["perceive_done"]  # not held for 0.5 s
+    assert fakes["decide_calls"][0]["claims"] is None
+    events = bus.events("r")
+    verdict_i = next(i for i, e in enumerate(events) if e.kind == "verdict")
+    perc = [i for i, e in enumerate(events) if e.kind == "log" and e.data.get("event") == "perception"]
+    assert len(perc) == 1 and perc[0] > verdict_i  # still shown, once, after it finished
+    assert res.claims == CLAIMS
+
+
+async def test_finished_perception_claims_are_passed(fakes, monkeypatch, tmp_path):
+    """If Argon is already done when the cart needs a decision, its Claims go to the firewall."""
+    model = CountingModel([SEARCH, CART, None])
+    await _run(model, LiveFakeShop(search_delay=0.05), media=_img(tmp_path))  # fake perceive is instant
+    assert fakes["decide_calls"][0]["claims"] == CLAIMS
+
+
+async def test_blocked_with_slow_perception_still_stops(fakes, monkeypatch, tmp_path):
+    async def slow_perceive(media):
+        await asyncio.sleep(0.3)
+        return CLAIMS
+
+    monkeypatch.setattr(gs, "perceive", slow_perceive)
+    fakes["actions"] = ["hard_block_quarantine"]
+    model = CountingModel([SEARCH, CART, SEARCH, None])
+    res, bus = await _run(model, LiveFakeShop(), media=_img(tmp_path))
+    assert res.blocked_call is not None and model.calls == 2  # loop stopped right after the block
+    assert fakes["decide_calls"][0]["claims"] is None
 
 
 # --- extra ---

@@ -115,10 +115,10 @@ def test_startup_fires_warm_up_in_background(monkeypatch):
 
 def test_firewall_timeout_from_env(monkeypatch):
     try:
-        monkeypatch.setenv("FIREWALL_TIMEOUT_MS", "2500")
-        assert importlib.reload(config).THRESHOLDS["firewall_timeout_ms"] == 2500
+        monkeypatch.setenv("FIREWALL_TIMEOUT_MS", "3000")
+        assert importlib.reload(config).THRESHOLDS["firewall_timeout_ms"] == 3000
         monkeypatch.delenv("FIREWALL_TIMEOUT_MS")
-        assert importlib.reload(config).THRESHOLDS["firewall_timeout_ms"] == 1500  # default unchanged
+        assert importlib.reload(config).THRESHOLDS["firewall_timeout_ms"] == 2500  # default
     finally:
         monkeypatch.delenv("FIREWALL_TIMEOUT_MS", raising=False)
         importlib.reload(config)

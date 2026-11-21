@@ -29,10 +29,11 @@ MODELS: dict[str, str] = {
 FIREWALL_JSON_LLM_MODEL: str = os.getenv("MODEL_FIREWALL_JSON_LLM", MODELS["perception"])
 
 # FIREWALL_TIMEOUT_MS tunes the firewall deadline without a code change (fail-closed after it).
+# Default 2500 (was 1500): holdout p95 was 1414 ms and 2 of 12 calls timed out at 1500.
 # approve / probe thresholds tuned on eval/golden with scripts/sweep_thresholds.py (Nov 21):
 # hard-category probes 0.50, pack_lie/privacy/promo 0.65 (set per probe in rules.json).
 THRESHOLDS = {"approve": 0.86, "probe_default": 0.50,
-              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "1500")),
+              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "2500")),
               "min_confidence": 0.75, "product_match_min_confidence": 0.60}
 TIERS = {"low_max": 40, "high_min": 150}
 

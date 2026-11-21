@@ -204,7 +204,7 @@ def _build_decisions_request(intent: Intent, media: list[Media], product_json: d
     questions[SEVERITY_Q] = {"type": "score", "criteria": list(SEVERITY_LEVELS),
                              "instructions": SEVERITY_INSTRUCTIONS}
     text = _context_text(intent, product_json, proposed, claims, len(media))
-    return {"input": [*gemini.content_blocks(media), {"type": "text", "text": text}],
+    return {"input": [*gemini.firewall_content_blocks(media), {"type": "text", "text": text}],
             "questions": questions}
 
 
@@ -319,7 +319,7 @@ async def _call_json_llm(request: dict, timeout_s: float) -> dict:
     with a JSON response schema and no tools. Uses config.FIREWALL_JSON_LLM_MODEL."""
     resp = await gemini.client().aio.interactions.create(
         model=config.FIREWALL_JSON_LLM_MODEL,
-        input=[*gemini.content_blocks(request["media"]), {"type": "text", "text": request["prompt"]}],
+        input=[*gemini.firewall_content_blocks(request["media"]), {"type": "text", "text": request["prompt"]}],
         response_format={"type": "text", "mime_type": "application/json",
                          "schema": _json_llm_schema(request["probe_ids"])},
         generation_config={"thinking_level": _json_llm_thinking()},

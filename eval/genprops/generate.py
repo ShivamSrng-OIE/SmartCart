@@ -180,7 +180,7 @@ async def make_item(row: dict, ptype: dict, product: dict, sem: asyncio.Semaphor
             clean_wav = await gaudio.make_clean(item)
             if pm == "audio":
                 inj = await gaudio.synthesize(spoken, "default")
-                gain = [-24, -21, -18][level]
+                gain = [-30, -27, -24][level]
                 wav = gaudio.mix_under(clean_wav, inj, gain_db=gain)
             else:
                 wav = clean_wav

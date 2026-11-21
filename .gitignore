@@ -9,3 +9,4 @@ node_modules/
 runs/*
 !runs/redteam_demo.jsonl
 redteam/out/
+.pytest_tmp/

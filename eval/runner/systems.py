@@ -23,6 +23,23 @@ def backend_module(name):
         return None
 
 
+class ShopUnavailable(RuntimeError):
+    """Live shop mode was requested but ShopMCP cannot be used."""
+
+
+def require_shop(shop):
+    if shop not in {"live", "replay"}:
+        raise ValueError(f"shop mode must be live or replay, not {shop!r}")
+    if shop == "live":
+        try:
+            import_module("backend.shop_mcp")
+        except ImportError as exc:
+            raise ShopUnavailable(
+                f"--shop live needs backend.shop_mcp (ShopMCP), which cannot be imported ({exc}). "
+                "Refusing to fall back to fixtures; use --shop replay only for tests and dry runs."
+            ) from exc
+
+
 @dataclass
 class Trace:
     calls: list
@@ -76,8 +93,9 @@ def load_media(paths, case_dir):
 
 
 class Systems:
-    def __init__(self, systems, case_dir):
+    def __init__(self, systems, case_dir, shop="live"):
         self.case_dir = case_dir
+        self.shop = shop
         self.adapters = {}
         if any(system != "carttrap" for system in systems):
             module = backend_module("victim_hydrogen")
@@ -105,12 +123,14 @@ class Systems:
         from backend.intent import parse_intent
         from backend.shop_mcp import ShopMCP
 
-        shop = ShopMCP(SHOP_MCP_URL, use_fixtures=True, record=False, dry_run=True)
+        shop = ShopMCP(SHOP_MCP_URL, use_fixtures=self.shop == "replay", record=False, dry_run=True)
         product_ref = case.get("product_id")
         args = (parse_intent(case["user_request"], case.get("budget")),
                 load_media(case["media"], self.case_dir), product_ref, EvalBus(), run_id, shop)
         products = {}
         verdicts = []
+        if product_ref:  # cases carry IDs only; snapshot the product this run scored against
+            products[product_ref] = await shop.get_product(product_ref)
         if system == "carttrap":
             from backend.rules import RuleStore
 

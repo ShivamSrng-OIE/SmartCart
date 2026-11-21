@@ -182,8 +182,9 @@ async def test_bad_manifests_are_recorded_without_running_them(dataset, tmp_path
     assert "invalid case" in report["cases"][1]["error"]
 
 
-@pytest.mark.parametrize(("victim_system", "c7_present"), [("baseline", False), ("hardened", True)])
-def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present):
+@pytest.mark.parametrize(("victim_system", "c7_present", "shop_mode"), [
+    ("baseline", False, "replay"), ("hardened", True, "replay"), ("hardened", True, "live")])
+def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present, shop_mode):
     # Run the script entry point against the published C2/C7 interfaces.
     # The keyed catalog cassette deliberately has no network client.
     import socket
@@ -203,7 +204,7 @@ def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present):
 
     class ShopMCP:
         def __init__(self, url, use_fixtures, dry_run, record=False):
-            assert use_fixtures and dry_run and not record
+            assert use_fixtures is (shop_mode == "replay") and dry_run and not record
 
         async def get_product(self, product_id):
             looked_up.append(product_id)
@@ -244,7 +245,8 @@ def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present):
         monkeypatch.setattr(backend, name, module, raising=False)
     script = Path(__file__).resolve().parents[1] / "eval" / "run_eval.py"
     monkeypatch.setattr(sys, "argv", [str(script), "--cases", str(directory), "--out", str(out),
-                                    "--limit", "5", "--systems", f"{victim_system},carttrap"])
+                                    "--limit", "5", "--shop", shop_mode,
+                                    "--systems", f"{victim_system},carttrap"])
     with pytest.raises(SystemExit) as exit_info:
         runpy.run_path(str(script), run_name="__main__")
     assert exit_info.value.code == 0
@@ -253,6 +255,8 @@ def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present):
     assert len(report["cases"]) == 10 and all(row["score"] for row in report["cases"])
     assert [r["id"] for r in report["cases"][::2]] == ids[:5]
     assert report["meta"]["model_ids"] == {"victim": "test-only"}
+    assert report["meta"]["shop_mode"] == shop_mode
+    assert report["n_errors"] == {victim_system: 0, "carttrap": 0}
     if c7_present:
         assert report["meta"]["adapters"]["carttrap"] == "run_guarded"
         guarded_metrics = report["systems"]["carttrap"]
@@ -261,3 +265,74 @@ def test_cli_smoke(dataset, tmp_path, monkeypatch, victim_system, c7_present):
     else:
         assert "fake" in report["meta"]["adapters"]["carttrap"]
     assert len(looked_up) >= 5
+
+
+def stub_backend(monkeypatch, shop_mcp):
+    backend = ModuleType("backend")
+    backend.__path__ = []
+    monkeypatch.setitem(sys.modules, "backend", backend)
+    for name in ("config", "guarded_shopper", "victim_hydrogen", "schemas", "intent", "rules"):
+        monkeypatch.setitem(sys.modules, f"backend.{name}", None)
+    monkeypatch.setitem(sys.modules, "backend.shop_mcp", shop_mcp)
+
+
+def test_live_mode_is_default_and_fails_fast_without_shop_mcp(dataset, tmp_path, monkeypatch, capsys):
+    from eval.run_eval import main
+
+    directory, _ = dataset
+    out = tmp_path / "out"
+    stub_backend(monkeypatch, None)  # None in sys.modules makes the import fail
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--cases", str(directory), "--out", str(out), "--systems", "carttrap"])
+    assert exit_info.value.code == 2
+    message = capsys.readouterr().err
+    assert "live" in message and "backend.shop_mcp" in message and "--shop replay" in message
+    assert not out.exists() or not list(out.iterdir())
+
+
+def test_shop_option_rejects_unknown_mode(dataset, tmp_path):
+    from eval.run_eval import main
+
+    directory, _ = dataset
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--cases", str(directory), "--out", str(tmp_path / "out"), "--shop", "cache"])
+    assert exit_info.value.code == 2
+
+
+@pytest.mark.asyncio
+async def test_replay_mode_needs_no_shop_mcp_and_is_recorded(dataset, tmp_path, monkeypatch):
+    from eval.run_eval import run
+
+    directory, _ = dataset
+    stub_backend(monkeypatch, None)
+    path = await run(directory, tmp_path / "out", ["carttrap"], shop="replay", timeout=5)
+    assert json.loads(path.read_text())["meta"]["shop_mode"] == "replay"
+
+
+@pytest.mark.asyncio
+async def test_each_case_keeps_the_product_snapshot_it_was_scored_against(dataset, tmp_path):
+    from eval.run_eval import run
+
+    directory, _ = dataset
+    path = await run(directory, tmp_path / "out", ["baseline"], execute=success, shop="replay")
+    for row in json.loads(path.read_text())["cases"]:
+        assert row["product_snapshot"] == {row["product_id"]: {"price": 1}}
+
+
+@pytest.mark.asyncio
+async def test_n_errors_counts_per_system_and_stays_out_of_denominators(dataset, tmp_path):
+    from eval.run_eval import run
+
+    directory, ids = dataset
+
+    async def execute(system, case):
+        if system == "hardened" and case["id"] in ids[:2]:
+            raise RuntimeError("shop down")
+        return cart_trace(case)
+
+    path = await run(directory, tmp_path / "out", ["baseline", "hardened"], execute=execute,
+                     shop="replay")
+    report = json.loads(path.read_text())
+    assert report["n_errors"] == {"baseline": 0, "hardened": 2}
+    assert report["systems"]["hardened"]["n_attack"] + report["systems"]["hardened"]["n_benign"] == len(ids) - 2
+    assert report["meta"]["shop_mode"] == "replay"

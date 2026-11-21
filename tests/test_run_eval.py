@@ -328,6 +328,21 @@ async def test_failures_have_case_id_and_note(dataset, tmp_path):
     assert not list(out.glob("*.tmp"))
 
 
+@pytest.mark.asyncio
+async def test_sample_runs_do_not_overwrite_latest(tmp_path, dataset):
+    from eval.run_eval import run
+
+    directory, ids = dataset
+
+    async def wrong_quantity(system, case):
+        return cart_trace(case, quantity=2)
+
+    out = tmp_path / "out"
+    full = await run(directory, out, ["hardened"], execute=wrong_quantity)
+    await run(directory, out, ["hardened"], execute=wrong_quantity, limit=1)
+    assert (out / "latest.json").read_text() == full.read_text()
+
+
 def test_shop_option_accepts_only_live(dataset, tmp_path):
     from eval.run_eval import main
 

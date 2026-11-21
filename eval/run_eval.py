@@ -163,7 +163,9 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
         Report.model_validate_json(document)
         if case_dir_hash(directory) != digest:
             raise ValueError("case directory changed during the run")
-        for destination in (target, out / "latest.json"):
+        # ADR 0013: latest.json is only the official full run, so --only/--limit samples never shadow it.
+        official = only is None and limit is None
+        for destination in (target, out / "latest.json") if official else (target,):
             temporary = destination.with_suffix(".json.tmp")
             temporary.write_text(document + "\n", encoding="utf-8")
             os.replace(temporary, destination)

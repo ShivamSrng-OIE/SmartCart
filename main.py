@@ -14,9 +14,11 @@ from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend.defender_neon import on_block as defender_on_block
 from backend.firewall_decisions import warm_up
 from backend.guarded_shopper import run_guarded
 from backend.intent import parse_intent
+from backend.m4_routes import m4_router
 from backend.rules import RuleStore
 from backend.schemas import Intent, Media
 from backend.shop_mcp import ShopMCP
@@ -42,7 +44,7 @@ RULES = RuleStore(str(Path(__file__).resolve().parent / "rules.json"))  # shared
 async def guarded_pipeline(intent, media, product_ref, bus, run_id):
     """Task 9: protected pane. Live ShopMCP (approved carts are really created; spend requests
     are still always intercepted and complete_* is forbidden inside shop_mcp)."""
-    await run_guarded(intent, media, product_ref, bus, run_id, shop=ShopMCP(), rules=RULES)
+    await run_guarded(intent, media, product_ref, bus, run_id, shop=ShopMCP(), rules=RULES, on_block=defender_on_block)
 
 
 @asynccontextmanager
@@ -57,6 +59,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CartTrap", lifespan=lifespan)
 app.state.bus = TraceBus()
+app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
+app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
 app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 

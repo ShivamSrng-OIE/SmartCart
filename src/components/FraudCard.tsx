@@ -25,7 +25,7 @@ function fmtSells(key: string, v: unknown): string {
   return String(v);
 }
 
-const AGENT_RE = /(agent|agents|AI shop|bot|assistant|set quantity|qty|spend[_ ]request|promo[_ ]code)/i;
+const AGENT_RE = /\b(agent|agents|AI shop|bot|assistant|set quantity|qty|spend[_ ]request|promo[_ ]code)\b/i;
 
 function rankClaims(lines: string[], evidence: EvidenceItem[]): { text: string; hidden: boolean }[] {
   const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();

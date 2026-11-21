@@ -43,8 +43,7 @@ If the call doesn't match, it's **held**. The shopper sees a Fraud Card with the
 
 ### 🖼️ Non-technical walkthrough
 
-<!-- TODO: add a simple one-image explainer for non-technical readers (shopper → AI agent → poisoned photo → CartTrap holds it → evidence + safe alternative) -->
-![Non-technical explainer placeholder](docs/images/nontech-explainer-placeholder.png)
+![How CartTrap works, in plain language](docs/images/nontech-explainer.png)
 
 ---
 

@@ -15,7 +15,7 @@ export function SafeCart({ cart, className }: { cart: SafeCartT; className?: str
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[13px] font-semibold text-safe">
-            <ShieldCheck className="size-4" /> A safer option, ready to buy
+            <ShieldCheck className="size-4" /> Suggested alternative
           </p>
           <p className="mt-1 truncate text-[15px] font-medium text-ink">{title}</p>
           <p className="truncate text-xs text-ink-2">
@@ -36,13 +36,13 @@ export function SafeCart({ cart, className }: { cart: SafeCartT; className?: str
           rel="noopener noreferrer"
           className="btn-brand mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-[10px] text-[14px] font-semibold transition active:scale-[0.99]"
         >
-          Buy the safe one <ArrowUpRight className="size-4" />
+          Check out <ArrowUpRight className="size-4" />
         </a>
       ) : (
         <p className="mt-3 text-xs text-ink-3">No checkout link was returned for this cart.</p>
       )}
       <p className="mt-2 text-center text-[11px] text-ink-3">
-        {cart.intercepted ? "Anonymous checkout was unavailable, so this cart was only staged." : "Opens the merchant’s own checkout. You finish the purchase; CartTrap never does."}
+        {cart.intercepted ? "Checkout link unavailable right now." : "Opens the store’s secure checkout."}
       </p>
     </div>
   );

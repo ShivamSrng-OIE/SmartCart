@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Bot, Check, ChevronDown, Copy, Info, Loader2, Minus, PackageSearch, Plus, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
-import { demoCatalog, getProduct, isUrl, refFromProduct, searchCatalog, splitQueries, type CatalogProduct, type CatalogSource, type ProductRef } from "../catalog";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpRight, Bot, Check, Info, Loader2, Minus, PackageSearch, Plus, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
+import { demoCatalog, isUrl, searchCatalog, splitQueries, type CatalogProduct, type CatalogSource, type ProductRef } from "../catalog";
 import { createCheckoutMcp, type ShopMessage } from "../shop";
+import { useCountry } from "../locale";
 import type { Mode } from "../hooks/useBackend";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
@@ -10,8 +11,10 @@ import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, Kbd, Segmented, cx } from "./ui";
 
 const SUGGESTIONS = ["cold brew", "sparkling water", "ceramic mug", "flash drive", "granola", "insulated bottle"];
+/** What the Shop page shows before you search: live sections, one search each. */
+const BROWSE = ["Coffee", "Mugs & cups", "Water bottles", "Snacks", "Tech accessories", "Home & kitchen"];
 const PRICE_CAPS: { value: string; label: string; cap: number | null }[] = [
-  { value: "any", label: "Any price", cap: null },
+  { value: "any", label: "Any", cap: null },
   { value: "25", label: "Under $25", cap: 25 },
   { value: "50", label: "Under $50", cap: 50 },
   { value: "100", label: "Under $100", cap: 100 },
@@ -81,180 +84,6 @@ function CardSkeleton() {
         <div className="h-3.5 w-4/5 animate-pulse rounded bg-surface-2" />
         <div className="h-3 w-1/2 animate-pulse rounded bg-surface-2" />
         <div className="mt-2 h-4 w-1/4 animate-pulse rounded bg-surface-2" />
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------- detail */
-
-function DetailSheet({
-  seed,
-  live,
-  inCart,
-  onClose,
-  onAdd,
-  onAskAI,
-}: {
-  seed: CatalogProduct;
-  live: boolean;
-  inCart: number;
-  onClose: () => void;
-  onAdd: (p: CatalogProduct) => void;
-  onAskAI: (ref: ProductRef) => void;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  const scrim = useRef<HTMLDivElement>(null);
-  const [product, setProduct] = useState<CatalogProduct>(seed);
-  const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState<CatalogSource>("demo");
-  const [copied, setCopied] = useState(false);
-  const [showRaw, setShowRaw] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    getProduct(seed.id, live).then(({ product: p, source: s }) => {
-      if (!alive) return;
-      if (p) setProduct(p);
-      setSource(s);
-      setLoading(false);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [seed.id, live]);
-
-  const close = useCallback(() => {
-    const mobile = window.innerWidth < 768;
-    gsap.to(scrim.current, { opacity: 0, duration: d(0.2) });
-    gsap.to(panel.current, { [mobile ? "yPercent" : "xPercent"]: 100, duration: d(0.28), ease: "power2.in", onComplete: onClose });
-  }, [onClose]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-    window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [close]);
-
-  useGSAP(() => {
-    const mobile = window.innerWidth < 768;
-    gsap.fromTo(scrim.current, { opacity: 0 }, { opacity: 1, duration: d(0.25) });
-    gsap.fromTo(panel.current, { [mobile ? "yPercent" : "xPercent"]: 100 }, { [mobile ? "yPercent" : "xPercent"]: 0, duration: d(0.45), ease: "expo.out" });
-  });
-
-  const p = product;
-  return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={p.title}>
-      <div ref={scrim} className="absolute inset-0 bg-black/40" onClick={close} />
-      <div
-        ref={panel}
-        className="absolute inset-x-0 bottom-0 flex max-h-[90dvh] flex-col rounded-t-2xl bg-surface shadow-float md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[460px] md:rounded-none md:rounded-l-2xl"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line-strong md:hidden" />
-        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium">Product details</span>
-            {loading ? <Loader2 className="size-3.5 animate-spin text-ink-3" /> : <Chip className="h-5 text-[10px]">{source === "demo" ? "demo product" : "live from Shopify"}</Chip>}
-          </div>
-          <button onClick={close} aria-label="Close" className="inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-ink">
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="thin-scroll flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="aspect-[16/10] w-full">
-            <ProductThumb product={p} size="lg" />
-          </div>
-          <h2 className="mt-4 text-xl leading-snug font-semibold tracking-tight">{p.title}</h2>
-          <p className="mt-0.5 text-sm text-ink-3">{p.shopName ?? p.shop ?? p.vendor}</p>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="tnum text-[28px] font-semibold tracking-tight">{money(p.price, false, p.currency)}</span>
-            {unitsLabel(p.units) && <Chip>{unitsLabel(p.units)}</Chip>}
-            {p.rating && (
-              <span className="inline-flex items-center gap-1 text-sm text-ink-2">
-                <Star className="size-3.5 fill-current text-warn" /> {p.rating.value.toFixed(1)} <span className="text-ink-3">· {p.rating.count} reviews</span>
-              </span>
-            )}
-          </div>
-          {p.available === false && <p className="mt-2 text-sm text-danger">This item is sold out right now.</p>}
-          {p.options.length > 0 && (
-            <div className="mt-3 flex flex-col gap-2">
-              {p.options.slice(0, 3).map((o) => (
-                <div key={o.name}>
-                  <p className="text-xs text-ink-3">{o.name}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {o.values.slice(0, 8).map((v) => (
-                      <span key={v} className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-2">
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {p.description && <p className="mt-3 line-clamp-[12] text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{p.description}</p>}
-
-          <dl className="mt-5 divide-y divide-line rounded-xl border border-line">
-            {[
-              ["Units in one purchase", p.units != null ? String(p.units) : "—"],
-              ["Brand", p.vendor ?? "—"],
-              ["Store", p.shop ?? "—"],
-              ["Category", p.type ?? "—"],
-            ].map(([k, v]) => (
-              <div key={k} className="flex items-baseline justify-between gap-4 px-3.5 py-2.5 text-sm">
-                <dt className="text-ink-3">{k}</dt>
-                <dd className="min-w-0 truncate text-right text-ink">{v}</dd>
-              </div>
-            ))}
-            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
-              <dt className="shrink-0 text-ink-3">Product ID</dt>
-              <dd className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate font-mono text-[12px] text-ink">{p.id}</span>
-                <button
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(p.id);
-                    setCopied(true);
-                    window.setTimeout(() => setCopied(false), 1400);
-                  }}
-                  aria-label="Copy product ID"
-                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-surface-2 hover:text-ink"
-                >
-                  {copied ? <Check className="size-3.5 text-safe" /> : <Copy className="size-3.5" />}
-                </button>
-              </dd>
-            </div>
-          </dl>
-
-          <button onClick={() => setShowRaw((s) => !s)} className="mt-4 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink">
-            <ChevronDown className={cx("size-3.5 transition-transform", showRaw && "rotate-180")} /> Show raw data
-          </button>
-          {showRaw && (
-            <pre className="thin-scroll mt-2 max-h-64 overflow-auto rounded-lg border border-line bg-sunken p-3 font-mono text-[11.5px] leading-relaxed text-ink-2">{JSON.stringify(p.raw, null, 2)}</pre>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-line p-4 sm:px-5">
-          <div className="flex gap-2">
-            <Button variant="primary" size="lg" className="flex-1" disabled={p.available === false} onClick={() => onAdd(p)} icon={inCart ? <Check className="size-4" /> : <Plus className="size-4" />}>
-              {inCart ? `Add another (${inCart} in cart)` : "Add to cart"}
-            </Button>
-            {p.url && (
-              <a href={p.url} target="_blank" rel="noopener noreferrer" aria-label="Open on the store" className="btn-secondary inline-flex size-11 shrink-0 items-center justify-center rounded-[10px]">
-                <ArrowUpRight className="size-4" />
-              </a>
-            )}
-          </div>
-          <Button variant="ghost" size="md" onClick={() => onAskAI(refFromProduct(p))} icon={<Bot className="size-4" />}>
-            Ask an AI shopper to buy this instead
-          </Button>
-        </div>
       </div>
     </div>
   );
@@ -335,7 +164,7 @@ function CartPanel({ cart, className, onClose }: { cart: Cart; className?: strin
         <div className="flex flex-1 flex-col items-center justify-center gap-1.5 px-6 py-10 text-center">
           <ShoppingBag className="size-6 text-ink-3" />
           <p className="text-[14px] font-medium">Nothing here yet</p>
-          <p className="text-[13px] text-ink-3">Search for a product and press Add. You decide everything here; no AI is involved.</p>
+          <p className="text-[13px] text-ink-3">Search for a product and press Add.</p>
         </div>
       ) : (
         <>
@@ -388,7 +217,7 @@ function CartPanel({ cart, className, onClose }: { cart: Cart; className?: strin
               {cart.byShop.map(([shop, lines]) => (
                 <CheckoutButton key={shop} shop={shop} lines={lines} />
               ))}
-              <p className="text-center text-[11px] text-ink-3">Each store has its own checkout. You pay on the store’s site; this page never completes a purchase.</p>
+              <p className="text-center text-[11px] text-ink-3">Each store has its own secure checkout. You complete payment on the store’s site.</p>
             </div>
           </footer>
         </>
@@ -399,10 +228,21 @@ function CartPanel({ cart, className, onClose }: { cart: Cart; className?: strin
 
 /* ------------------------------------------------------------------ page */
 
-export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; onAskAI: (ref: ProductRef) => void }) {
+export function ShopYourself({
+  cart,
+  onAskAI,
+  onOpenProduct,
+  initialQuery = "",
+}: {
+  mode?: Mode;
+  cart: Cart;
+  onAskAI: (ref: ProductRef) => void;
+  onOpenProduct: (p: CatalogProduct) => void;
+  initialQuery?: string;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [cap, setCap] = useState("any");
   const [sort, setSort] = useState<Sort>("relevance");
   const [items, setItems] = useState<CatalogProduct[]>(demoCatalog());
@@ -414,12 +254,11 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
   const [total, setTotal] = useState<number | undefined>();
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState<CatalogProduct | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
-  const live = mode === "live";
   const query = q.trim();
   const urlQuery = isUrl(query);
   const terms = useMemo(() => splitQueries(query), [query]);
+  const country = useCountry();
   const capN = PRICE_CAPS.find((c) => c.value === cap)?.cap ?? null;
 
   useEffect(() => {
@@ -430,11 +269,19 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
         setLoading(true);
         try {
           if (!terms.length) {
-            setItems(demoCatalog().filter((p) => capN == null || (p.price ?? 0) <= capN));
-            setGroups(null);
-            setSource("demo");
+            const results = await Promise.all(BROWSE.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 4 })));
+            const live = results.some((r) => r.source !== "demo");
+            if (live) {
+              setGroups(BROWSE.map((term, i) => ({ term, items: results[i].items.slice(0, 4) })).filter((g) => g.items.length));
+              setItems(results.flatMap((r) => r.items));
+              setSource(results.find((r) => r.source !== "demo")!.source);
+            } else {
+              setGroups(null);
+              setItems(demoCatalog().filter((p) => capN == null || (p.price ?? 0) <= capN));
+              setSource("demo");
+            }
             setWarnings([]);
-            setNote(undefined);
+            setNote(results.find((r) => r.note)?.note);
             setCursor(undefined);
             setTotal(undefined);
           } else if (terms.length === 1) {
@@ -469,7 +316,7 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
       ctrl.abort();
       window.clearTimeout(t);
     };
-  }, [terms, capN, urlQuery, query]);
+  }, [terms, capN, urlQuery, query, country.code]);
 
   const loadMore = async () => {
     if (!cursor || terms.length !== 1) return;
@@ -572,7 +419,7 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
                 Open it <ArrowUpRight className="size-4" />
               </a>
               <Button variant="primary" size="lg" onClick={() => onAskAI({ url: query, title: query })} icon={<Bot className="size-4" />}>
-                Let an AI buy it
+                Have the assistant buy it
               </Button>
             </div>
           </section>
@@ -581,13 +428,13 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
             <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="tnum font-medium">{groups ? items.length : total != null && total > sorted.length ? `${sorted.length} of ${total.toLocaleString()}` : sorted.length}</span>
-                <span className="text-ink-3">{!query ? "products to start with" : groups ? `results for ${groups.length} items` : `results for “${terms[0] ?? query}”`}</span>
+                <span className="text-ink-3">{!query ? (groups ? `products across ${groups.length} categories` : "products to start with") : groups ? `results for ${groups.length} items` : `results for “${terms[0] ?? query}”`}</span>
                 <Chip tone={source === "demo" ? "neutral" : "safe"} className="h-5 text-[10px]">
                   {source === "demo" ? "demo products" : "live from Shopify"}
                 </Chip>
               </p>
-              <div className="flex items-center gap-2">
-                <Segmented size="sm" value={cap} onChange={setCap} options={PRICE_CAPS.map((c) => ({ value: c.value, label: c.label }))} className="flex-1 overflow-x-auto sm:flex-none" />
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex">
+                <Segmented size="sm" value={cap} onChange={setCap} options={PRICE_CAPS.map((c) => ({ value: c.value, label: c.label }))} className="w-full sm:w-auto" />
                 <label>
                   <span className="sr-only">Sort</span>
                   <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="field h-8 py-0 pr-8 text-[13px]">
@@ -619,13 +466,20 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
               <div className={cx("flex flex-col gap-6 transition-opacity", loading && "opacity-60")}>
                 {groups.map((g) => (
                   <section key={g.term} aria-label={`Results for ${g.term}`}>
-                    <h2 className="mb-2.5 flex items-baseline gap-2 text-[15px] font-semibold">
-                      {g.term} <span className="tnum text-xs font-normal text-ink-3">{g.items.length} results</span>
-                    </h2>
+                    <div className="mb-2.5 flex items-baseline justify-between gap-2">
+                      <h2 className="flex items-baseline gap-2 text-[15px] font-semibold">
+                        {g.term} {query && <span className="tnum text-xs font-normal text-ink-3">{g.items.length} results</span>}
+                      </h2>
+                      {!query && (
+                        <button onClick={() => setQ(g.term)} className="text-[13px] font-medium text-ink-2 hover:text-ink">
+                          See all
+                        </button>
+                      )}
+                    </div>
                     {g.items.length ? (
                       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
                         {sortItems(g.items, sort).map((p) => (
-                          <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => setOpen(p)} onAdd={() => add(p)} />
+                          <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={() => add(p)} />
                         ))}
                       </div>
                     ) : (
@@ -638,7 +492,7 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
               <>
                 <div className={cx("grid grid-cols-2 gap-2.5 transition-opacity sm:grid-cols-3 sm:gap-3 xl:grid-cols-4", loading && "opacity-60")}>
                   {sorted.map((p) => (
-                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => setOpen(p)} onAdd={() => add(p)} />
+                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={() => add(p)} />
                   ))}
                 </div>
                 {cursor && (
@@ -688,7 +542,6 @@ export function ShopYourself({ mode, cart, onAskAI }: { mode: Mode; cart: Cart; 
         </div>
       )}
 
-      {open && <DetailSheet seed={open} live={live} inCart={cart.qtyOf(open.id)} onClose={() => setOpen(null)} onAdd={add} onAskAI={onAskAI} />}
     </div>
   );
 }

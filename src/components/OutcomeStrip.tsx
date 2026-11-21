@@ -64,9 +64,9 @@ export function OutcomeStrip({ state, phase }: { state: ArenaState; phase: "idle
   // Before the first run: tell people how to read the page.
   if (phase === "idle") {
     const steps = [
-      { icon: MousePointerClick, title: "Pick a scenario", body: "Or show a product to the camera and type what to buy." },
-      { icon: Play, title: "Press Run", body: "Two copies of the same AI shopper get the exact same request and photo." },
-      { icon: Columns2, title: "Compare", body: "Left has no protection. Right goes through CartTrap first." },
+      { icon: MousePointerClick, title: "Describe it", body: "Pick an example, or show a product and type what you need." },
+      { icon: Play, title: "Ask both", body: "The same request goes to both assistants." },
+      { icon: Columns2, title: "Compare", body: "Left is the regular assistant. Right uses Safe Checkout." },
     ];
     return (
       <div ref={root} className="card grid gap-3 p-3.5 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-line sm:p-0">
@@ -90,32 +90,32 @@ export function OutcomeStrip({ state, phase }: { state: ArenaState; phase: "idle
 
   // Without CartTrap
   let left: { headline: string; detail: string; tone: Tone; icon: React.ReactNode; pending?: boolean };
-  if (v.status === "hijacked") left = { headline: "Hijacked", detail: call ? `Tried to buy ${call}.` : "Followed instructions hidden in the media.", tone: "danger", icon: <ShieldX className="size-5 shrink-0" /> };
-  else if (v.status === "intercepted") left = { headline: "Bought what you asked", detail: call ? `${call}.` : "The cart matched the request.", tone: "neutral", icon: <ShoppingCart className="size-5 shrink-0" /> };
-  else if (v.status === "idle" || v.status === "running") left = { headline: "Shopping…", detail: "Searching the catalog and reading the photo.", tone: "neutral", icon: null, pending: true };
+  if (v.status === "hijacked") left = { headline: "Unexpected order", detail: call ? `Put together ${call}.` : "The order doesn’t match the request.", tone: "danger", icon: <ShieldX className="size-5 shrink-0" /> };
+  else if (v.status === "intercepted") left = { headline: "Cart ready", detail: call ? `${call}.` : "The cart matched the request.", tone: "neutral", icon: <ShoppingCart className="size-5 shrink-0" /> };
+  else if (v.status === "idle" || v.status === "running") left = { headline: "Working on it…", detail: "Searching Shopify and looking at the photo.", tone: "neutral", icon: null, pending: true };
   else left = { headline: "Finished", detail: "No purchase attempted.", tone: "neutral", icon: <ShoppingCart className="size-5 shrink-0" /> };
   if (v.finished && v.status === "running") left = { headline: "No purchase", detail: "The shopper stopped without making a cart.", tone: "neutral", icon: <ShoppingCart className="size-5 shrink-0" /> };
 
   // With CartTrap
   let right: { headline: string; detail: string; tone: Tone; icon: React.ReactNode; pending?: boolean };
   const saved = state.fraudCard?.dollars_defended;
-  if (!verdict) right = { headline: "Checking…", detail: "Every purchase waits for CartTrap’s decision.", tone: "neutral", icon: null, pending: true };
-  else if (verdict.error) right = { headline: "Blocked to be safe", detail: `The check failed (${verdict.error}), so nothing was bought.`, tone: "warn", icon: <ShieldAlert className="size-5 shrink-0" /> };
-  else if (verdict.action === "approve_checkout") right = { headline: "Allowed the purchase", detail: `Approved in ${Math.round(verdict.latency_ms)} ms. It matches your request and budget.`, tone: "safe", icon: <ShieldCheck className="size-5 shrink-0" /> };
+  if (!verdict) right = { headline: "Verifying…", detail: "The order is checked before it’s placed.", tone: "neutral", icon: null, pending: true };
+  else if (verdict.error) right = { headline: "On hold", detail: `Verification unavailable (${verdict.error}).`, tone: "warn", icon: <ShieldAlert className="size-5 shrink-0" /> };
+  else if (verdict.action === "approve_checkout") right = { headline: "Order verified", detail: `Checked in ${Math.round(verdict.latency_ms)} ms.`, tone: "safe", icon: <ShieldCheck className="size-5 shrink-0" /> };
   else if (verdict.action === "escalate_to_neon_swap")
-    right = { headline: "Swapped to a safer product", detail: `The photo didn’t match the listing.${saved ? ` Saved ${money(saved)}.` : ""}`, tone: "safe", icon: <ShieldCheck className="size-5 shrink-0" /> };
+    right = { headline: "Better match suggested", detail: `The photo didn’t match the listing.${saved ? ` ${money(saved)} protected.` : ""}`, tone: "safe", icon: <ShieldCheck className="size-5 shrink-0" /> };
   else
     right = {
-      headline: "Stopped the attack",
-      detail: `Blocked in ${Math.round(verdict.latency_ms)} ms${saved ? `, saved ${money(saved)}` : ""}${state.fraudCard?.safe_cart ? ", and found a safe option." : "."}`,
+      headline: "Held for review",
+      detail: `Checked in ${Math.round(verdict.latency_ms)} ms${saved ? `, ${money(saved)} protected` : ""}${state.fraudCard?.safe_cart ? ", alternative suggested." : "."}`,
       tone: "safe",
       icon: <ShieldCheck className="size-5 shrink-0" />,
     };
 
   return (
     <div ref={root} className="grid grid-cols-2 gap-2.5 sm:gap-4">
-      <OutcomeCard eyebrow="Without CartTrap" {...left} />
-      <OutcomeCard eyebrow="With CartTrap" {...right} />
+      <OutcomeCard eyebrow="Assistant" {...left} />
+      <OutcomeCard eyebrow="Safe Checkout" {...right} />
     </div>
   );
 }

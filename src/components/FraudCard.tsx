@@ -58,33 +58,33 @@ export function FraudCard({
     const approved = status === "approved";
     const waiting = verdict && !approved;
     return (
-      <section ref={root} className={cx("card flex flex-col overflow-hidden", className)} aria-label="Why it was stopped">
+      <section ref={root} className={cx("card flex flex-col overflow-hidden", className)} aria-label="Order review">
         <header className="border-b border-line px-4 py-3 sm:px-5">
-          <p className="label">With CartTrap</p>
-          <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why it was stopped</h2>
+          <p className="label">Order review</p>
+          <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why was this held?</h2>
         </header>
         <div className="flex flex-1 flex-col justify-center p-5">
         {approved ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <ShieldCheck className="size-7 text-safe" />
-            <p className="text-[17px] font-semibold">Nothing was stopped</p>
-            <p className="max-w-xs text-sm text-ink-2">The cart matches your request and budget, so CartTrap let it through.</p>
+            <p className="text-[17px] font-semibold">Nothing to review</p>
+            <p className="max-w-xs text-sm text-ink-2">The order matches your request and budget.</p>
           </div>
         ) : waiting ? (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-ink-2">Writing the explanation and looking for a safer product within your budget…</p>
+            <p className="text-sm text-ink-2">Preparing the details and looking for an alternative within your budget…</p>
             {[0.92, 0.75, 0.55].map((w, i) => (
               <div key={i} className="h-3 animate-pulse rounded bg-surface-2" style={{ width: `${w * 100}%` }} />
             ))}
           </div>
         ) : (
           <div className="flex flex-col items-start gap-3 py-2">
-            <p className="text-[15px] text-ink-2">If CartTrap stops a purchase, you’ll see why here:</p>
+            <p className="text-[15px] text-ink-2">If an order is held, the details show up here:</p>
             <ul className="flex flex-col gap-1.5 text-sm text-ink-3">
-              <li>· how much money it saved</li>
-              <li>· what the photo said vs. what the store really sells</li>
-              <li>· which checks caught it</li>
-              <li>· a safer product you can buy instead</li>
+              <li>· the amount protected</li>
+              <li>· what the photo showed vs. the store listing</li>
+              <li>· which checks flagged it</li>
+              <li>· a suggested alternative</li>
             </ul>
           </div>
         )}
@@ -99,35 +99,35 @@ export function FraudCard({
   const attemptedShown = attempted > 0 ? attempted : card.dollars_defended + safeTotal;
 
   return (
-    <section ref={root} className={cx("card flex min-h-0 flex-col overflow-hidden", className)} aria-label="Why it was stopped">
+    <section ref={root} className={cx("card flex min-h-0 flex-col overflow-hidden", className)} aria-label="Order review">
         <header className="border-b border-line px-4 py-3 sm:px-5">
-          <p className="label">With CartTrap</p>
-          <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why it was stopped</h2>
+          <p className="label">Order review</p>
+          <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why was this held?</h2>
         </header>
       <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
         {/* dollars */}
         <div data-fc className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 border-b border-line pb-4">
           <div>
-            <p className="label" title="Dollars defended: what the hijacked cart would have charged, minus the safe option">Money saved</p>
+            <p className="label" title="Dollars defended: the held order total minus the suggested alternative">Amount protected</p>
             <p className="tnum mt-1 text-[40px] leading-none font-semibold tracking-[-0.035em] text-ink sm:text-[44px]">
               <span ref={dollarsRef}>{money(card.dollars_defended)}</span>
             </p>
           </div>
           <p className="tnum pb-1 font-mono text-[12px] text-ink-3">
-            <span className="text-danger">{money(attemptedShown)}</span> it tried to charge − <span className="text-safe">{money(safeTotal)}</span> safer option
+            <span className="text-danger">{money(attemptedShown)}</span> held − <span className="text-safe">{money(safeTotal)}</span> alternative
           </p>
         </div>
 
         {/* reason */}
         <div data-fc>
-          <p className="label mb-1.5">What happened</p>
+          <p className="label mb-1.5">Summary</p>
           <p className="text-[16px] leading-relaxed text-ink sm:text-[17px]">{card.reason}</p>
         </div>
 
         {/* evidence */}
         <div data-fc className="grid gap-2.5 sm:grid-cols-2">
           <div className="rounded-xl border border-danger-line p-3.5">
-            <p className="label mb-2 text-danger!">The photo said</p>
+            <p className="label mb-2 text-danger!">Text found in the photo</p>
             {card.media_claimed.length ? (
               <ul className="flex flex-col gap-1.5">
                 {card.media_claimed.map((c, i) => (
@@ -142,7 +142,7 @@ export function FraudCard({
             )}
           </div>
           <div className="rounded-xl border border-line p-3.5">
-            <p className="label mb-2">The store really sells</p>
+            <p className="label mb-2">Store listing</p>
             {sells ? (
               <dl className="flex flex-col gap-1.5">
                 {SELLS_KEYS.filter(([k]) => sells[k] != null).map(([k, label]) => (
@@ -153,7 +153,7 @@ export function FraudCard({
                 ))}
               </dl>
             ) : (
-              <p className="text-sm text-ink-3">We couldn’t find this product on Shopify to compare.</p>
+              <p className="text-sm text-ink-3">No store listing to compare with.</p>
             )}
           </div>
         </div>
@@ -161,7 +161,7 @@ export function FraudCard({
         {/* probes */}
         {top.length > 0 && (
           <div data-fc>
-            <p className="label mb-2">Checks that caught it</p>
+            <p className="label mb-2">Flagged checks</p>
             <ul className="flex flex-col gap-2">
               {top.map((p) => (
                 <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">

@@ -11,26 +11,26 @@ type StageKey = "launch" | "attack" | "blocked" | "mutate" | "bypass" | "diagnos
 type Tone = "neutral" | "danger" | "safe" | "warn";
 
 const STAGE: Record<StageKey, { title: string; icon: typeof Bug; tone: Tone }> = {
-  launch: { title: "Attacker started", icon: Rocket, tone: "neutral" },
-  attack: { title: "New attack", icon: Bug, tone: "neutral" },
-  blocked: { title: "CartTrap blocked it", icon: ShieldCheck, tone: "safe" },
-  mutate: { title: "Attacker tries a new trick", icon: Wand2, tone: "neutral" },
-  bypass: { title: "An attack got through", icon: ShieldX, tone: "danger" },
-  diagnose: { title: "CartTrap studies the miss", icon: Stethoscope, tone: "neutral" },
-  probe_proposed: { title: "New check written", icon: FlaskConical, tone: "warn" },
+  launch: { title: "Test run started", icon: Rocket, tone: "neutral" },
+  attack: { title: "New test order", icon: Bug, tone: "neutral" },
+  blocked: { title: "Held by Safe Checkout", icon: ShieldCheck, tone: "safe" },
+  mutate: { title: "New variation", icon: Wand2, tone: "neutral" },
+  bypass: { title: "Missed", icon: ShieldX, tone: "danger" },
+  diagnose: { title: "Reviewing the miss", icon: Stethoscope, tone: "neutral" },
+  probe_proposed: { title: "New check drafted", icon: FlaskConical, tone: "warn" },
   validate: { title: "New check tested", icon: CheckCircle2, tone: "safe" },
   patched: { title: "New check switched on", icon: GitCommitHorizontal, tone: "safe" },
-  reblocked: { title: "Same attack, now blocked", icon: ShieldCheck, tone: "safe" },
+  reblocked: { title: "Same order, now held", icon: ShieldCheck, tone: "safe" },
 };
 
 const ORDER: StageKey[] = ["attack", "blocked", "bypass", "probe_proposed", "patched", "reblocked"];
 const ORDER_LABEL: Record<string, string> = {
-  attack: "Attack",
-  blocked: "Blocked",
-  bypass: "Got through",
-  probe_proposed: "Learns",
-  patched: "Updates",
-  reblocked: "Blocked again",
+  attack: "Test",
+  blocked: "Held",
+  bypass: "Missed",
+  probe_proposed: "New check",
+  patched: "Enabled",
+  reblocked: "Held again",
 };
 
 interface Item {
@@ -147,10 +147,10 @@ export function RedTeam({
       <section className="card flex min-h-0 flex-col overflow-hidden">
         <header className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
           <div>
-            <p className="label mb-1">Self-healing</p>
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Watch CartTrap learn from an attack it missed</h1>
+            <p className="label mb-1">Safety updates</p>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">How Safe Checkout adds new checks</h1>
             <p className="mt-1 max-w-lg text-sm text-ink-2">
-              An attacker AI keeps changing its trick until one gets past CartTrap. CartTrap then writes one new check, makes sure it catches the attack without flagging normal photos, and switches it on.
+              Safe Checkout is tested continuously with new kinds of orders. When one slips through, a new check is drafted, tested on normal orders, and switched on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -182,16 +182,16 @@ export function RedTeam({
                 <span className="font-semibold">Couldn’t launch live.</span> {error}
               </p>
               <Button size="sm" onClick={onSwitchToReplay}>
-                Use demo data instead
+                Use sample data
               </Button>
             </div>
           )}
           {items.length === 0 ? (
             <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center">
               <Bug className="size-6 text-ink-3" />
-              <p className="text-[15px] font-medium">Press Launch to start</p>
+              <p className="text-[15px] font-medium">Start a test run</p>
               <p className="max-w-sm text-sm text-ink-3">
-                {mode === "replay" ? "Demo data: plays a scripted example of the full loop in about 15 seconds." : "Runs up to 3 live rounds against our own test agent."}
+                {mode === "replay" ? "Sample data: plays an example run in about 15 seconds." : "Runs up to 3 test rounds."}
               </p>
             </div>
           ) : (
@@ -253,7 +253,7 @@ export function RedTeam({
               <Chip>current</Chip>
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-3">Every learned check is saved as a new version, so a bad one can be rolled back.</p>
+          <p className="mt-2 text-xs text-ink-3">Each update is a new version and can be rolled back.</p>
         </section>
 
         <section className="card p-4 sm:p-5">
@@ -270,7 +270,7 @@ export function RedTeam({
               </p>
             </div>
           ) : (
-            <p className="text-sm text-ink-3">When an attack gets through, the check CartTrap writes to stop it shows up here.</p>
+            <p className="text-sm text-ink-3">New checks appear here.</p>
           )}
         </section>
 
@@ -279,7 +279,7 @@ export function RedTeam({
           {exploit ? (
             <ul className="flex flex-col gap-2.5">
               <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                <span className="text-[14px] font-medium">Catches the attack</span>
+                <span className="text-[14px] font-medium">Flags the missed order</span>
                 <span className={cx("tnum font-mono text-[13px] font-semibold", exploit.fired ? "text-safe" : "text-danger")}>{prob(exploit.p)}</span>
                 <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <span className="block h-full rounded-full bg-safe" style={{ width: `${exploit.p * 100}%` }} />
@@ -287,7 +287,7 @@ export function RedTeam({
               </li>
               {benign.map((b) => (
                 <li key={b.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                  <span className="truncate text-[13px] text-ink-2">Ignores normal photo: {humanize(b.id.replace(/^benign_/, "")).toLowerCase()}</span>
+                  <span className="truncate text-[13px] text-ink-2">Normal order: {humanize(b.id.replace(/^benign_/, "")).toLowerCase()}</span>
                   <span className={cx("tnum font-mono text-[12px]", b.p < 0.1 ? "text-ink-2" : "text-danger")}>{prob(b.p)}</span>
                   <span className="col-span-2 h-1 overflow-hidden rounded-full bg-surface-2">
                     <span className="block h-full rounded-full bg-ink-3" style={{ width: `${Math.max(2, b.p * 100)}%` }} />
@@ -296,7 +296,7 @@ export function RedTeam({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-ink-3">A new check only goes live if it catches the attack and stays quiet on 5 normal photos.</p>
+            <p className="text-sm text-ink-3">A check is only enabled if it flags the missed order and none of 5 normal orders.</p>
           )}
         </section>
       </aside>

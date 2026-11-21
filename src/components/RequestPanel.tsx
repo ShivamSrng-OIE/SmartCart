@@ -24,7 +24,7 @@ function kindOf(file: File): MediaKind | null {
 export function ModeBadge({ mode }: { mode: Mode }) {
   return mode === "replay" ? (
     <Chip tone="warn" className="h-6" mono={false}>
-      <TriangleAlert className="size-3" /> Demo data · scripted
+      <TriangleAlert className="size-3" /> Sample data
     </Chip>
   ) : (
     <Chip tone="safe" className="h-6" mono={false}>
@@ -40,7 +40,7 @@ export function RequestPanel({
   onReset,
   canReset,
   wide = false,
-  title = "Your test",
+  title = "Your request",
   runLabel = "Run",
   className,
 }: {
@@ -114,7 +114,7 @@ export function RequestPanel({
 
   const scenarios = (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium">Quick start</span>
+      <span className="text-[13px] font-medium">Examples</span>
       <div className="flex flex-wrap gap-1.5">
         {SCENARIOS.map((s) => (
           <button
@@ -129,7 +129,6 @@ export function RequestPanel({
               scenario?.id === s.id ? "border-ink bg-ink text-ink-inverse" : "border-line text-ink-2 hover:border-line-strong hover:text-ink",
             )}
           >
-            <span className={cx("size-1.5 shrink-0 rounded-full", s.expect === "block" ? "bg-danger" : "bg-safe")} />
             {s.title}
           </button>
         ))}
@@ -141,7 +140,7 @@ export function RequestPanel({
   const photo = (
     <div className="flex flex-col gap-1.5">
       <span className="flex items-center justify-between text-[13px] font-medium">
-        Photo <span className="text-xs font-normal text-ink-3">optional · checked, never obeyed</span>
+        Photo <span className="text-xs font-normal text-ink-3">optional</span>
       </span>
       <div
         className={cx("relative overflow-hidden rounded-xl border bg-sunken", wide ? "aspect-[4/3] xl:aspect-auto xl:h-[150px]" : "aspect-[2/1]", dragging ? "border-ink" : "border-line")}
@@ -167,7 +166,7 @@ export function RequestPanel({
               </Button>
             </div>
             <p className="text-xs text-ink-3">
-              {cam.state === "denied" ? "Camera blocked. Allow it in the browser, or upload a photo." : cam.state === "unavailable" ? "No camera found. Upload or drop a photo." : "Hold the product up to the camera, or drop a photo here."}
+              {cam.state === "denied" ? "Camera blocked. Allow it in the browser, or upload a photo." : cam.state === "unavailable" ? "No camera found. Upload or drop a photo." : "Show the product to the camera, or drop a photo here."}
             </p>
           </div>
         )}
@@ -208,7 +207,7 @@ export function RequestPanel({
   const request = (
     <div className="flex min-w-0 flex-col gap-1.5">
       <label htmlFor="request" className="text-[13px] font-medium">
-        What should the shopper buy?
+        What are you looking for?
       </label>
       <div className="relative">
         <textarea
@@ -336,8 +335,8 @@ export function RequestPanel({
         {busy ? "Running…" : runLabel}
       </Button>
       {canReset && (
-        <Button size="lg" variant="secondary" onClick={onReset} icon={<RotateCcw className="size-4" />} aria-label="Clear the result">
-          <span className="hidden sm:inline">Clear</span>
+        <Button size="lg" variant="secondary" onClick={onReset} icon={<RotateCcw className="size-4" />} aria-label="Start over">
+          <span className="hidden sm:inline">Start over</span>
         </Button>
       )}
     </div>

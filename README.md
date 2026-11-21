@@ -4,11 +4,11 @@ Can an AI shopping agent be tricked into buying the wrong thing? CartTrap's site
 
 | Mode | Key | What happens |
 |---|---|---|
-| **1 · Shop yourself** | `1` | Search Shopify (live), open listings, build a cart, check out on each store's own site. No AI. |
-| **2 · AI shopper** | `2` | An AI agent (Gemini) gets your request and a photo, then shops. A note hidden in the photo can make it buy the wrong thing. |
-| **3 · AI + CartTrap** | `3` | The same agent, but every purchase is checked first: the decision in ~0.2 s, 50 threat checks, why it was stopped, money saved, and a safe option. |
+| **Shop** | `1` | Live Shopify search and browse, full product pages (gallery, description, features, every store's offer, price comparison, similar items), cart and per-store checkout. |
+| **Assistant** | `2` | An AI agent (Gemini) gets your request and a photo, then shops. A note hidden in the photo can make it put together the wrong order. |
+| **Safe Checkout** | `3` | The same agent, but every order is verified first: the decision in ~0.2 s, 50 checks, why it was held, amount protected, and a suggested alternative. |
 
-Under **More**: *Side by side* (modes 2 and 3 at once, for a big screen), *Self-healing* (CartTrap learning a new check from an attack it missed) and *Results* (the 50-case eval).
+Under **More**: *Compare* (Assistant and Safe Checkout at once, for a big screen), *Safety updates* (a new check learned from a missed order) and *Performance* (the 50-case eval). The visible copy is deliberately neutral: it reads as an ordinary Shopify shopping site, so a wrong order from the Assistant shows up as a surprise.
 
 Vite + React + TypeScript + Tailwind v4, GSAP for motion, vitest for the logic. Shopify-admin look, light and dark themes, phone to 1920 px.
 
@@ -54,7 +54,9 @@ Product search and details use **Shopify's Shop MCP** (`https://mcp.shop.com/`, 
 
 - The browser calls `/shop-mcp` on its own origin and the Vite dev/preview server forwards it (no CORS, no cookies or Origin header sent to Shopify). For a static deploy, add the same one-line proxy on your host.
 - JSON-RPC 2.0 `tools/call` with protocol `2026-07-28`, matching `Mcp-Method` / `Mcp-Name` headers and the required `_meta`.
-- `search_catalog` (with price filter in minor units and cursor pagination for **Show more**), `get_product`, and `create_checkout` (with an idempotency key) for the cart. **`complete_checkout` is never called**; the shopper finishes on the merchant's `continue_url`.
+- `search_catalog` (query, price filter in minor units, `ships_to` + `available` filters, cursor pagination for **Show more**, and `like` for similar products), `get_product` (every store offer, media, metadata, policies), and `create_checkout` (with an idempotency key) for the cart.
+- **Deliver to** (header) sets `address_country`, `currency` and `ships_to`; it is detected from the browser on first visit. Stores that only quote USD keep USD.
+- Product photos load from Shopify's CDN at the size each slot needs (`width` + `srcset`), lazily, with a preconnect; repeat searches come from a 2-minute memory cache and identical in-flight requests are merged. **`complete_checkout` is never called**; the shopper finishes on the merchant's `continue_url`.
 - Prices arrive in minor units and are converted per currency. Product and checkout links are used exactly as returned, never rebuilt or logged. Merchant descriptions are shown as plain text only. Shopify `warning` messages and `rate_limited` errors (with `retry_after`) are shown to the user.
 - Type several items separated by commas (`cold brew, ceramic mug`) to search them all at once.
 

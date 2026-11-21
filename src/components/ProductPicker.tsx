@@ -6,6 +6,8 @@ import { gsap, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { cx } from "./ui";
 
+const POPULAR = "coffee";
+
 type Option = { kind: "none" } | { kind: "url"; url: string } | { kind: "product"; p: CatalogProduct };
 
 export function ProductPicker({ value, onChange }: { value: ProductRef | null; onChange: (v: ProductRef | null) => void; live?: boolean }) {
@@ -27,7 +29,7 @@ export function ProductPicker({ value, onChange }: { value: ProductRef | null; o
     const t = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const res = query ? await searchCatalog(query, { limit: 8, signal: ctrl.signal, network: true }) : { items: demoCatalog().slice(0, 6) };
+        const res = await searchCatalog(query || POPULAR, { limit: query ? 8 : 6, signal: ctrl.signal });
         setItems(res.items);
         setActive(0);
       } catch {
@@ -144,7 +146,7 @@ export function ProductPicker({ value, onChange }: { value: ProductRef | null; o
             {loading && <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-ink-3" />}
           </div>
           <ul id={listId} role="listbox" className="thin-scroll max-h-[300px] overflow-y-auto p-1">
-            {!query && <li className="label px-2.5 pt-2 pb-1">Demo products · type to search Shopify</li>}
+            {!query && <li className="label px-2.5 pt-2 pb-1">Popular on Shopify · type to search</li>}
             {options.map((o, i) => (
               <li key={o.kind === "product" ? o.p.id : o.kind} role="option" aria-selected={i === active}>
                 <button

@@ -19,20 +19,20 @@ type Tone = "neutral" | "danger" | "safe" | "warn";
 
 const COPY: Record<AgentKind, { step: string; title: string; body: string; models: string[]; run: string; other: string }> = {
   unprotected: {
-    step: "Mode 2",
-    title: "AI shopper, no protection",
-    body: "A normal AI shopping agent. It reads your request and the photo, searches Shopify and builds a cart. If the photo tells it to do something, it usually does.",
+    step: "Assistant",
+    title: "Shopping assistant",
+    body: "Tell the assistant what you need. Add a photo of the product if you have one, and it will find it on Shopify and build your cart.",
     models: ["Gemini 4 Hydrogen"],
-    run: "Send to the AI shopper",
-    other: "Run the same test with CartTrap",
+    run: "Ask the assistant",
+    other: "Try it with Safe Checkout",
   },
   protected: {
-    step: "Mode 3",
-    title: "AI shopper + CartTrap",
-    body: "The same shopper, but every purchase stops at CartTrap first. It reads the photo separately, runs 50 quick checks, blocks anything suspicious, explains why, and finds a safer option.",
+    step: "Safe Checkout",
+    title: "Assistant with Safe Checkout",
+    body: "The same assistant. Before any order is placed, Safe Checkout verifies it against your request and the store’s listing.",
     models: ["Gemini 4 Argon", "Decisions API", "Gemini 4 Neon"],
-    run: "Send through CartTrap",
-    other: "See what happens without CartTrap",
+    run: "Ask the assistant",
+    other: "Compare with the regular assistant",
   },
 };
 
@@ -124,46 +124,46 @@ export function AgentPage({
   if (kind === "unprotected") {
     const last = [...p.steps].reverse().find((s) => s.kind === "intercepted");
     const call = describeCall(last, state.products);
-    if (phase === "idle") result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "Ready when you are", body: `Press “${copy.run}”. You’ll see every step it takes and what it tries to buy.` };
+    if (phase === "idle") result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "What can I find for you?", body: "Describe what you need on the left. You’ll see each step the assistant takes and the order it puts together." };
     else if (p.status === "hijacked")
       result = {
         tone: "danger",
         icon: <ShieldX className="size-6 shrink-0" />,
         eyebrow: "Result",
-        headline: "It got tricked",
+        headline: "This order doesn’t match your request",
         body: (
           <>
-            It tried to buy <span className="font-medium text-ink">{call ?? "something you didn’t ask for"}</span>. You asked for {asked}. In this test the purchase was caught before it reached Shopify.
+            The assistant put together <span className="font-medium text-ink">{call ?? "an order you didn’t ask for"}</span>. You asked for {asked}. Sandbox mode, so nothing was charged.
           </>
         ),
         action: otherBtn,
       };
     else if (p.status === "intercepted")
-      result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "It bought what you asked", body: <>{call ? `${call}.` : "The cart matched your request."} Nothing tried to trick it this time.</>, action: otherBtn };
-    else if (p.finished) result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "It stopped without buying", body: "The shopper finished without building a cart." };
-    else result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: "Shopping…", body: "Searching the catalog and reading your photo." };
+      result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "Your cart is ready", body: <>{call ? `${call}.` : "The cart matches your request."} Sandbox mode, so nothing was charged.</>, action: otherBtn };
+    else if (p.finished) result = { tone: "neutral", icon: <ShoppingCart className="size-6 shrink-0" />, eyebrow: "Result", headline: "No order placed", body: "The assistant finished without building a cart." };
+    else result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: "Working on it…", body: "Searching Shopify and looking at your photo." };
   } else {
     const saved = state.fraudCard?.dollars_defended;
-    if (phase === "idle") result = { tone: "neutral", icon: <ShieldCheck className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "Ready when you are", body: `Press “${copy.run}”. CartTrap checks every purchase before it reaches Shopify.` };
-    else if (!verdict) result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: p.status === "idle" ? "Starting…" : "Checking…", body: "The shopper is working. Any purchase waits here for CartTrap’s decision." };
-    else if (verdict.error) result = { tone: "warn", icon: <ShieldAlert className="size-6 shrink-0" />, eyebrow: "Result", headline: "Blocked to be safe", body: `The check couldn’t finish (${verdict.error}), so CartTrap didn’t let anything through.` };
+    if (phase === "idle") result = { tone: "neutral", icon: <ShieldCheck className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "What can I find for you?", body: "Describe what you need on the left. Safe Checkout verifies the order before it’s placed." };
+    else if (!verdict) result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: p.status === "idle" ? "Starting…" : "Working on it…", body: "The assistant is shopping. The order will be verified before it’s placed." };
+    else if (verdict.error) result = { tone: "warn", icon: <ShieldAlert className="size-6 shrink-0" />, eyebrow: "Result", headline: "Order on hold", body: `Verification couldn’t finish (${verdict.error}), so the order was held. Nothing was charged.` };
     else if (verdict.action === "approve_checkout")
-      result = { tone: "safe", icon: <ShieldCheck className="size-6 shrink-0" />, eyebrow: "Result", headline: "Allowed: it matches your request", body: `Approved in ${Math.round(verdict.latency_ms)} ms. Nothing suspicious in the photo, and the cart fits what you asked for (${asked}).`, action: otherBtn };
+      result = { tone: "safe", icon: <ShieldCheck className="size-6 shrink-0" />, eyebrow: "Result", headline: "Order verified", body: `Checked in ${Math.round(verdict.latency_ms)} ms. It matches what you asked for (${asked}).`, action: otherBtn };
     else
       result = {
         tone: "safe",
         icon: <ShieldCheck className="size-6 shrink-0" />,
         eyebrow: "Result",
-        headline: verdict.action === "escalate_to_neon_swap" ? "Swapped to a safer product" : "CartTrap stopped the attack",
+        headline: verdict.action === "escalate_to_neon_swap" ? "We suggested a better match" : "Order held for review",
         body: (
           <>
-            Blocked in <span className="font-medium text-ink">{Math.round(verdict.latency_ms)} ms</span>
+            The order didn’t match your request, so it wasn’t placed
             {saved ? (
               <>
-                {" "}and saved <span className="font-medium text-ink">{money(saved)}</span>
+                {" "}(<span className="font-medium text-ink">{money(saved)}</span> protected)
               </>
             ) : null}
-            .{state.fraudCard?.safe_cart ? " A safer option you can buy is ready below." : state.fraudCard ? "" : " Writing up why…"}
+            .{state.fraudCard?.safe_cart ? " We found an alternative that fits." : state.fraudCard ? "" : " Preparing details…"}
           </>
         ),
         action: otherBtn,
@@ -174,7 +174,7 @@ export function AgentPage({
     <div className="mx-auto w-full max-w-[1600px]">
           <header className="mb-4 flex flex-col gap-2 lg:hidden">
             <div className="min-w-0">
-              <p className="label">{copy.step} of 3</p>
+              <p className="label">{copy.step}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">{copy.title}</h1>
               <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
             </div>
@@ -200,7 +200,7 @@ export function AgentPage({
         <div ref={resultRef} className="flex min-w-0 scroll-mt-20 flex-col gap-4">
           <header className="hidden flex-col gap-2 lg:flex xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0">
-              <p className="label">{copy.step} of 3</p>
+              <p className="label">{copy.step}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">{copy.title}</h1>
               <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
             </div>
@@ -217,11 +217,11 @@ export function AgentPage({
               <p className="flex items-start gap-2 text-sm text-danger">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  <span className="font-semibold">Couldn’t reach the {kind === "unprotected" ? "AI shopper" : "CartTrap"} API.</span> {error}
+                  <span className="font-semibold">The assistant isn’t responding.</span> {error}
                 </span>
               </p>
               <Button size="sm" onClick={onSwitchToReplay}>
-                Use demo data instead
+                Use sample data
               </Button>
             </div>
           )}
@@ -241,16 +241,16 @@ export function AgentPage({
               className="max-h-[70dvh] min-h-[320px]"
               footer={
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[13px] text-ink-2">It would have charged</span>
+                  <span className="text-[13px] text-ink-2">Order total</span>
                   <span className={cx("tnum text-lg font-semibold tracking-tight", state.victim.status === "hijacked" ? "text-danger" : "text-ink")}>{money(state.victim.attempted || null)}</span>
                 </div>
               }
             />
           ) : (
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-              <section className="card flex min-h-0 flex-col overflow-hidden" aria-label="How CartTrap decided">
+              <section className="card flex min-h-0 flex-col overflow-hidden" aria-label="Verification">
                 <header className="border-b border-line px-4 py-3 sm:px-5">
-                  <h2 className="text-[15px] font-semibold tracking-tight">How CartTrap decided</h2>
+                  <h2 className="text-[15px] font-semibold tracking-tight">Verification</h2>
                 </header>
                 <div className="flex flex-col p-4 sm:p-5">
                   <VerdictBanner verdict={verdict} checking={checking} size="md" />
@@ -259,8 +259,8 @@ export function AgentPage({
                       value={tab}
                       onChange={setTab}
                       options={[
-                        { value: "checks", label: `The ${rules.probes.length} checks` },
-                        { value: "log", label: `Every step · ${state.guarded.steps.length}` },
+                        { value: "checks", label: `Checks · ${rules.probes.length}` },
+                        { value: "log", label: `Activity · ${state.guarded.steps.length}` },
                       ]}
                     />
                   </div>

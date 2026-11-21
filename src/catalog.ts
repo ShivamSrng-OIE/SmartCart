@@ -8,6 +8,32 @@
  */
 import sample from "./fixtures/catalog.sample.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
+import { getCountry } from "./locale";
+
+export interface MediaItem {
+  type: "image" | "video" | "model" | "external";
+  url: string;
+  alt: string | null;
+  width: number | null;
+  height: number | null;
+  poster: string | null;
+}
+
+/** One store's offer for this product (get_product returns the same item from several sellers). */
+export interface Offer {
+  variantId: string;
+  title: string | null;
+  price: number | null;
+  currency: string;
+  available: boolean | null;
+  url: string | null;
+  checkoutUrl: string | null;
+  condition: string[];
+  rating: { value: number; count: number } | null;
+  image: string | null;
+  seller: { id: string | null; name: string | null; url: string | null; domain: string | null; links: { type: string; url: string }[] };
+  options: { name: string; label: string }[];
+}
 
 export interface CatalogProduct {
   id: string;
@@ -29,6 +55,12 @@ export interface CatalogProduct {
   available: boolean | null;
   rating: { value: number; count: number } | null;
   options: { name: string; values: string[] }[];
+  priceMax: number | null;
+  media: MediaItem[];
+  offers: Offer[];
+  features: string[];
+  highlights: string[];
+  handle: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -95,6 +127,7 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
   const vPrice = obj(v.price);
   const range = obj(p.price_range);
   const rangeMin = obj(range.min);
+  const rangeMax = obj(range.max);
 
   // Shop MCP prices are minor units with a currency; our demo data uses major units.
   let currency = str(vPrice.currency) ?? str(rangeMin.currency) ?? str(obj(p.price).currency) ?? str(p.currency) ?? "USD";
@@ -125,10 +158,58 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
     type: str(p.product_type) ?? str(p.category),
     available: typeof obj(v.availability).available === "boolean" ? (obj(v.availability).available as boolean) : null,
     rating: num(rating.value) != null ? { value: num(rating.value)!, count: num(rating.count) ?? 0 } : null,
+    priceMax: rangeMax.amount != null ? minorToMajor(rangeMax.amount, str(rangeMax.currency) ?? currency) : null,
+    media: media.map(toMedia).filter(Boolean) as MediaItem[],
+    offers: variants.map((x) => toOffer(x, currency)).filter(Boolean) as Offer[],
+    features: strList(obj(p.metadata).top_features),
+    highlights: strList(obj(p.metadata).unique_selling_points),
+    handle: str(p.handle),
     options: Array.isArray(p.options)
       ? (p.options as Obj[]).map((o) => ({ name: String(o.name ?? ""), values: Array.isArray(o.values) ? (o.values as Obj[]).map((x) => String(x.label ?? x)) : [] })).filter((o) => o.name)
       : [],
     raw: p,
+  };
+}
+
+function strList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
+}
+
+function toMedia(m: Obj): MediaItem | null {
+  const url = str(m.url) ?? str(obj(m.preview).url);
+  if (!url) return null;
+  const t = String(m.type ?? "image").toLowerCase();
+  const type: MediaItem["type"] = t.includes("video") ? "video" : t.includes("model") ? "model" : t.includes("external") ? "external" : "image";
+  return { type, url, alt: str(m.alt_text) ?? str(m.alt), width: num(m.width), height: num(m.height), poster: type === "image" ? null : str(obj(m.preview).url) };
+}
+
+function toOffer(v: Obj, fallbackCurrency: string): Offer | null {
+  const variantId = str(v.id);
+  if (!variantId) return null;
+  const price = obj(v.price);
+  const currency = str(price.currency) ?? fallbackCurrency;
+  const seller = obj(v.seller);
+  const rating = obj(v.rating);
+  const media = Array.isArray(v.media) ? (v.media as Obj[]) : [];
+  return {
+    variantId,
+    title: str(v.title),
+    price: price.amount != null ? minorToMajor(price.amount, currency) : null,
+    currency,
+    available: typeof obj(v.availability).available === "boolean" ? (obj(v.availability).available as boolean) : null,
+    url: str(v.url),
+    checkoutUrl: str(v.checkout_url),
+    condition: strList(v.condition),
+    rating: num(rating.value) != null ? { value: num(rating.value)!, count: num(rating.count) ?? 0 } : null,
+    image: str(media[0]?.url) ?? str(obj(media[0]?.preview).url),
+    seller: {
+      id: str(seller.id),
+      name: str(seller.name),
+      url: str(seller.url),
+      domain: str(seller.domain),
+      links: Array.isArray(seller.links) ? (seller.links as Obj[]).map((l) => ({ type: String(l.type ?? "link"), url: String(l.url ?? "") })).filter((l) => l.url) : [],
+    },
+    options: Array.isArray(v.options) ? (v.options as Obj[]).map((o) => ({ name: String(o.name ?? ""), label: String(o.label ?? "") })) : [],
   };
 }
 
@@ -166,7 +247,68 @@ function localSearch(q: string, maxPrice?: number | null, limit = 24): CatalogPr
 let backendSearchMissing = false;
 let shopifyUnavailable = false;
 
-export async function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
+// Short-lived memory cache + in-flight de-duplication: the same search typed twice, or asked
+// for by two components at once, costs one request. Nothing is persisted.
+const CACHE_TTL_MS = 2 * 60 * 1000;
+const cache = new Map<string, { at: number; value: Promise<SearchResult> }>();
+
+export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
+  const { maxPrice = null, limit = 12, cursor, network = true } = opts;
+  const key = JSON.stringify([q.trim().toLowerCase(), maxPrice, limit, cursor ?? null, network, getCountry().code]);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return withAbort(hit.value, opts.signal);
+  // The shared request is never tied to one caller's AbortSignal.
+  const value = searchUncached(q, { ...opts, signal: undefined });
+  cache.set(key, { at: Date.now(), value });
+  value.then((r) => r.source === "demo" && cache.delete(key)).catch(() => cache.delete(key));
+  if (cache.size > 60) cache.delete(cache.keys().next().value!);
+  return withAbort(value, opts.signal);
+}
+
+function withAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Items Shopify itself considers similar to this product (search_catalog `like`). */
+export async function similarProducts(id: string, opts: { limit?: number; signal?: AbortSignal; fallbackQuery?: string } = {}): Promise<CatalogProduct[]> {
+  try {
+    const doc = await searchCatalogMcp({ like: [id], limit: opts.limit ?? 12, signal: opts.signal });
+    const items = (doc.products ?? []).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
+    if (items.length) return items.filter((p) => p.id !== id);
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+  }
+  if (!opts.fallbackQuery) return [];
+  const r = await searchCatalog(opts.fallbackQuery, { limit: opts.limit ?? 12, signal: opts.signal });
+  return r.items.filter((p) => p.id !== id);
+}
+
+/** First live Shopify match for a query, or null. Used to give examples a real product. */
+export async function firstLiveProduct(q: string, signal?: AbortSignal): Promise<CatalogProduct | null> {
+  try {
+    const r = await searchCatalog(q, { limit: 4, signal });
+    return r.source !== "demo" ? (r.items.find((p) => p.available !== false) ?? r.items[0] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function searchUncached(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
   const { maxPrice = null, limit = 12, cursor, signal, network = true } = opts;
   const notes: string[] = [];
 
@@ -211,9 +353,13 @@ export async function searchCatalog(q: string, opts: SearchOptions = {}): Promis
   return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "demo", note: notes[0] };
 }
 
+const productCache = new Map<string, { product: CatalogProduct | null; source: CatalogSource }>();
+
 export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource }> {
   const demo = findDemo(id);
   if (demo || !network) return { product: demo, source: "demo" };
+  const hit = productCache.get(`${getCountry().code}:${id}`);
+  if (hit) return hit;
   if (!backendSearchMissing) {
     try {
       const r = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`);
@@ -228,7 +374,12 @@ export async function getProduct(id: string, network = true): Promise<{ product:
   try {
     const doc = await getProductMcp(id);
     const p = normalizeProduct(doc.product ?? doc);
-    if (p) return { product: p, source: "shopify" };
+    if (p) {
+      const res = { product: p, source: "shopify" as const };
+      productCache.set(`${getCountry().code}:${id}`, res);
+      if (productCache.size > 40) productCache.delete(productCache.keys().next().value!);
+      return res;
+    }
   } catch {
     /* fall through */
   }

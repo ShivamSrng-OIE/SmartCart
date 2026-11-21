@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SCENARIOS, type FixtureName, type Scenario } from "./config";
-import { findDemo, refFromProduct, type ProductRef } from "./catalog";
+import { findDemo, firstLiveProduct, refFromProduct, type ProductRef } from "./catalog";
 import { cleanRequest, parseIntent } from "./lib/intent";
 import type { Intent } from "./types";
 
@@ -64,10 +64,29 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const pickScenario = useCallback((s: Scenario) => {
-    const p = findDemo(s.productId);
-    setDraft((d) => ({ ...d, request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, scenarioId: s.id }));
+  // Examples get a real Shopify product: shown at once with the sample item, then swapped
+  // for the first live match as soon as Shopify answers.
+  const liveReq = useRef(0);
+  const attachLive = useCallback((s: Scenario) => {
+    const ticket = ++liveReq.current;
+    void firstLiveProduct(s.search).then((p) => {
+      if (!p || ticket !== liveReq.current) return;
+      setDraft((d) => (d.scenarioId === s.id ? { ...d, product: refFromProduct(p) } : d));
+    });
   }, []);
+
+  const pickScenario = useCallback(
+    (s: Scenario) => {
+      const p = findDemo(s.productId);
+      setDraft((d) => ({ ...d, request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, scenarioId: s.id }));
+      attachLive(s);
+    },
+    [attachLive],
+  );
+
+  useEffect(() => {
+    attachLive(SCENARIOS[0]);
+  }, [attachLive]);
 
   const value = useMemo<DraftApi>(() => {
     const scenario = SCENARIOS.find((s) => s.id === draft.scenarioId) ?? null;

@@ -33,11 +33,11 @@ const STATUS: Record<Variant, Record<PaneState["status"], { label: string; tone:
 
 // Role first, model in the tooltip: judges read roles, engineers can still hover for the model.
 const SOURCE_LABEL: Record<string, string> = {
-  argon: "Photo reader",
-  hydrogen: "Shopper",
-  neon: "Investigator",
-  carttrap: "CartTrap",
-  firewall: "CartTrap",
+  argon: "Photo",
+  hydrogen: "Assistant",
+  neon: "Review",
+  carttrap: "Safe Checkout",
+  firewall: "Safe Checkout",
 };
 const SOURCE_MODEL: Record<string, string> = { argon: "Gemini 4 Argon", hydrogen: "Gemini 4 Hydrogen", neon: "Gemini 4 Neon" };
 
@@ -113,18 +113,18 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
           <div className="min-w-0">
             <div className={cx("flex items-center gap-2 text-[13px] font-semibold", danger ? "text-danger" : "text-warn")}>
               <ShieldAlert className="size-4" />
-              {danger ? "Tried to buy the wrong thing" : "Cart ready"}
+              {danger ? "Order doesn’t match your request" : "Order ready"}
             </div>
             <p className="mt-1 text-[15px] font-medium text-ink">
               {toolLabel(step.title)}
               <span className="font-normal text-ink-2"> · {summarize(step, products) ?? "—"}</span>
             </p>
-            <p className="mt-0.5 text-xs text-ink-3">This is a test copy, so we caught the call. Nothing was actually bought.</p>
+            <p className="mt-0.5 text-xs text-ink-3">Sandbox mode: the order was prepared but not submitted, so nothing was charged.</p>
           </div>
           {step.spend != null && (
             <div className="text-right">
               <div className={cx("tnum text-xl font-semibold tracking-tight", danger ? "text-danger" : "text-ink")}>{money(step.spend)}</div>
-              <div className="label mt-0.5">would charge</div>
+              <div className="label mt-0.5">order total</div>
             </div>
           )}
         </div>
@@ -140,12 +140,12 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
     const v = step.verdict;
     const Icon = v.error ? ShieldX : v.action === "approve_checkout" ? ShieldCheck : v.action === "escalate_to_neon_swap" ? ShieldAlert : ShieldX;
     const label = v.error
-      ? "Check failed, blocked to be safe"
+      ? "Verification unavailable, order held"
       : v.action === "approve_checkout"
-        ? "CartTrap approved this purchase"
+        ? "Order verified"
         : v.action === "escalate_to_neon_swap"
-          ? "CartTrap swapped to a safer product"
-          : "CartTrap blocked this purchase";
+          ? "Better match suggested"
+          : "Order held for review";
     return (
       <li data-step className="flex items-center gap-3 py-2">
         <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
@@ -163,7 +163,7 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
       return (
         <li data-step className="flex items-center gap-3 py-1.5">
           <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
-          <span className="text-[13px] text-ink-2">Explanation ready</span>
+          <span className="text-[13px] text-ink-2">Review details ready</span>
         </li>
       );
     }
@@ -198,8 +198,8 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
             <span className={cx("text-[14px] font-medium", step.tone === "neutral" ? "text-ink" : toneText(step.tone))}>{toolLabel(step.title)}</span>
-            {source === "neon" && <Chip className="h-5 px-1.5 text-[10px]">safe swap</Chip>}
-            {pending && <span className="text-xs text-warn">waiting for CartTrap…</span>}
+            {source === "neon" && <Chip className="h-5 px-1.5 text-[10px]">alternative</Chip>}
+            {pending && <span className="text-xs text-warn">verifying…</span>}
             {step.spend != null && <span className="tnum ml-auto pl-2 font-mono text-xs text-ink-2">{money(step.spend)}</span>}
           </span>
           <span className="block truncate text-[13px] text-ink-2">{summarize(step, products)}</span>
@@ -267,13 +267,13 @@ export function TracePane({
     { dependencies: [pane.status] },
   );
 
-  const title = variant === "victim" ? "What the unprotected shopper did" : "What the protected shopper did";
-  const subtitle = variant === "victim" ? "Without CartTrap · every step, live" : "With CartTrap · every step, live";
+  const title = variant === "victim" ? "Assistant activity" : "Assistant activity";
+  const subtitle = variant === "victim" ? "Assistant" : "Safe Checkout";
 
   const list =
     pane.steps.length === 0 ? (
       <div className="flex h-full min-h-[120px] items-center justify-center px-6 text-center text-sm text-ink-3">
-        {variant === "victim" ? "Press Run to watch this shopper search, read the photo and build a cart." : "Each step the protected shopper takes shows up here, including the check before any purchase."}
+        {variant === "victim" ? "Steps appear here as the assistant searches and builds your cart." : "Steps appear here, including the check before the order is placed."}
       </div>
     ) : (
       <ol ref={listRef} className="relative flex flex-col gap-0.5">

@@ -3,7 +3,7 @@ import { WifiOff } from "lucide-react";
 import { ALL_VIEWS, Header, MODES, type View } from "./components/Header";
 import { HomePage } from "./components/Home";
 import { ShopYourself } from "./components/ShopYourself";
-import { AgentPage } from "./components/AgentPage";
+import type { CatalogProduct } from "./catalog";
 import { useBackend } from "./hooks/useBackend";
 import { useTheme } from "./hooks/useTheme";
 import { useCart } from "./hooks/useCart";
@@ -11,6 +11,8 @@ import { useDraft } from "./draft";
 import { gsap, useGSAP, d } from "./lib/motion";
 
 // Secondary pages load on demand so the first screen stays light.
+const ProductPage = lazy(() => import("./components/ProductPage").then((m) => ({ default: m.ProductPage })));
+const AgentPage = lazy(() => import("./components/AgentPage").then((m) => ({ default: m.AgentPage })));
 const Arena = lazy(() => import("./components/Arena").then((m) => ({ default: m.Arena })));
 const RedTeam = lazy(() => import("./components/RedTeam").then((m) => ({ default: m.RedTeam })));
 const Scoreboard = lazy(() => import("./components/Scoreboard").then((m) => ({ default: m.Scoreboard })));
@@ -21,9 +23,13 @@ function PageLoading() {
   return <div className="card h-64 animate-pulse" aria-label="Loading" />;
 }
 
-function viewFromHash(): View {
-  const h = window.location.hash.replace(/^#\/?/, "") as View;
-  return ALL_VIEWS.includes(h) ? h : "home";
+function parseHash(): { view: View; productId: string | null } {
+  const h = window.location.hash.replace(/^#\/?/, "");
+  if (h.startsWith("product/")) {
+    const id = decodeURIComponent(h.slice("product/".length));
+    return id ? { view: "product", productId: id } : { view: "shop", productId: null };
+  }
+  return { view: ALL_VIEWS.includes(h as View) && h !== "product" ? (h as View) : "home", productId: null };
 }
 
 export default function App() {
@@ -31,8 +37,11 @@ export default function App() {
   const backend = useBackend();
   const cart = useCart();
   const { set: setDraft } = useDraft();
-  const [view, setView] = useState<View>(viewFromHash);
+  const [view, setView] = useState<View>(() => parseHash().view);
+  const [productId, setProductId] = useState<string | null>(() => parseHash().productId);
+  const [productSeed, setProductSeed] = useState<CatalogProduct | null>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const [shopQuery, setShopQuery] = useState("");
 
   const go = useCallback((v: View) => {
     setView(v);
@@ -40,9 +49,21 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, []);
 
+  const openProduct = useCallback((p: CatalogProduct) => {
+    setProductSeed(p);
+    setProductId(p.id);
+    setView("product");
+    window.history.pushState(null, "", `#/product/${encodeURIComponent(p.id)}`);
+    window.scrollTo({ top: 0 });
+  }, []);
+
   // Browser back/forward walks between pages.
   useEffect(() => {
-    const onPop = () => setView(viewFromHash());
+    const onPop = () => {
+      const r = parseHash();
+      setView(r.view);
+      setProductId(r.productId);
+    };
     window.addEventListener("popstate", onPop);
     window.addEventListener("hashchange", onPop);
     return () => {
@@ -66,15 +87,16 @@ export default function App() {
   useEffect(() => {
     const titles: Record<View, string> = {
       home: "CartTrap",
-      shop: "Shop yourself · CartTrap",
-      unprotected: "AI shopper · CartTrap",
-      protected: "AI shopper + CartTrap",
-      compare: "Side by side · CartTrap",
-      redteam: "Self-healing · CartTrap",
-      results: "Results · CartTrap",
+      product: productSeed?.title ? `${productSeed.title} · CartTrap` : "Product · CartTrap",
+      shop: "Shop · CartTrap",
+      unprotected: "Assistant · CartTrap",
+      protected: "Safe Checkout · CartTrap",
+      compare: "Compare · CartTrap",
+      redteam: "Safety updates · CartTrap",
+      results: "Performance · CartTrap",
     };
     document.title = titles[view];
-  }, [view]);
+  }, [view, productSeed?.title]);
 
   useGSAP(
     () => {
@@ -100,7 +122,7 @@ export default function App() {
             <p className="flex items-center gap-2 text-[13px] text-warn">
               <WifiOff className="size-4 shrink-0" />
               <span>
-                <span className="font-semibold">The AI shopper APIs aren’t reachable.</span> Switch to demo data, or start them and retry.
+                <span className="font-semibold">The assistant isn’t connected.</span> Use sample data for now, or retry.
               </span>
             </p>
             <div className="flex items-center gap-1.5">
@@ -108,7 +130,7 @@ export default function App() {
                 Retry
               </button>
               <button onClick={toReplay} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
-                Use demo data
+                Use sample data
               </button>
             </div>
           </div>
@@ -116,12 +138,38 @@ export default function App() {
       )}
       <main id="main" ref={mainRef} className="mx-auto w-full max-w-[1920px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8">
         <div key={view} className="flex flex-col gap-4">
-          {view === "home" && <HomePage onView={go} />}
+          <Suspense fallback={<PageLoading />}>
+          {view === "home" && (
+            <HomePage
+              onView={go}
+              onOpenProduct={openProduct}
+              onSearch={(q) => {
+                setShopQuery(q);
+                go("shop");
+              }}
+            />
+          )}
           {view === "shop" && (
             <ShopYourself
+              initialQuery={shopQuery}
               mode={backend.mode}
               cart={cart}
+              onOpenProduct={openProduct}
               onAskAI={(ref) => {
+                setDraft({ product: ref, scenarioId: null });
+                go("unprotected");
+              }}
+            />
+          )}
+          {view === "product" && productId && (
+            <ProductPage
+              key={productId}
+              id={productId}
+              seed={productSeed?.id === productId ? productSeed : null}
+              cart={cart}
+              onBack={() => (window.history.length > 1 ? window.history.back() : go("shop"))}
+              onOpen={openProduct}
+              onAskAssistant={(ref) => {
                 setDraft({ product: ref, scenarioId: null });
                 go("unprotected");
               }}
@@ -133,7 +181,6 @@ export default function App() {
           {view === "protected" && (
             <AgentPage kind="protected" mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} onOtherMode={() => go("unprotected")} />
           )}
-          <Suspense fallback={<PageLoading />}>
           {view === "compare" && <Arena mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} />}
           {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} onSwitchToReplay={toReplay} />}
           {view === "results" && <Scoreboard results={backend.evalResults} source={backend.evalSource} />}

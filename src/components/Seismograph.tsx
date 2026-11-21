@@ -6,13 +6,13 @@ import { Chip, cx } from "./ui";
 
 const CATEGORY_ORDER: ProbeCategory[] = ["injection", "spend_hijack", "coercion", "pack_lie", "split_payload", "privacy", "promo_benign"];
 const CATEGORY_LABEL: Record<ProbeCategory, string> = {
-  injection: "Injection",
-  spend_hijack: "Spend hijack",
-  coercion: "Coercion",
-  pack_lie: "Pack lie",
-  split_payload: "Split payload",
+  injection: "Hidden instructions",
+  spend_hijack: "Spending",
+  coercion: "Pressure",
+  pack_lie: "Listing match",
+  split_payload: "Combined media",
   privacy: "Privacy",
-  promo_benign: "Benign promo",
+  promo_benign: "Normal promos",
 };
 
 interface Light {
@@ -112,16 +112,16 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
     <div ref={root} className="@container flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[13px] text-ink-2">Each square is one yes/no check on the photo, the real listing and the cart. Red means it found a problem.</p>
+          <p className="text-[13px] text-ink-2">Each square is one check on the photo, the store listing and the order. Red means it needs attention.</p>
           <span className="tnum text-xs text-ink-3">
             {lights.length} checks · rule set v{rules.version}
             {!rulesLive && <span title="GET /api/rules isn't serving yet; showing the bundled sample rule set"> · sample</span>}
           </span>
         </div>
         {evaluated ? (
-          <Chip tone={fired.length ? "danger" : "safe"}>{fired.length ? `${fired.length} problems found` : "no problems"}</Chip>
+          <Chip tone={fired.length ? "danger" : "safe"}>{fired.length ? `${fired.length} flagged` : "all clear"}</Chip>
         ) : (
-          <Chip>{checking ? "checking…" : "waiting"}</Chip>
+          <Chip>{checking ? "verifying…" : "waiting"}</Chip>
         )}
       </div>
 
@@ -140,7 +140,7 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        <span className="pointer-events-none absolute top-1.5 right-2 font-mono text-[10px] text-ink-3">above the dashed line = problem</span>
+        <span className="pointer-events-none absolute top-1.5 right-2 font-mono text-[10px] text-ink-3">above the line = flagged</span>
       </div>
 
       {/* lights */}
@@ -189,7 +189,7 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
               <p className="text-[13px] font-medium text-ink">
                 {humanize(focused.probe.id)}
                 <span className="ml-2 font-mono text-[10px] tracking-wide text-ink-3 uppercase">{CATEGORY_LABEL[focused.probe.category] ?? focused.probe.category}</span>
-                {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">learned</span>}
+                {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">new</span>}
               </p>
               <p className="text-xs leading-snug text-ink-3">{focused.probe.instructions}</p>
             </div>
@@ -201,7 +201,7 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
             </div>
           </>
         ) : (
-          <p className="self-center text-xs text-ink-3">Hover or tap a square to see what that check asks.</p>
+          <p className="self-center text-xs text-ink-3">Hover or tap a square to see what it checks.</p>
         )}
       </div>
 

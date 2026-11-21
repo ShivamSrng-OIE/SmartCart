@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, Sun, Swords, Trophy, X } from "lucide-react";
 import type { Mode } from "../hooks/useBackend";
+import { COUNTRIES, setCountry, useCountry } from "../locale";
 import type { Theme } from "../hooks/useTheme";
 import { gsap, d } from "../lib/motion";
 import { Dot, cx } from "./ui";
 
-export type View = "home" | "shop" | "unprotected" | "protected" | "compare" | "redteam" | "results";
+export type View = "home" | "shop" | "product" | "unprotected" | "protected" | "compare" | "redteam" | "results";
 
 export interface NavItem {
   id: View;
@@ -18,32 +19,89 @@ export interface NavItem {
 
 /** The three modes: the main way through the site. */
 export const MODES: NavItem[] = [
-  { id: "shop", label: "Shop yourself", short: "Yourself", hint: "Search and buy on your own", icon: Search, key: "1" },
-  { id: "unprotected", label: "AI shopper", short: "AI shopper", hint: "An AI buys for you, no protection", icon: Bot, key: "2" },
-  { id: "protected", label: "AI + CartTrap", short: "+ CartTrap", hint: "The same AI, checked by CartTrap", icon: ShieldCheck, key: "3" },
+  { id: "shop", label: "Shop", short: "Shop", hint: "Search products and check out yourself", icon: Search, key: "1" },
+  { id: "unprotected", label: "Assistant", short: "Assistant", hint: "Let the AI assistant shop for you", icon: Bot, key: "2" },
+  { id: "protected", label: "Safe Checkout", short: "Safe", hint: "The assistant, with every order verified", icon: ShieldCheck, key: "3" },
 ];
 
 export const MORE: NavItem[] = [
-  { id: "compare", label: "Side by side", short: "Compare", hint: "Run modes 2 and 3 together", icon: Columns2 },
-  { id: "redteam", label: "Self-healing", short: "Learning", hint: "Watch CartTrap learn from a miss", icon: Swords },
-  { id: "results", label: "Results", short: "Results", hint: "How well it works on 50 tests", icon: Trophy },
+  { id: "compare", label: "Compare", short: "Compare", hint: "Assistant and Safe Checkout side by side", icon: Columns2 },
+  { id: "redteam", label: "Safety updates", short: "Updates", hint: "How Safe Checkout learns new checks", icon: Swords },
+  { id: "results", label: "Performance", short: "Performance", hint: "Accuracy on 50 test orders", icon: Trophy },
 ];
 
-export const ALL_VIEWS: View[] = ["home", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];
+export const ALL_VIEWS: View[] = ["home", "product", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];
+
+/** Logo: a shopping bag whose body carries a check. Works at 16px and in both themes. */
+export function LogoMark({ className = "size-7" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} aria-hidden>
+      <rect width="32" height="32" rx="9" fill="var(--brand)" />
+      <path d="M11.5 11V9.75a4.5 4.5 0 0 1 9 0V11" fill="none" stroke="var(--brand-ink)" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M8.6 12.4c.1-.8.8-1.4 1.6-1.4h11.6c.8 0 1.5.6 1.6 1.4l1.1 10.2a2.4 2.4 0 0 1-2.4 2.7H9.9a2.4 2.4 0 0 1-2.4-2.7z" fill="var(--brand-ink)" />
+      <path d="m12.6 18.4 2.4 2.4 4.6-4.8" fill="none" stroke="var(--brand)" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export function Logo() {
   return (
     <span className="flex items-center gap-2">
-      <span className="flex size-7 items-center justify-center rounded-lg bg-brand text-brand-ink shadow-[inset_0_-1px_0_rgb(0_0_0/0.3)]">
-        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.1L20 8H6.2" />
-          <path d="M10.5 10.8l2 2 3.5-3.6" />
-          <circle cx="9.5" cy="19.5" r="1" fill="currentColor" stroke="none" />
-          <circle cx="16.5" cy="19.5" r="1" fill="currentColor" stroke="none" />
-        </svg>
-      </span>
-      <span className="text-[15px] font-semibold tracking-tight">CartTrap</span>
+      <LogoMark />
+      <span className="text-[15px] font-semibold tracking-[-0.02em]">CartTrap</span>
     </span>
+  );
+}
+
+function CountryPicker({ compact = false }: { compact?: boolean }) {
+  const country = useCountry();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={`Deliver to ${country.name}. Prices in ${country.currency} where stores support it.`}
+        className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink", compact && "w-full justify-between px-3")}
+      >
+        <span className="rounded bg-surface-2 px-1 font-mono text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{country.code}</span>
+        <span className={compact ? "" : "hidden lg:inline"}>{compact ? `Deliver to ${country.name}` : country.currency}</span>
+        <ChevronDown className="size-3.5" />
+      </button>
+      {open && (
+        <ul role="listbox" aria-label="Deliver to" className={cx("thin-scroll absolute z-50 max-h-80 w-60 overflow-y-auto rounded-xl bg-surface p-1 shadow-[0_0_0_1px_var(--line),var(--shadow-lg)]", compact ? "bottom-[calc(100%+6px)] left-0" : "top-[calc(100%+6px)] right-0")}>
+          <li className="label px-2.5 pt-2 pb-1">Deliver to</li>
+          {COUNTRIES.map((c) => (
+            <li key={c.code} role="option" aria-selected={c.code === country.code}>
+              <button
+                onClick={() => {
+                  setCountry(c.code);
+                  setOpen(false);
+                }}
+                className={cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-surface-2", c.code === country.code && "bg-surface-2 font-medium")}
+              >
+                <span className="w-7 rounded bg-surface-2 px-1 text-center font-mono text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{c.code}</span>
+                <span className="flex-1">{c.name}</span>
+                <span className="text-xs text-ink-3">{c.currency}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -67,18 +125,18 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
 function ModeSwitch({ mode, online, onChange }: { mode: Mode; online: boolean | null; onChange: (m: Mode) => void }) {
   return (
-    <div className="flex items-center rounded-lg bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]" role="radiogroup" aria-label="AI shoppers: live or demo data">
+    <div className="flex items-center rounded-lg bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]" role="radiogroup" aria-label="Assistant: live or sample data">
       {(["live", "replay"] as Mode[]).map((m) => (
         <button
           key={m}
           role="radio"
           aria-checked={mode === m}
           onClick={() => onChange(m)}
-          title={m === "live" ? (online ? "AI shoppers run on the real Gemini APIs" : "The AI shopper APIs aren’t reachable right now") : "AI shoppers play scripted sample runs. Product search stays live."}
+          title={m === "live" ? (online ? "The assistant is connected" : "The assistant service isn’t reachable right now") : "The assistant uses sample data. Product search stays live."}
           className={cx("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all", mode === m ? "bg-surface text-ink shadow-card" : "text-ink-3 hover:text-ink")}
         >
           {m === "live" && <Dot tone={online ? "safe" : online === false ? "danger" : "neutral"} pulse={!!online && mode === "live"} />}
-          {m === "live" ? "Live" : "Demo"}
+          {m === "live" ? "Live" : "Sample"}
         </button>
       ))}
     </div>
@@ -194,6 +252,9 @@ export function Header({
           </nav>
 
           <div className="ml-auto flex items-center gap-1 md:ml-0">
+            <span className="hidden sm:block">
+              <CountryPicker />
+            </span>
             <MoreMenu view={view} onView={onView} />
             <ModeSwitch mode={mode} online={online} onChange={onMode} />
             <ThemeToggle theme={theme} onToggle={onTheme} />
@@ -227,13 +288,16 @@ export function Header({
           <div className="absolute inset-0 bg-black/40" onClick={() => setSheet(false)} />
           <div ref={sheetRef} className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface p-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line-strong" />
+            <div className="mb-2 sm:hidden">
+              <CountryPicker compact />
+            </div>
             <div className="mb-1 flex items-center justify-between px-2">
               <span className="text-[15px] font-semibold">More</span>
               <button onClick={() => setSheet(false)} aria-label="Close" className="inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2">
                 <X className="size-4" />
               </button>
             </div>
-            {[{ id: "home" as View, label: "Home", short: "Home", hint: "What each mode does", icon: Home }, ...MORE].map((m) => {
+            {[{ id: "home" as View, label: "Home", short: "Home", hint: "Back to the start", icon: Home }, ...MORE].map((m) => {
               const Icon = m.icon;
               return (
                 <button

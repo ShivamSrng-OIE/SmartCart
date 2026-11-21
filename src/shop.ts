@@ -10,6 +10,8 @@
  *  - `rate_limited` errors carry retry_after seconds
  */
 
+import { getCountry } from "./locale";
+
 export const SHOP_MCP_PATH = "/shop-mcp";
 const PROTOCOL = "2026-07-28";
 const CLIENT = { name: "carttrap-arena", version: "0.1.0" };
@@ -115,7 +117,9 @@ export function minorToMajor(amount: unknown, currency = "USD"): number | null {
 }
 
 export interface SearchParams {
-  query: string;
+  query?: string;
+  /** product or variant ids to find similar items for (Shop MCP `catalog.like`) */
+  like?: string[];
   maxPrice?: number | null;
   currency?: string;
   country?: string;
@@ -131,22 +135,29 @@ export interface SearchDoc {
 }
 
 export function searchCatalogMcp(p: SearchParams): Promise<SearchDoc> {
-  const currency = p.currency ?? "USD";
+  const loc = getCountry();
+  const currency = p.currency ?? loc.currency;
+  const country = p.country ?? loc.code;
   const catalog: Record<string, unknown> = {
-    query: p.query,
-    context: { address_country: p.country ?? "US", currency },
+    ...(p.query ? { query: p.query } : {}),
+    ...(p.like?.length ? { like: p.like.slice(0, 2).map((id) => ({ id })) } : {}),
+    context: { address_country: country, currency, language: typeof navigator !== "undefined" ? navigator.language : "en" },
     pagination: { limit: Math.min(50, Math.max(1, p.limit ?? 12)), ...(p.cursor ? { cursor: p.cursor } : {}) },
   };
+  // Only show what can actually ship to the shopper, and in stock.
+  const filters: Record<string, unknown> = { ships_to: { country }, available: true };
   if (p.maxPrice != null) {
     // filters.price is in minor units of context.currency
     const major = minorToMajor(1, currency) ?? 0.01;
-    catalog.filters = { price: { max: Math.round(p.maxPrice / major) } };
+    filters.price = { max: Math.round(p.maxPrice / major) };
   }
+  catalog.filters = filters;
   return callTool<SearchDoc>("search_catalog", { catalog }, p.signal);
 }
 
-export function getProductMcp(id: string, signal?: AbortSignal, currency = "USD", country = "US") {
-  return callTool<{ product?: Record<string, unknown> }>("get_product", { catalog: { id, context: { address_country: country, currency } } }, signal);
+export function getProductMcp(id: string, signal?: AbortSignal) {
+  const { code, currency } = getCountry();
+  return callTool<{ product?: Record<string, unknown> }>("get_product", { catalog: { id, context: { address_country: code, currency } } }, signal);
 }
 
 /** Starts (never completes) a checkout on the merchant; the shopper finishes it at continue_url. */

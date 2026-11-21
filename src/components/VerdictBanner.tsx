@@ -5,10 +5,10 @@ import { countTo, gsap, useGSAP, d } from "../lib/motion";
 import { cx } from "./ui";
 
 const TIER_LABEL: Record<string, string> = {
-  low: "Small cart (under $40), so promo stickers are tolerated",
-  normal: "Normal cart",
-  high: "Large cart (over $150), so the checks are strict",
-  spend_request: "Outside payment request, so nothing is trusted",
+  low: "Small order (under $40)",
+  normal: "Standard order",
+  high: "Large order (over $150), stricter checks",
+  spend_request: "External payment request",
 };
 
 export function VerdictBanner({ verdict, checking, size = "lg" }: { verdict?: Verdict; checking: boolean; size?: "lg" | "md" }) {
@@ -17,27 +17,27 @@ export function VerdictBanner({ verdict, checking, size = "lg" }: { verdict?: Ve
 
   const word = !verdict
     ? checking
-      ? "Checking"
+      ? "Verifying"
       : "Waiting"
     : verdict.error
-      ? "Blocked to be safe"
+      ? "On hold"
       : verdict.action === "approve_checkout"
-        ? "Approved"
+        ? "Verified"
         : verdict.action === "escalate_to_neon_swap"
-          ? "Escalated"
-          : "Blocked";
+          ? "Better match"
+          : "Held";
   const tone = !verdict ? "neutral" : verdict.error || verdict.action === "hard_block_quarantine" ? "danger" : verdict.action === "approve_checkout" ? "safe" : "warn";
   const sub = !verdict
     ? checking
-      ? "The shopper wants to buy something. CartTrap checks it first."
-      : "Run a test. Before any purchase reaches Shopify, CartTrap decides here."
+      ? "Checking the order against your request and the store listing."
+      : "Every order is verified here before it’s placed."
     : verdict.error
-      ? `The check couldn’t finish (${verdict.error}), so CartTrap blocked the purchase to be safe.`
+      ? `Verification couldn’t finish (${verdict.error}), so the order is on hold.`
       : verdict.action === "approve_checkout"
-        ? "The cart matches what you asked for, so the purchase goes through."
+        ? "The order matches what you asked for."
         : verdict.action === "escalate_to_neon_swap"
-          ? "The photo doesn’t match the real listing, so CartTrap offers an honest swap."
-          : "The photo was giving the agent orders. The purchase never reached Shopify.";
+          ? "The photo doesn’t match the store listing, so we suggested a better match."
+          : "The order didn’t match your request, so it wasn’t placed.";
 
   useGSAP(
     () => {
@@ -61,7 +61,7 @@ export function VerdictBanner({ verdict, checking, size = "lg" }: { verdict?: Ve
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <p className="label mb-1">CartTrap’s decision</p>
+        <p className="label mb-1">Status</p>
         <div className="overflow-hidden">
           <div
             ref={wordRef}
@@ -80,25 +80,25 @@ export function VerdictBanner({ verdict, checking, size = "lg" }: { verdict?: Ve
       {verdict && (
         <dl className="grid grid-cols-3 gap-x-5 gap-y-1 text-right sm:gap-x-7">
           <div>
-            <dt className="label">Decided in</dt>
+            <dt className="label">Checked in</dt>
             <dd className="tnum mt-0.5 text-2xl font-semibold tracking-tight sm:text-[28px]">
               <span ref={latRef}>{Math.round(verdict.latency_ms)}</span>
               <span className="ml-0.5 text-sm font-medium text-ink-3">ms</span>
             </dd>
           </div>
           <div>
-            <dt className="label" title="Model probability that this purchase is safe to approve. Needs 92% or more.">Safe score</dt>
+            <dt className="label" title="Confidence that the order is fine to place. Needs 92% or more.">Confidence</dt>
             <dd className="tnum mt-0.5 text-2xl font-semibold tracking-tight sm:text-[28px]">{approveP != null ? `${Math.round(approveP * 100)}%` : "—"}</dd>
           </div>
           <div>
-            <dt className="label">Threat level</dt>
+            <dt className="label">Risk</dt>
             <dd className="tnum mt-0.5 text-2xl font-semibold tracking-tight sm:text-[28px]">
               {verdict.severity}
               <span className="text-sm font-medium text-ink-3">/3</span>
             </dd>
           </div>
           <dd className="col-span-3 mt-1 font-mono text-[11px] text-ink-3">
-            {TIER_LABEL[verdict.tier] ?? verdict.tier} · needs 92% to approve{verdict.latency_ms > 400 && ` · slow (${ms(verdict.latency_ms)})`}
+            {TIER_LABEL[verdict.tier] ?? verdict.tier} · needs 92% confidence{verdict.latency_ms > 400 && ` · slow (${ms(verdict.latency_ms)})`}
           </dd>
         </dl>
       )}

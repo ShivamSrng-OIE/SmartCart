@@ -17,7 +17,7 @@ import { clock, money } from "../lib/format";
 function VictimFooter({ pane }: { pane: PaneState }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[13px] text-ink-2">It would have charged</span>
+      <span className="text-[13px] text-ink-2">Order total</span>
       <span className={cx("tnum text-lg font-semibold tracking-tight", pane.status === "hijacked" ? "text-danger" : "text-ink")}>{money(pane.attempted || null)}</span>
     </div>
   );
@@ -69,11 +69,11 @@ export function Arena({
     <div className="flex flex-col gap-3 sm:gap-4">
       {/* 1 · set up */}
       <header>
-        <p className="label">Side by side</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">Both shoppers, same test, at the same time</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">Left is the AI shopper with no protection, right is the same shopper behind CartTrap. Good for a live demo on a big screen.</p>
+        <p className="label">Compare</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">Assistant and Safe Checkout, side by side</h1>
+        <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">One request, sent to both at once.</p>
       </header>
-      <RequestPanel wide mode={mode} busy={busy} onRun={() => run({ form: toForm(), intent, fixture })} onReset={reset} canReset={phase !== "idle"} title="1 · Set up a test" runLabel="Run both" />
+      <RequestPanel wide mode={mode} busy={busy} onRun={() => run({ form: toForm(), intent, fixture })} onReset={reset} canReset={phase !== "idle"} title="Your request" runLabel="Ask both" />
 
       {error && (
         <div className="flex flex-col gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -84,20 +84,20 @@ export function Arena({
             </span>
           </p>
           <Button size="sm" onClick={onSwitchToReplay}>
-            Use demo data instead
+            Use sample data
           </Button>
         </div>
       )}
 
       {/* 2 · result at a glance */}
       <div ref={resultRef} className="flex scroll-mt-20 flex-col gap-2.5">
-        <StepHeading n={2} title="Result" hint={phase === "idle" ? "How to read this page" : "The same request, with and without CartTrap"} aside={<RunClock startedAt={startedAt} live={busy} />} />
+        <StepHeading n={2} title="Result" hint={phase === "idle" ? "" : "Same request, both assistants"} aside={<RunClock startedAt={startedAt} live={busy} />} />
         <OutcomeStrip state={state} phase={phase} />
       </div>
 
       {/* 3 · details */}
       <div className="flex flex-col gap-2.5">
-        <StepHeading n={3} title="Details" hint="Open any panel to see exactly what happened" />
+        <StepHeading n={3} title="Details" />
         <div
           className={cx(
             "grid grid-cols-1 gap-3 sm:gap-4",
@@ -115,10 +115,10 @@ export function Arena({
           />
 
           {/* With CartTrap: decision + checks / step log */}
-          <section className="card order-1 flex min-h-0 flex-col overflow-hidden lg:order-none lg:[grid-area:decide]" aria-label="How CartTrap decided">
+          <section className="card order-1 flex min-h-0 flex-col overflow-hidden lg:order-none lg:[grid-area:decide]" aria-label="Verification">
             <header className="border-b border-line px-4 py-3 sm:px-5">
-              <p className="label">With CartTrap</p>
-              <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">How CartTrap decided</h2>
+              <p className="label">Safe Checkout</p>
+              <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Verification</h2>
             </header>
             <div className="thin-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
               <VerdictBanner verdict={state.verdict} checking={checking || phase === "starting"} />
@@ -127,8 +127,8 @@ export function Arena({
                   value={tab}
                   onChange={setTab}
                   options={[
-                    { value: "checks", label: `Threat checks · ${rules.probes.length}` },
-                    { value: "log", label: `Step by step · ${state.guarded.steps.length}` },
+                    { value: "checks", label: `Checks · ${rules.probes.length}` },
+                    { value: "log", label: `Activity · ${state.guarded.steps.length}` },
                   ]}
                 />
               </div>

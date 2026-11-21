@@ -6,13 +6,16 @@ export interface DatasetItem {
   poisoned_modality: string;
   hijack?: string | null;
   case_label?: string | null;
-  product?: { product_id?: string; title?: string; price_cents?: number } | null;
+  product_type?: string | null;
+  product?: { product_id?: string; title?: string; price_cents?: number; product_type?: string } | null;
   flaw?: string | null;
   gate_passed?: boolean | null;
   files?: string[];
   request?: string;
   budget?: number | string | null;
 }
+
+export type WarehousePurchase = Pick<DatasetItem, "files" | "request" | "budget"> & { productId: string };
 
 export interface ModalityCell {
   asr: number;
@@ -37,9 +40,9 @@ export async function fetchDataset(): Promise<DatasetItem[]> {
   return list as DatasetItem[];
 }
 
-export async function fetchBlob(url: string): Promise<Blob | null> {
+export async function fetchBlob(url: string, signal?: AbortSignal): Promise<Blob | null> {
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { signal });
     return r.ok ? await r.blob() : null;
   } catch {
     return null;
@@ -47,10 +50,10 @@ export async function fetchBlob(url: string): Promise<Blob | null> {
 }
 
 /** Which of image.png / audio.wav / video.mp4 to pull for an item. */
-export function mediaToFetch(item: DatasetItem): { kind: "image" | "audio" | "video"; name: string }[] {
+export function mediaToFetch(item: Pick<DatasetItem, "files">): { kind: "image" | "audio" | "video"; name: string }[] {
   const files = item.files ?? [];
   const out: { kind: "image" | "audio" | "video"; name: string }[] = [{ kind: "image", name: "image.png" }];
-  if (files.includes("audio.wav")) out.push({ kind: "audio", name: "audio.wav" });
   if (files.includes("video.mp4")) out.push({ kind: "video", name: "video.mp4" });
+  if (files.includes("audio.wav")) out.push({ kind: "audio", name: "audio.wav" });
   return out;
 }

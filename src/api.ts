@@ -7,6 +7,7 @@ import defaultRulesJson from "./fixtures/rules.sample.json";
 import evalSample from "./fixtures/eval.sample.json";
 import { ENDPOINTS, streamUrl, type AgentKind, type FixtureName } from "./config";
 import { looksLikeGemini, toEvents } from "./lib/gemini";
+import { fetchBlob, fileUrl, mediaToFetch, type WarehousePurchase } from "./lib/dataset";
 
 // ---------------------------------------------------------------- live API
 // Routes from docs/architecture.md §5 (owned by Member 1). Send changes to M1.
@@ -33,6 +34,27 @@ export async function startRun(form: FormData, url: string = ENDPOINTS.both.run)
   const j = (await r.json()) as { run_id?: string };
   if (!j.run_id) throw new Error(`POST ${url} returned no run_id`);
   return j.run_id;
+}
+
+/** The guarded runner adds mode=guarded when it submits this form. */
+export async function warehouseRunForm(itemId: string, purchase: WarehousePurchase, signal?: AbortSignal): Promise<FormData> {
+  const request = purchase.request?.trim();
+  const budget = Number(purchase.budget);
+  if (!request || !purchase.productId || !Number.isFinite(budget) || budget <= 0) {
+    throw new Error("The warehouse listing is missing checkout details.");
+  }
+
+  const media = await Promise.all(mediaToFetch(purchase).map(async ({ kind, name }) => {
+    const blob = await fetchBlob(fileUrl(itemId, name), signal);
+    if (!blob?.size) throw new Error(`Couldn’t load ${name} for Safe Checkout.`);
+    return { kind, name, blob };
+  }));
+  const form = new FormData();
+  form.set("request", request.slice(0, 1000));
+  form.set("budget", String(budget));
+  form.set("product_id", purchase.productId);
+  for (const { kind, name, blob } of media) form.set(kind, blob, name);
+  return form;
 }
 
 /** SSE stream for a run. Each message may be a TraceEvent or a Gemini response chunk. */

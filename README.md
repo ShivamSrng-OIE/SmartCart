@@ -18,11 +18,9 @@
 
 ## 🎬 Demo
 
-<!-- TODO: add the demo video (e.g. demo/carttrap-demo.mp4 or a YouTube link) -->
-**[▶ Watch the demo — _video coming soon_](#)** · **Try it locally:** see [Setup](#-setup)
+**[▶ Watch the 1-minute demo (live site)](demo/carttrap-demo.mp4)** · **Try it locally:** see [Setup](#-setup)
 
-<!-- TODO: add a GIF of: search "dog treats" → Warehouse item → Add to cart → Held by Safe Checkout → evidence panel -->
-![Demo GIF placeholder](docs/images/demo-placeholder.png)
+![Live demo: search "dog treats", open a Warehouse item, Add to cart, Safe Checkout holds it and shows where the hidden instruction is](demo/carttrap-demo.gif)
 
 ---
 

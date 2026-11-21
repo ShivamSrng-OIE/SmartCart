@@ -32,7 +32,8 @@ const proxy: Record<string, ProxyOptions> = {
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: { port: 5173, proxy },
-  preview: { port: 4173, proxy },
+  // allowedHosts: lets a Cloudflare quick tunnel (https://*.trycloudflare.com) reach the preview server.
+  preview: { port: 4173, proxy, allowedHosts: [".trycloudflare.com"] },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

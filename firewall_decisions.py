@@ -221,6 +221,31 @@ async def _call_decisions(request: dict, timeout_s: float):
     )
 
 
+WARM_UP_TIMEOUT_S = 15.0  # a warm-up may pay for DNS + TLS + auth; it is never on a firewall path
+
+
+async def warm_up() -> int | None:
+    """One tiny Decisions call so the process's shared client opens its connection before the
+    first real firewall check (called in the background on FastAPI startup). Returns latency in
+    ms, or None if skipped or failed. Never raises: failure is only logged."""
+    if config.FIREWALL_BACKEND != "decisions" or not config.GEMINI_API_KEY:
+        log.info("decisions warm-up skipped (backend=%s, key set=%s)",
+                 config.FIREWALL_BACKEND, bool(config.GEMINI_API_KEY))
+        return None
+    request = {"input": [{"type": "text", "text": "warm-up\n"}],
+               "questions": {"warm_up": {"type": "noul", "instructions": "Is this a warm-up request?"}}}
+    t0 = time.perf_counter()
+    try:
+        await asyncio.wait_for(_call_decisions(request, WARM_UP_TIMEOUT_S), timeout=WARM_UP_TIMEOUT_S)
+    except Exception as e:  # noqa: BLE001
+        log.warning("decisions warm-up failed after %d ms: %s: %s",
+                    int((time.perf_counter() - t0) * 1000), type(e).__name__, e)
+        return None
+    ms = int((time.perf_counter() - t0) * 1000)
+    log.info("decisions warm-up ok in %d ms (model=%s)", ms, config.MODELS["firewall"])
+    return ms
+
+
 def _field(obj, name: str):
     """Read a response field from an SDK model or a plain dict."""
     return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)

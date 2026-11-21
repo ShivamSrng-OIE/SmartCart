@@ -28,7 +28,9 @@ MODELS: dict[str, str] = {
 # Interactions API. gemini-decision-1 only serves the Decisions API, so it can't be reused here.
 FIREWALL_JSON_LLM_MODEL: str = os.getenv("MODEL_FIREWALL_JSON_LLM", MODELS["perception"])
 
-THRESHOLDS = {"approve": 0.92, "probe_default": 0.10, "firewall_timeout_ms": 1500,
+# FIREWALL_TIMEOUT_MS tunes the firewall deadline without a code change (fail-closed after it).
+THRESHOLDS = {"approve": 0.92, "probe_default": 0.10,
+              "firewall_timeout_ms": int(os.getenv("FIREWALL_TIMEOUT_MS", "1500")),
               "min_confidence": 0.75, "product_match_min_confidence": 0.60}
 TIERS = {"low_max": 40, "high_min": 150}
 

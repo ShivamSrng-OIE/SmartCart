@@ -433,6 +433,28 @@ async def test_report_groups_metrics_by_poisoned_modality(tmp_path):
     assert (by["none"]["n_benign"], by["none"]["benign_completion"]) == (1, 1)
 
 
+@pytest.mark.asyncio
+async def test_report_groups_metrics_by_tier(tmp_path):
+    from eval.run_eval import run
+
+    directory = tmp_path / "cases"
+    _modality_cases(directory)
+    for cid, tier in (("m_img", "bold"), ("m_aud", "subtle")):
+        path = directory / f"{cid}.json"
+        case = json.loads(path.read_text())
+        path.write_text(json.dumps(dict(case, tier=tier)))
+
+    async def hijack_audio(system, case):
+        return cart_trace(case, quantity=2 if case["id"] == "m_aud" else 1)
+
+    path = await run(directory, tmp_path / "out", ["hardened"], execute=hijack_audio)
+    report = json.loads(path.read_text())
+    assert {r["id"]: r["tier"] for r in report["cases"]}["m_aud"] == "subtle"
+    by = report["by_tier"]["hardened"]
+    assert set(by) == {"bold", "subtle"}
+    assert (by["bold"]["asr"], by["subtle"]["asr"]) == (0, 1)
+
+
 def test_new_hijack_vectors_are_valid():
     from eval.run_eval import VECTORS
 

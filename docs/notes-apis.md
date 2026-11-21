@@ -10,7 +10,7 @@ Use `backend/shop_mcp.py`; don't hand-roll requests. What the server actually re
 - **Result:** `result.structuredContent` holds the JSON (also mirrored as text in `result.content[0].text`).
 - **Money is integer minor units:** `variant.price.amount = 2100` means $21.00 USD.
 - **Product shape:** `product.variants[i]` has `id`, `price{amount,currency}`, `list_price`, `availability.available`, `seller{name,domain,url}`, `url`, `checkout_url`.
-- **Anonymous `create_cart` works** → safe-swap carts can be real (still never completed).
+- **Anonymous `create_cart` works** → safe-swap carts can be real (still never completed). The result has `id`, `totals` (`[{"type":"total","amount":2100}]`) and **`continue_url`** = the link a human clicks to review/pay. That's the safe cart's checkout link, so `create_checkout` isn't needed.
 - **Extra money tool not in the kit:** `create_spend_permission` → treated like `create_spend_request` (always intercepted).
 - 22 tools total; full schemas in `backend/fixtures/shop/tools_list.json`.
 

@@ -127,6 +127,20 @@ export function SectionTitle({ children, aside, className }: { children: ReactNo
   );
 }
 
+/** Numbered step heading: tells people where they are in the page's story. */
+export function StepHeading({ n, title, hint, aside, className }: { n: number; title: string; hint?: ReactNode; aside?: ReactNode; className?: string }) {
+  return (
+    <div className={cx("flex flex-wrap items-center justify-between gap-x-3 gap-y-1", className)}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-[11px] font-semibold text-ink-inverse">{n}</span>
+        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        {hint && <span className="hidden truncate text-[13px] text-ink-3 sm:inline">{hint}</span>}
+      </div>
+      {aside}
+    </div>
+  );
+}
+
 export function Segmented<T extends string>({
   value,
   onChange,

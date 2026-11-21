@@ -8,7 +8,7 @@ import { cx } from "./ui";
 
 type Option = { kind: "none" } | { kind: "url"; url: string } | { kind: "product"; p: CatalogProduct };
 
-export function ProductPicker({ value, onChange, live }: { value: ProductRef | null; onChange: (v: ProductRef | null) => void; live: boolean }) {
+export function ProductPicker({ value, onChange }: { value: ProductRef | null; onChange: (v: ProductRef | null) => void; live?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<CatalogProduct[]>(demoCatalog().slice(0, 6));
@@ -27,7 +27,7 @@ export function ProductPicker({ value, onChange, live }: { value: ProductRef | n
     const t = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const res = query ? await searchCatalog(query, { limit: 8, signal: ctrl.signal, preferLive: live }) : { items: demoCatalog().slice(0, 6) };
+        const res = query ? await searchCatalog(query, { limit: 8, signal: ctrl.signal, network: true }) : { items: demoCatalog().slice(0, 6) };
         setItems(res.items);
         setActive(0);
       } catch {
@@ -40,7 +40,7 @@ export function ProductPicker({ value, onChange, live }: { value: ProductRef | n
       ctrl.abort();
       window.clearTimeout(t);
     };
-  }, [query, open, live]);
+  }, [query, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,7 +92,7 @@ export function ProductPicker({ value, onChange, live }: { value: ProductRef | n
             {value.url && !value.id ? (
               <Link2 className="size-4 shrink-0 text-ink-3" />
             ) : (
-              <ProductThumb product={{ title: value.title, image: null, vendor: value.shop ?? null }} size="sm" className="size-7!" />
+              <ProductThumb product={{ title: value.title, image: value.image ?? null, vendor: value.shop ?? null }} size="sm" className="size-7!" />
             )}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] leading-tight">{value.title}</span>
@@ -144,7 +144,7 @@ export function ProductPicker({ value, onChange, live }: { value: ProductRef | n
             {loading && <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-ink-3" />}
           </div>
           <ul id={listId} role="listbox" className="thin-scroll max-h-[300px] overflow-y-auto p-1">
-            {!query && <li className="label px-2.5 pt-2 pb-1">Demo products</li>}
+            {!query && <li className="label px-2.5 pt-2 pb-1">Demo products · type to search Shopify</li>}
             {options.map((o, i) => (
               <li key={o.kind === "product" ? o.p.id : o.kind} role="option" aria-selected={i === active}>
                 <button

@@ -4,9 +4,12 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/geist-mono";
 import "./index.css";
 import App from "./App";
+import { DraftProvider } from "./draft";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <DraftProvider>
+      <App />
+    </DraftProvider>
   </StrictMode>,
 );

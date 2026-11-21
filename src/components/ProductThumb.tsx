@@ -21,7 +21,7 @@ export function ProductThumb({ product, className, size = "md" }: { product: Pic
       )}
     >
       {product.image && !broken ? (
-        <img src={product.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="size-full object-cover" />
+        <img src={product.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="absolute inset-0 size-full object-cover" />
       ) : (
         <span className={cx("font-semibold tracking-tight text-ink-3", size === "sm" ? "text-[11px]" : size === "md" ? "text-xl" : "text-3xl")}>{initials || "•"}</span>
       )}

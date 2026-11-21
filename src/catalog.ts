@@ -1,83 +1,138 @@
 /**
- * Product search + detail for the Catalog page and the Arena's product picker.
+ * Product search + detail for "Shop yourself" and the product picker.
  *
- * Live routes (proposed to Member 1; thin wrappers over Shop MCP `search_catalog` / `get_product`):
- *   GET /api/catalog/search?q=<text>&max_price=<n>&limit=<n>  → { products: [...] } (raw search_catalog items are fine)
- *   GET /api/catalog/products/<url-encoded id>                 → get_product JSON
- * Until they exist, everything falls back to a bundled demo catalog and says so in the UI.
+ * Source order for every call:
+ *   1. team backend route, if it exists (GET /api/catalog/search, GET /api/catalog/products/{id})
+ *   2. Shopify Shop MCP directly, through the /shop-mcp proxy (search_catalog / get_product)
+ *   3. the bundled demo catalog, clearly labelled
  */
 import sample from "./fixtures/catalog.sample.json";
+import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 
 export interface CatalogProduct {
   id: string;
+  /** featured variant: what cart/checkout line items reference */
+  variantId: string | null;
   title: string;
   price: number | null;
   currency: string;
   units: number | null;
   vendor: string | null;
+  /** seller.domain, the `shop` value for create_checkout */
   shop: string | null;
   shopName: string | null;
+  /** product link exactly as Shopify returned it */
   url: string | null;
   image: string | null;
   description: string | null;
   type: string | null;
+  available: boolean | null;
+  rating: { value: number; count: number } | null;
+  options: { name: string; values: string[] }[];
   raw: Record<string, unknown>;
 }
 
-export type CatalogSource = "live" | "demo";
+export type CatalogSource = "live" | "shopify" | "demo";
 
 export interface SearchResult {
   items: CatalogProduct[];
   source: CatalogSource;
-  /** why we fell back, when we did */
   note?: string;
+  messages?: ShopMessage[];
+  cursor?: string;
+  total?: number;
 }
 
 export interface SearchOptions {
   maxPrice?: number | null;
   limit?: number;
+  cursor?: string;
   signal?: AbortSignal;
-  preferLive?: boolean;
+  /** false skips network sources (offline rehearsal) */
+  network?: boolean;
 }
 
+type Obj = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
+const obj = (v: unknown): Obj => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
 const num = (v: unknown): number | null => {
-  if (v && typeof v === "object") v = (v as Record<string, unknown>).amount;
   const n = typeof v === "string" ? Number.parseFloat(v) : typeof v === "number" ? v : Number.NaN;
   return Number.isFinite(n) ? n : null;
 };
 
-/** Accept raw Shop MCP shapes as well as our own; never throw on a missing field. */
+/** Merchant descriptions arrive as HTML; we only ever show them as plain text. */
+export function plainText(html: string | null): string | null {
+  if (!html) return null;
+  const text = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/(p|li|div|h\d)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&rsquo;/g, "’")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
+  return text || null;
+}
+
+/** Accept Shop MCP products, raw search items, or our demo shape. Never throws on a missing field. */
 export function normalizeProduct(raw: unknown): CatalogProduct | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const p = (r.product && typeof r.product === "object" ? r.product : r) as Record<string, unknown>;
-  const id = str(p.id) ?? str(p.product_id) ?? str(p.gid);
+  const r = obj(raw);
+  const p = r.product && typeof r.product === "object" ? obj(r.product) : r;
+  const id = str(p.id) ?? str(p.product_id);
   const title = str(p.title) ?? str(p.name);
   if (!id || !title) return null;
-  const seller = (p.seller && typeof p.seller === "object" ? p.seller : {}) as Record<string, unknown>;
-  const priceObj = p.price && typeof p.price === "object" ? (p.price as Record<string, unknown>) : null;
-  const images = Array.isArray(p.images) ? (p.images as unknown[]) : [];
-  const firstImage = images[0] && typeof images[0] === "object" ? str((images[0] as Record<string, unknown>).url) : str(images[0]);
+
+  const variants = Array.isArray(p.variants) ? (p.variants as Obj[]) : [];
+  const v = variants[0] ?? {};
+  const seller = obj(v.seller ?? p.seller);
+  const vPrice = obj(v.price);
+  const range = obj(p.price_range);
+  const rangeMin = obj(range.min);
+
+  // Shop MCP prices are minor units with a currency; our demo data uses major units.
+  let currency = str(vPrice.currency) ?? str(rangeMin.currency) ?? str(obj(p.price).currency) ?? str(p.currency) ?? "USD";
+  let price: number | null = null;
+  if (vPrice.amount != null) price = minorToMajor(vPrice.amount, currency);
+  else if (rangeMin.amount != null) price = minorToMajor(rangeMin.amount, currency);
+  else price = num(obj(p.price).amount ?? p.price);
+  if (!currency) currency = "USD";
+
+  const media = Array.isArray(p.media) ? (p.media as Obj[]) : Array.isArray(p.images) ? (p.images as Obj[]) : [];
+  const firstImage = media.find((m) => !m.type || m.type === "image");
+  const desc = obj(p.description);
+  const rating = obj(p.rating);
+
   return {
     id,
+    variantId: str(v.id),
     title,
-    price: num(p.price ?? p.min_price ?? (p.price_range as Record<string, unknown> | undefined)?.min),
-    currency: str(priceObj?.currency) ?? str(p.currency) ?? "USD",
-    units: num(p.units ?? p.pack_size ?? p.quantity),
+    price,
+    currency,
+    units: num(p.units ?? p.pack_size),
     vendor: str(p.vendor) ?? str(p.brand),
     shop: str(seller.domain) ?? str(p.shop) ?? str(p.domain),
     shopName: str(seller.name) ?? str(p.shop_name),
-    url: str(p.url) ?? str(p.product_url) ?? str(p.online_store_url),
-    image: str(p.image_url) ?? str((p.image as Record<string, unknown> | undefined)?.url) ?? str(p.image) ?? firstImage,
-    description: str(p.description) ?? str(p.body),
+    url: str(v.url) ?? str(p.url) ?? str(p.product_url),
+    image: str(firstImage?.url) ?? str(obj(firstImage?.preview).url) ?? str(p.image_url) ?? str(obj(p.image).url) ?? str(p.image),
+    description: plainText(str(desc.plain) ?? str(desc.html) ?? str(p.description) ?? str(p.body)),
     type: str(p.product_type) ?? str(p.category),
+    available: typeof obj(v.availability).available === "boolean" ? (obj(v.availability).available as boolean) : null,
+    rating: num(rating.value) != null ? { value: num(rating.value)!, count: num(rating.count) ?? 0 } : null,
+    options: Array.isArray(p.options)
+      ? (p.options as Obj[]).map((o) => ({ name: String(o.name ?? ""), values: Array.isArray(o.values) ? (o.values as Obj[]).map((x) => String(x.label ?? x)) : [] })).filter((o) => o.name)
+      : [],
     raw: p,
   };
 }
 
 const DEMO: CatalogProduct[] = (sample.products as unknown[]).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
-
 export const demoCatalog = () => DEMO;
 export const findDemo = (id: string) => DEMO.find((p) => p.id === id) ?? null;
 
@@ -85,46 +140,81 @@ export function isUrl(q: string): boolean {
   return /^https?:\/\/\S+$/i.test(q.trim()) || /^[\w-]+(\.[\w-]+)+\/\S*$/.test(q.trim());
 }
 
+/** "cold brew, mug; granola" → ["cold brew", "mug", "granola"]. Commas, semicolons and new lines separate items. */
+export function splitQueries(q: string): string[] {
+  const seen = new Set<string>();
+  return q
+    .split(/\s*[,;\n]\s*/)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .filter((s) => s.length > 0 && !seen.has(s.toLowerCase()) && (seen.add(s.toLowerCase()), true))
+    .slice(0, 6);
+}
+
 function localSearch(q: string, maxPrice?: number | null, limit = 24): CatalogProduct[] {
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const scored = DEMO.map((p) => {
+  return DEMO.map((p) => {
     const hay = `${p.title} ${p.vendor ?? ""} ${p.type ?? ""} ${p.description ?? ""} ${p.shopName ?? ""}`.toLowerCase();
     const score = terms.length ? terms.reduce((s, t) => s + (hay.includes(t) ? (p.title.toLowerCase().includes(t) ? 3 : 1) : -10), 0) : 1;
     return { p, score };
   })
     .filter(({ p, score }) => score > 0 && (maxPrice == null || (p.price ?? Infinity) <= maxPrice))
-    .sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((x) => x.p);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.p);
 }
 
-let liveSearchMissing = false;
+let backendSearchMissing = false;
+let shopifyUnavailable = false;
 
 export async function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
-  const { maxPrice = null, limit = 24, signal, preferLive = true } = opts;
-  if (preferLive && !liveSearchMissing) {
+  const { maxPrice = null, limit = 12, cursor, signal, network = true } = opts;
+  const notes: string[] = [];
+
+  if (network && !backendSearchMissing) {
     try {
       const params = new URLSearchParams({ q, limit: String(limit) });
       if (maxPrice != null) params.set("max_price", String(maxPrice));
+      if (cursor) params.set("cursor", cursor);
       const r = await fetch(`/api/catalog/search?${params}`, { signal });
-      if (r.status === 404 || r.status === 405) {
-        liveSearchMissing = true;
-        throw new Error("search route not available yet");
+      if (r.ok) {
+        const j = (await r.json()) as unknown;
+        const list = Array.isArray(j) ? j : Array.isArray(obj(j).products) ? (obj(j).products as unknown[]) : [];
+        const items = list.map(normalizeProduct).filter(Boolean) as CatalogProduct[];
+        return { items, source: "live", cursor: str(obj(obj(j).pagination).cursor) ?? undefined };
       }
-      if (!r.ok) throw new Error(`search failed (${r.status})`);
-      const j = (await r.json()) as unknown;
-      const list = Array.isArray(j) ? j : Array.isArray((j as Record<string, unknown>)?.products) ? ((j as Record<string, unknown>).products as unknown[]) : [];
-      const items = list.map(normalizeProduct).filter(Boolean) as CatalogProduct[];
-      return { items: maxPrice != null ? items.filter((p) => p.price == null || p.price <= maxPrice) : items, source: "live" };
+      backendSearchMissing = true;
     } catch (err) {
       if ((err as Error).name === "AbortError") throw err;
-      return { items: localSearch(q, maxPrice, limit), source: "demo", note: (err as Error).message };
+      backendSearchMissing = true;
     }
   }
-  return { items: localSearch(q, maxPrice, limit), source: "demo", note: preferLive ? "search route not available yet" : "replay mode" };
+
+  if (network && !shopifyUnavailable) {
+    try {
+      const doc = await searchCatalogMcp({ query: q, maxPrice, limit, cursor, signal });
+      const items = (doc.products ?? []).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
+      const filtered = maxPrice != null ? items.filter((p) => p.price == null || p.price <= maxPrice) : items;
+      return {
+        items: filtered,
+        source: "shopify",
+        messages: (doc.messages ?? []).filter((m) => m.type === "warning"),
+        cursor: doc.pagination?.has_next_page ? doc.pagination.cursor : undefined,
+        total: doc.pagination?.total_count,
+      };
+    } catch (err) {
+      if ((err as Error).name === "AbortError") throw err;
+      if (err instanceof ShopError && (err.code === "no_proxy" || err.code === "network")) shopifyUnavailable = true;
+      notes.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "demo", note: notes[0] };
 }
 
-export async function getProduct(id: string, preferLive = true): Promise<{ product: CatalogProduct | null; source: CatalogSource }> {
-  if (preferLive) {
+export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource }> {
+  const demo = findDemo(id);
+  if (demo || !network) return { product: demo, source: "demo" };
+  if (!backendSearchMissing) {
     try {
       const r = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`);
       if (r.ok) {
@@ -135,16 +225,24 @@ export async function getProduct(id: string, preferLive = true): Promise<{ produ
       /* fall through */
     }
   }
-  return { product: findDemo(id), source: "demo" };
+  try {
+    const doc = await getProductMcp(id);
+    const p = normalizeProduct(doc.product ?? doc);
+    if (p) return { product: p, source: "shopify" };
+  } catch {
+    /* fall through */
+  }
+  return { product: null, source: "demo" };
 }
 
-/** Product the arena should test, carried between pages. */
+/** Product the AI shoppers should buy, carried between pages. */
 export interface ProductRef {
   id?: string;
   url?: string;
   title: string;
   price?: number | null;
   shop?: string | null;
+  image?: string | null;
 }
 
-export const refFromProduct = (p: CatalogProduct): ProductRef => ({ id: p.id, title: p.title, price: p.price, shop: p.shopName ?? p.shop });
+export const refFromProduct = (p: CatalogProduct): ProductRef => ({ id: p.id, url: p.url ?? undefined, title: p.title, price: p.price, shop: p.shopName ?? p.shop, image: p.image });

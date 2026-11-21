@@ -111,17 +111,17 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
   return (
     <div ref={root} className="@container flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-baseline gap-2">
-          <h3 className="text-[15px] font-semibold tracking-tight">Threat seismograph</h3>
+        <div className="min-w-0">
+          <p className="text-[13px] text-ink-2">Each square is one yes/no check on the photo, the real listing and the cart. Red means it found a problem.</p>
           <span className="tnum text-xs text-ink-3">
-            {lights.length} probes · rules v{rules.version}
+            {lights.length} checks · rule set v{rules.version}
             {!rulesLive && <span title="GET /api/rules isn't serving yet; showing the bundled sample rule set"> · sample</span>}
           </span>
         </div>
         {evaluated ? (
-          <Chip tone={fired.length ? "danger" : "safe"}>{fired.length ? `${fired.length} fired` : "all quiet"}</Chip>
+          <Chip tone={fired.length ? "danger" : "safe"}>{fired.length ? `${fired.length} problems found` : "no problems"}</Chip>
         ) : (
-          <Chip>{checking ? "listening" : "idle"}</Chip>
+          <Chip>{checking ? "checking…" : "waiting"}</Chip>
         )}
       </div>
 
@@ -140,7 +140,7 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        <span className="pointer-events-none absolute top-1.5 right-2 font-mono text-[10px] text-ink-3">p ≥ 0.10 fires</span>
+        <span className="pointer-events-none absolute top-1.5 right-2 font-mono text-[10px] text-ink-3">above the dashed line = problem</span>
       </div>
 
       {/* lights */}
@@ -189,7 +189,7 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
               <p className="text-[13px] font-medium text-ink">
                 {humanize(focused.probe.id)}
                 <span className="ml-2 font-mono text-[10px] tracking-wide text-ink-3 uppercase">{CATEGORY_LABEL[focused.probe.category] ?? focused.probe.category}</span>
-                {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">self-healed</span>}
+                {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">learned</span>}
               </p>
               <p className="text-xs leading-snug text-ink-3">{focused.probe.instructions}</p>
             </div>
@@ -197,11 +197,11 @@ export function Seismograph({ rules, rulesLive = true, verdict, checking }: { ru
               <div className={cx("tnum font-mono text-sm font-semibold", focused.result?.fired ? "text-danger" : "text-ink")}>
                 {focused.result ? prob(focused.result.p) : "—"}
               </div>
-              <div className="tnum font-mono text-[10px] text-ink-3">thr {prob(focused.probe.threshold)}</div>
+              <div className="tnum font-mono text-[10px] text-ink-3">flags at {prob(focused.probe.threshold)}</div>
             </div>
           </>
         ) : (
-          <p className="self-center text-xs text-ink-3">Hover or tap a light to read what that probe asks.</p>
+          <p className="self-center text-xs text-ink-3">Hover or tap a square to see what that check asks.</p>
         )}
       </div>
 

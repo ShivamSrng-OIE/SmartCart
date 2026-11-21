@@ -1,8 +1,20 @@
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const formatters = new Map<string, Intl.NumberFormat>();
+function fmt(currency: string, whole: boolean): Intl.NumberFormat {
+  const key = `${currency}:${whole}`;
+  let f = formatters.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat("en-US", { style: "currency", currency, ...(whole ? { maximumFractionDigits: 0 } : {}) });
+    } catch {
+      f = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", ...(whole ? { maximumFractionDigits: 0 } : {}) });
+    }
+    formatters.set(key, f);
+  }
+  return f;
+}
 
-export const money = (n: number | null | undefined, whole = false): string =>
-  n == null || !Number.isFinite(n) ? "—" : (whole ? usd0 : usd).format(n);
+export const money = (n: number | null | undefined, whole = false, currency = "USD"): string =>
+  n == null || !Number.isFinite(n) ? "—" : fmt(currency || "USD", whole).format(n);
 
 export const pct = (n: number | null | undefined, digits = 1): string =>
   n == null || !Number.isFinite(n) ? "—" : `${(n * 100).toFixed(digits)}%`;

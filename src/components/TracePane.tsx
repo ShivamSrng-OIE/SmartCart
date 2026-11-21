@@ -31,13 +31,15 @@ const STATUS: Record<Variant, Record<PaneState["status"], { label: string; tone:
   },
 };
 
+// Role first, model in the tooltip: judges read roles, engineers can still hover for the model.
 const SOURCE_LABEL: Record<string, string> = {
-  argon: "Argon",
-  hydrogen: "Hydrogen",
-  neon: "Neon",
+  argon: "Photo reader",
+  hydrogen: "Shopper",
+  neon: "Investigator",
   carttrap: "CartTrap",
-  firewall: "Firewall",
+  firewall: "CartTrap",
 };
+const SOURCE_MODEL: Record<string, string> = { argon: "Gemini 4 Argon", hydrogen: "Gemini 4 Hydrogen", neon: "Gemini 4 Neon" };
 
 function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -111,13 +113,13 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
           <div className="min-w-0">
             <div className={cx("flex items-center gap-2 text-[13px] font-semibold", danger ? "text-danger" : "text-warn")}>
               <ShieldAlert className="size-4" />
-              {danger ? "Hijacked call intercepted" : "Call intercepted"}
+              {danger ? "Tried to buy the wrong thing" : "Cart ready"}
             </div>
             <p className="mt-1 text-[15px] font-medium text-ink">
               {toolLabel(step.title)}
               <span className="font-normal text-ink-2"> · {summarize(step, products) ?? "—"}</span>
             </p>
-            <p className="mt-0.5 text-xs text-ink-3">Logged and stopped in dry-run. Nothing was sent to Shopify.</p>
+            <p className="mt-0.5 text-xs text-ink-3">This is a test copy, so we caught the call. Nothing was actually bought.</p>
           </div>
           {step.spend != null && (
             <div className="text-right">
@@ -138,12 +140,12 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
     const v = step.verdict;
     const Icon = v.error ? ShieldX : v.action === "approve_checkout" ? ShieldCheck : v.action === "escalate_to_neon_swap" ? ShieldAlert : ShieldX;
     const label = v.error
-      ? "Firewall error, failed closed"
+      ? "Check failed, blocked to be safe"
       : v.action === "approve_checkout"
-        ? "Approved by the firewall"
+        ? "CartTrap approved this purchase"
         : v.action === "escalate_to_neon_swap"
-          ? "Escalated to Neon"
-          : "Blocked by the firewall";
+          ? "CartTrap swapped to a safer product"
+          : "CartTrap blocked this purchase";
     return (
       <li data-step className="flex items-center gap-3 py-2">
         <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
@@ -161,7 +163,7 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
       return (
         <li data-step className="flex items-center gap-3 py-1.5">
           <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
-          <span className="text-[13px] text-ink-2">Fraud card ready</span>
+          <span className="text-[13px] text-ink-2">Explanation ready</span>
         </li>
       );
     }
@@ -172,7 +174,11 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
         <div className="flex min-w-0 flex-1 items-start gap-2">
           <Icon className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
           <p className="min-w-0 text-[13px] leading-snug text-ink-2">
-            {source && <span className="font-medium text-ink">{SOURCE_LABEL[source] ?? source} </span>}
+            {source && (
+              <span className="font-medium text-ink" title={SOURCE_MODEL[source]}>
+                {SOURCE_LABEL[source] ?? source}:{" "}
+              </span>
+            )}
             {step.message}
           </p>
         </div>
@@ -192,8 +198,8 @@ function StepRow({ step, products, variant }: { step: Step; products: ProductLed
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
             <span className={cx("text-[14px] font-medium", step.tone === "neutral" ? "text-ink" : toneText(step.tone))}>{toolLabel(step.title)}</span>
-            {source === "neon" && <Chip className="h-5 px-1.5 text-[10px]">neon</Chip>}
-            {pending && <span className="text-xs text-warn">checking…</span>}
+            {source === "neon" && <Chip className="h-5 px-1.5 text-[10px]">safe swap</Chip>}
+            {pending && <span className="text-xs text-warn">waiting for CartTrap…</span>}
             {step.spend != null && <span className="tnum ml-auto pl-2 font-mono text-xs text-ink-2">{money(step.spend)}</span>}
           </span>
           <span className="block truncate text-[13px] text-ink-2">{summarize(step, products)}</span>
@@ -217,6 +223,7 @@ export function TracePane({
   headerExtra,
   footer,
   compact,
+  bare,
 }: {
   variant: Variant;
   pane: PaneState;
@@ -225,6 +232,8 @@ export function TracePane({
   headerExtra?: ReactNode;
   footer?: ReactNode;
   compact?: boolean;
+  /** list only, no card chrome (used inside the CartTrap panel's tabs) */
+  bare?: boolean;
 }) {
   const listRef = useRef<HTMLOListElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -258,15 +267,32 @@ export function TracePane({
     { dependencies: [pane.status] },
   );
 
-  const title = variant === "victim" ? "Unprotected" : "CartTrap protected";
-  const subtitle = variant === "victim" ? "Hydrogen shopper, no firewall" : "Same shopper behind the firewall";
+  const title = variant === "victim" ? "What the unprotected shopper did" : "What the protected shopper did";
+  const subtitle = variant === "victim" ? "Without CartTrap · every step, live" : "With CartTrap · every step, live";
+
+  const list =
+    pane.steps.length === 0 ? (
+      <div className="flex h-full min-h-[120px] items-center justify-center px-6 text-center text-sm text-ink-3">
+        {variant === "victim" ? "Press Run to watch this shopper search, read the photo and build a cart." : "Each step the protected shopper takes shows up here, including the check before any purchase."}
+      </div>
+    ) : (
+      <ol ref={listRef} className="relative flex flex-col gap-0.5">
+        {pane.steps.map((s) => (
+          <StepRow key={s.id} step={s} products={products} variant={variant} />
+        ))}
+      </ol>
+    );
+
+  if (bare) {
+    return <div className={cx("thin-scroll min-h-0 overflow-y-auto", className)}>{list}</div>;
+  }
 
   return (
     <section className={cx("card flex min-h-0 flex-col overflow-hidden", className)} aria-label={title}>
       <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-          <p className="truncate text-xs text-ink-3">{subtitle}</p>
+          <p className="label">{subtitle}</p>
+          <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">{title}</h2>
         </div>
         <div ref={statusRef} className="flex items-center gap-2">
           {headerExtra}
@@ -277,17 +303,7 @@ export function TracePane({
         </div>
       </header>
       <div className={cx("thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2", compact ? "max-h-[360px]" : "")}>
-        {pane.steps.length === 0 ? (
-          <div className="flex h-full min-h-[120px] items-center justify-center px-6 text-center text-sm text-ink-3">
-            {variant === "victim" ? "Tool calls from the unprotected agent appear here." : "Every money-moving call stops here for a firewall check."}
-          </div>
-        ) : (
-          <ol ref={listRef} className="relative flex flex-col gap-0.5">
-            {pane.steps.map((s) => (
-              <StepRow key={s.id} step={s} products={products} variant={variant} />
-            ))}
-          </ol>
-        )}
+        {list}
       </div>
       {footer && <footer className="border-t border-line px-4 py-3">{footer}</footer>}
     </section>

@@ -1,104 +1,143 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Header, VIEWS, type View } from "./components/Header";
-import { Arena } from "./components/Arena";
-import { RedTeam } from "./components/RedTeam";
-import { Scoreboard } from "./components/Scoreboard";
-import { Catalog } from "./components/Catalog";
-import { findDemo, refFromProduct, type ProductRef } from "./catalog";
-import { SCENARIOS } from "./config";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { WifiOff } from "lucide-react";
+import { ALL_VIEWS, Header, MODES, type View } from "./components/Header";
+import { HomePage } from "./components/Home";
+import { ShopYourself } from "./components/ShopYourself";
+import { AgentPage } from "./components/AgentPage";
 import { useBackend } from "./hooks/useBackend";
 import { useTheme } from "./hooks/useTheme";
+import { useCart } from "./hooks/useCart";
+import { useDraft } from "./draft";
 import { gsap, useGSAP, d } from "./lib/motion";
-import { WifiOff } from "lucide-react";
+
+// Secondary pages load on demand so the first screen stays light.
+const Arena = lazy(() => import("./components/Arena").then((m) => ({ default: m.Arena })));
+const RedTeam = lazy(() => import("./components/RedTeam").then((m) => ({ default: m.RedTeam })));
+const Scoreboard = lazy(() => import("./components/Scoreboard").then((m) => ({ default: m.Scoreboard })));
+
+const AGENT_VIEWS: View[] = ["unprotected", "protected", "compare"];
+
+function PageLoading() {
+  return <div className="card h-64 animate-pulse" aria-label="Loading" />;
+}
 
 function viewFromHash(): View {
-  const h = window.location.hash.replace(/^#\/?/, "");
-  return (VIEWS.find((v) => v.id === h)?.id ?? "arena") as View;
+  const h = window.location.hash.replace(/^#\/?/, "") as View;
+  return ALL_VIEWS.includes(h) ? h : "home";
 }
 
 export default function App() {
   const { theme, toggle } = useTheme();
   const backend = useBackend();
+  const cart = useCart();
+  const { set: setDraft } = useDraft();
   const [view, setView] = useState<View>(viewFromHash);
   const mainRef = useRef<HTMLElement>(null);
-  const [product, setProduct] = useState<ProductRef | null>(() => {
-    const p = findDemo(SCENARIOS[0].productId);
-    return p ? refFromProduct(p) : null;
-  });
 
   const go = useCallback((v: View) => {
     setView(v);
-    if (window.location.hash !== `#/${v}`) window.history.replaceState(null, "", `#/${v}`);
+    if (window.location.hash !== `#/${v}`) window.history.pushState(null, "", `#/${v}`);
+    window.scrollTo({ top: 0 });
   }, []);
 
+  // Browser back/forward walks between pages.
   useEffect(() => {
-    const onHash = () => setView(viewFromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onPop = () => setView(viewFromHash());
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("hashchange", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onPop);
+    };
   }, []);
 
-  // 1-4 switch views when not typing.
+  // 1 / 2 / 3 jump between the three modes when you're not typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (e.metaKey || e.ctrlKey || e.altKey || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
-      const v = VIEWS.find((x) => x.key === e.key);
-      if (v) go(v.id);
+      const m = MODES.find((x) => x.key === e.key);
+      if (m) go(m.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [go]);
 
-  // Page intro once, then a short rise on every view change.
+  useEffect(() => {
+    const titles: Record<View, string> = {
+      home: "CartTrap",
+      shop: "Shop yourself · CartTrap",
+      unprotected: "AI shopper · CartTrap",
+      protected: "AI shopper + CartTrap",
+      compare: "Side by side · CartTrap",
+      redteam: "Self-healing · CartTrap",
+      results: "Results · CartTrap",
+    };
+    document.title = titles[view];
+  }, [view]);
+
   useGSAP(
     () => {
       const kids = mainRef.current?.querySelectorAll(":scope > div > *");
       if (!kids?.length) return;
-      gsap.fromTo(kids, { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: d(0.55), stagger: 0.06, ease: "power3.out", clearProps: "transform,opacity" });
+      gsap.fromTo(kids, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: d(0.5), stagger: 0.05, ease: "power3.out", clearProps: "transform,opacity" });
     },
     { dependencies: [view], scope: mainRef },
   );
 
+  const toReplay = () => backend.setMode("replay");
+  const showOffline = backend.mode === "live" && backend.online === false && AGENT_VIEWS.includes(view);
+
   return (
     <div className="min-h-dvh">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2">
+        Skip to content
+      </a>
       <Header view={view} onView={go} theme={theme} onTheme={toggle} mode={backend.mode} online={backend.online} onMode={backend.setMode} />
-      {backend.mode === "live" && backend.online === false && (
+      {showOffline && (
         <div className="border-b border-warn-line bg-warn-soft">
           <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5">
             <p className="flex items-center gap-2 text-[13px] text-warn">
               <WifiOff className="size-4 shrink-0" />
               <span>
-                <span className="font-semibold">Backend not reachable.</span> Live runs need the API on localhost:8000.
+                <span className="font-semibold">The AI shopper APIs aren’t reachable.</span> Switch to demo data, or start them and retry.
               </span>
             </p>
             <div className="flex items-center gap-1.5">
               <button onClick={backend.refresh} className="btn-secondary h-7 rounded-md px-2.5 text-xs font-medium">
                 Retry
               </button>
-              <button onClick={() => backend.setMode("replay")} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
-                Use recorded runs
+              <button onClick={toReplay} className="btn-primary h-7 rounded-md px-2.5 text-xs font-medium">
+                Use demo data
               </button>
             </div>
           </div>
         </div>
       )}
-      <main ref={mainRef} className="mx-auto w-full max-w-[1920px] px-3 pt-3 pb-24 sm:px-5 sm:pt-5 md:pb-5">
-        <div key={view} className={view === "arena" ? "" : "flex flex-col gap-4"}>
-          {view === "arena" && (
-            <Arena mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={() => backend.setMode("replay")} product={product} onProduct={setProduct} />
-          )}
-          {view === "catalog" && (
-            <Catalog
+      <main id="main" ref={mainRef} className="mx-auto w-full max-w-[1920px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8">
+        <div key={view} className="flex flex-col gap-4">
+          {view === "home" && <HomePage onView={go} />}
+          {view === "shop" && (
+            <ShopYourself
               mode={backend.mode}
-              onTest={(ref) => {
-                setProduct(ref);
-                go("arena");
-                window.scrollTo({ top: 0, behavior: "smooth" });
+              cart={cart}
+              onAskAI={(ref) => {
+                setDraft({ product: ref, scenarioId: null });
+                go("unprotected");
               }}
             />
           )}
-          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} onSwitchToReplay={() => backend.setMode("replay")} />}
-          {view === "scoreboard" && <Scoreboard results={backend.evalResults} source={backend.evalSource} />}
+          {view === "unprotected" && (
+            <AgentPage kind="unprotected" mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} onOtherMode={() => go("protected")} />
+          )}
+          {view === "protected" && (
+            <AgentPage kind="protected" mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} onOtherMode={() => go("unprotected")} />
+          )}
+          <Suspense fallback={<PageLoading />}>
+          {view === "compare" && <Arena mode={backend.mode} rules={backend.rules} rulesLive={backend.rulesSource === "live"} onSwitchToReplay={toReplay} />}
+          {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} onSwitchToReplay={toReplay} />}
+          {view === "results" && <Scoreboard results={backend.evalResults} source={backend.evalSource} />}
+          </Suspense>
         </div>
       </main>
     </div>

@@ -11,26 +11,26 @@ type StageKey = "launch" | "attack" | "blocked" | "mutate" | "bypass" | "diagnos
 type Tone = "neutral" | "danger" | "safe" | "warn";
 
 const STAGE: Record<StageKey, { title: string; icon: typeof Bug; tone: Tone }> = {
-  launch: { title: "Carbon sandbox up", icon: Rocket, tone: "neutral" },
-  attack: { title: "Attack minted", icon: Bug, tone: "neutral" },
-  blocked: { title: "Firewall blocked it", icon: ShieldCheck, tone: "safe" },
-  mutate: { title: "Carbon mutates", icon: Wand2, tone: "neutral" },
-  bypass: { title: "Bypass landed", icon: ShieldX, tone: "danger" },
-  diagnose: { title: "Neon diagnoses the trace", icon: Stethoscope, tone: "neutral" },
-  probe_proposed: { title: "New probe proposed", icon: FlaskConical, tone: "warn" },
-  validate: { title: "Validated before activation", icon: CheckCircle2, tone: "safe" },
-  patched: { title: "Rules hot-reloaded", icon: GitCommitHorizontal, tone: "safe" },
-  reblocked: { title: "Same exploit, blocked", icon: ShieldCheck, tone: "safe" },
+  launch: { title: "Attacker started", icon: Rocket, tone: "neutral" },
+  attack: { title: "New attack", icon: Bug, tone: "neutral" },
+  blocked: { title: "CartTrap blocked it", icon: ShieldCheck, tone: "safe" },
+  mutate: { title: "Attacker tries a new trick", icon: Wand2, tone: "neutral" },
+  bypass: { title: "An attack got through", icon: ShieldX, tone: "danger" },
+  diagnose: { title: "CartTrap studies the miss", icon: Stethoscope, tone: "neutral" },
+  probe_proposed: { title: "New check written", icon: FlaskConical, tone: "warn" },
+  validate: { title: "New check tested", icon: CheckCircle2, tone: "safe" },
+  patched: { title: "New check switched on", icon: GitCommitHorizontal, tone: "safe" },
+  reblocked: { title: "Same attack, now blocked", icon: ShieldCheck, tone: "safe" },
 };
 
 const ORDER: StageKey[] = ["attack", "blocked", "bypass", "probe_proposed", "patched", "reblocked"];
 const ORDER_LABEL: Record<string, string> = {
   attack: "Attack",
-  blocked: "Block",
-  bypass: "Bypass",
-  probe_proposed: "New rule",
-  patched: "Patch",
-  reblocked: "Re-block",
+  blocked: "Blocked",
+  bypass: "Got through",
+  probe_proposed: "Learns",
+  patched: "Updates",
+  reblocked: "Blocked again",
 };
 
 interface Item {
@@ -147,10 +147,10 @@ export function RedTeam({
       <section className="card flex min-h-0 flex-col overflow-hidden">
         <header className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
           <div>
-            <p className="label mb-1">Self-healing red team</p>
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Let it get beaten, then watch it fix itself</h1>
+            <p className="label mb-1">Self-healing</p>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Watch CartTrap learn from an attack it missed</h1>
             <p className="mt-1 max-w-lg text-sm text-ink-2">
-              Carbon attacks a live SKU from a sandbox and mutates until something gets through. Neon writes one new rule, proves it on the exploit and five benign cases, and ships it.
+              An attacker AI keeps changing its trick until one gets past CartTrap. CartTrap then writes one new check, makes sure it catches the attack without flagging normal photos, and switches it on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -182,16 +182,16 @@ export function RedTeam({
                 <span className="font-semibold">Couldn’t launch live.</span> {error}
               </p>
               <Button size="sm" onClick={onSwitchToReplay}>
-                Play the recorded heal
+                Use demo data instead
               </Button>
             </div>
           )}
           {items.length === 0 ? (
             <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center">
               <Bug className="size-6 text-ink-3" />
-              <p className="text-[15px] font-medium">No rounds yet</p>
+              <p className="text-[15px] font-medium">Press Launch to start</p>
               <p className="max-w-sm text-sm text-ink-3">
-                {mode === "replay" ? "Replay mode plays the recorded heal from runs/redteam_demo.jsonl." : "Launch to start up to 3 live rounds against our own agent."}
+                {mode === "replay" ? "Demo data: plays a scripted example of the full loop in about 15 seconds." : "Runs up to 3 live rounds against our own test agent."}
               </p>
             </div>
           ) : (
@@ -237,7 +237,7 @@ export function RedTeam({
       {/* rules side */}
       <aside className="flex flex-col gap-4">
         <section className="card p-4 sm:p-5">
-          <p className="label">rules.json</p>
+          <p className="label">Rule set version</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <div className="flex items-baseline gap-1 overflow-hidden">
               <span className="text-lg font-medium text-ink-3">v</span>
@@ -247,17 +247,17 @@ export function RedTeam({
             </div>
             {patched ? (
               <Chip tone="safe">
-                v{String(patched.data.rules_version_from)} → v{String(patched.data.rules_version_to)} · hot-reloaded
+                v{String(patched.data.rules_version_from)} → v{String(patched.data.rules_version_to)} · live now
               </Chip>
             ) : (
               <Chip>current</Chip>
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-3">Neon-written probes are versioned with a backup, so a bad rule can be rolled back.</p>
+          <p className="mt-2 text-xs text-ink-3">Every learned check is saved as a new version, so a bad one can be rolled back.</p>
         </section>
 
         <section className="card p-4 sm:p-5">
-          <p className="label mb-2">New probe</p>
+          <p className="label mb-2">The new check</p>
           {probe ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -270,16 +270,16 @@ export function RedTeam({
               </p>
             </div>
           ) : (
-            <p className="text-sm text-ink-3">The rule Neon writes after a bypass shows up here.</p>
+            <p className="text-sm text-ink-3">When an attack gets through, the check CartTrap writes to stop it shows up here.</p>
           )}
         </section>
 
         <section className="card p-4 sm:p-5">
-          <p className="label mb-3">Validation gate</p>
+          <p className="label mb-3">Tested before switching on</p>
           {exploit ? (
             <ul className="flex flex-col gap-2.5">
               <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                <span className="text-[14px] font-medium">Exploit must fire</span>
+                <span className="text-[14px] font-medium">Catches the attack</span>
                 <span className={cx("tnum font-mono text-[13px] font-semibold", exploit.fired ? "text-safe" : "text-danger")}>{prob(exploit.p)}</span>
                 <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <span className="block h-full rounded-full bg-safe" style={{ width: `${exploit.p * 100}%` }} />
@@ -287,7 +287,7 @@ export function RedTeam({
               </li>
               {benign.map((b) => (
                 <li key={b.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                  <span className="truncate text-[13px] text-ink-2">{humanize(b.id.replace(/^benign_/, ""))} stays quiet</span>
+                  <span className="truncate text-[13px] text-ink-2">Ignores normal photo: {humanize(b.id.replace(/^benign_/, "")).toLowerCase()}</span>
                   <span className={cx("tnum font-mono text-[12px]", b.p < 0.1 ? "text-ink-2" : "text-danger")}>{prob(b.p)}</span>
                   <span className="col-span-2 h-1 overflow-hidden rounded-full bg-surface-2">
                     <span className="block h-full rounded-full bg-ink-3" style={{ width: `${Math.max(2, b.p * 100)}%` }} />
@@ -296,7 +296,7 @@ export function RedTeam({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-ink-3">A probe is only written to rules.json if it fires on the exploit and none of the 5 benign fixtures.</p>
+            <p className="text-sm text-ink-3">A new check only goes live if it catches the attack and stays quiet on 5 normal photos.</p>
           )}
         </section>
       </aside>

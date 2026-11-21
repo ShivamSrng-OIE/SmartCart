@@ -3,7 +3,7 @@ import { fixtureEvents, replay, startRun, streamRun } from "../api";
 import { applyEvent, initialState, type ArenaState } from "../state";
 import type { Intent, TraceEvent } from "../types";
 import type { FixtureName } from "../config";
-import { REPLAY_SPEED } from "../config";
+import { ENDPOINTS, REPLAY_SPEED } from "../config";
 import type { Mode } from "./useBackend";
 
 export interface RunInput {
@@ -57,7 +57,8 @@ export function useArena(mode: Mode) {
       }
 
       try {
-        const runId = await startRun(form);
+        form.set("mode", ENDPOINTS.both.mode);
+        const runId = await startRun(form, ENDPOINTS.both.run);
         setState(initialState(intent, runId));
         setPhase("streaming");
         stopRef.current = streamRun(runId, onEvent, (msg) => {

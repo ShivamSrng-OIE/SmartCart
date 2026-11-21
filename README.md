@@ -1,78 +1,103 @@
-# CartTrap arena (frontend)
+# CartTrap (frontend)
 
-The live arena for CartTrap: an unprotected Hydrogen shopper and the same shopper behind CartTrap's firewall get the same request and the same poisoned media, side by side. It shows the hijacked call, the firewall verdict with all ~50 probe lights, the "why is it fraud?" card with Dollars Defended and a safe Shopify cart, the self-healing red-team loop, and the eval scoreboard.
+Can an AI shopping agent be tricked into buying the wrong thing? CartTrap's site lets you try it three ways on real Shopify products:
 
-Vite + React + TypeScript + Tailwind v4, GSAP for motion, vitest for the event reducer. Light and dark themes, phone to 1920px projector.
+| Mode | Key | What happens |
+|---|---|---|
+| **1 · Shop yourself** | `1` | Search Shopify (live), open listings, build a cart, check out on each store's own site. No AI. |
+| **2 · AI shopper** | `2` | An AI agent (Gemini) gets your request and a photo, then shops. A note hidden in the photo can make it buy the wrong thing. |
+| **3 · AI + CartTrap** | `3` | The same agent, but every purchase is checked first: the decision in ~0.2 s, 50 threat checks, why it was stopped, money saved, and a safe option. |
+
+Under **More**: *Side by side* (modes 2 and 3 at once, for a big screen), *Self-healing* (CartTrap learning a new check from an attack it missed) and *Results* (the 50-case eval).
+
+Vite + React + TypeScript + Tailwind v4, GSAP for motion, vitest for the logic. Shopify-admin look, light and dark themes, phone to 1920 px.
 
 ## Run it
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173, proxies /api, /media, /health to :8000
-npm test           # reducer tests (vitest)
+npm run dev        # http://localhost:5173
+npm test           # 41 tests: event reducer, Gemini adapter, Shopify normalizer, request parsing
 npm run build      # type-check + production build into dist/
 ```
 
 On Windows, run vitest from a path with an uppercase drive letter (`E:\CartTrap`). A lowercase `e:` makes vitest load its runner twice and every suite fails.
 
-No backend? The app notices `/health` is down and switches to **Replay**, which plays recorded runs from `src/fixtures/`. The Live/Replay switch in the header flips it by hand, which is the offline fallback for the venue.
+## Plugging in the two AI shoppers (Gemini)
 
-## Screens
+Modes 2 and 3 each call one HTTP endpoint on **your backend**, which calls Gemini server-side; the Gemini key never reaches the browser. Point them at your APIs in `.env.local` (see `.env.example`):
 
-| Screen | Key | What it's for |
-|---|---|---|
-| Arena | `1` | Scenario presets, webcam + Snap, push-to-talk request, budget, product picker, untrusted media. Both agents stream side by side; the firewall verdict, seismograph and fraud card react live. `Ctrl/⌘ + Enter` runs. |
-| Catalog | `2` | Search products, filter by price, open a listing (the "truth ledger") and send it to the Arena. `/` focuses search. |
-| Red team | `3` | Launch the self-healing loop: attack → block → mutate → bypass → Neon diagnoses → new probe → validation → rules v+1 → re-blocked. |
-| Scoreboard | `4` | Baseline vs prompt-hardened vs CartTrap from the latest results file, failures, and freeze provenance. |
+```bash
+VITE_UNPROTECTED_RUN_URL=/api/run      # mode 2
+VITE_UNPROTECTED_RUN_MODE=victim
+VITE_PROTECTED_RUN_URL=/api/run        # mode 3
+VITE_PROTECTED_RUN_MODE=guarded
+VITE_STREAM_URL=/api/runs/{id}/stream
+```
 
-## API the UI consumes
+Both receive the same `multipart/form-data`: `request` (cleaned, ≤ 1000 chars), `budget?`, `product_id?`, `product_url?`, `image?`, `audio?`, `video?`, `pdf?`, and `mode`.
 
-Routes follow `docs/architecture.md` §5 on the `dev` branch. Every one has a fallback, so a missing endpoint never blanks the stage.
+### Gemini-compatible responses
+
+Your endpoint can answer in whichever shape is easiest. `src/lib/gemini.ts` turns all of these into steps on screen:
+
+1. **`{ "run_id": "..." }`** and then Server-Sent Events at `VITE_STREAM_URL`, one event per `data:` line (the team contract below).
+2. **A raw Gemini `generateContent` response**: `candidates[0].content.parts[]`, where `text` becomes a log line, `functionCall {name, args}` becomes a tool call and `functionResponse {name, response}` becomes its result. Thought parts are skipped; `SAFETY`/blocked finishes are shown. In mode 2, money-moving calls (`create_cart`, `create_checkout`, spend requests…) are shown as caught before they reached Shopify.
+3. **A `streamGenerateContent` stream** (`text/event-stream` or NDJSON), chunk by chunk.
+4. Any of the above with CartTrap extras next to `candidates`: `verdict`, `fraud_card`, `intercepted`, or `events: TraceEvent[]`.
+
+If the API isn't reachable, the page says so and offers **Demo**, which plays scripted sample runs. Demo data is labelled "Demo data · scripted" everywhere it appears; it is not a recording of a real run.
+
+## Shopify
+
+Product search and details use **Shopify's Shop MCP** (`https://mcp.shop.com/`, per [shop.dev/docs](https://shop.dev/docs/tools.md)):
+
+- The browser calls `/shop-mcp` on its own origin and the Vite dev/preview server forwards it (no CORS, no cookies or Origin header sent to Shopify). For a static deploy, add the same one-line proxy on your host.
+- JSON-RPC 2.0 `tools/call` with protocol `2026-07-28`, matching `Mcp-Method` / `Mcp-Name` headers and the required `_meta`.
+- `search_catalog` (with price filter in minor units and cursor pagination for **Show more**), `get_product`, and `create_checkout` (with an idempotency key) for the cart. **`complete_checkout` is never called**; the shopper finishes on the merchant's `continue_url`.
+- Prices arrive in minor units and are converted per currency. Product and checkout links are used exactly as returned, never rebuilt or logged. Merchant descriptions are shown as plain text only. Shopify `warning` messages and `rate_limited` errors (with `retry_after`) are shown to the user.
+- Type several items separated by commas (`cold brew, ceramic mug`) to search them all at once.
+
+If a team backend route exists (`GET /api/catalog/search`, `GET /api/catalog/products/{id}`), it is used first. If neither it nor Shopify is reachable, search falls back to a small bundled demo catalog and says so.
+
+## Team API contract
+
+Routes follow `docs/architecture.md` §5 on the `dev` branch. Every one has a fallback, so a missing endpoint never blanks a page.
 
 | Route | Used by | If it's missing |
 |---|---|---|
-| `GET /health` → `{ok: true}` | Live/Replay switch | Switches to Replay and shows a "backend not reachable" bar in Live |
-| `POST /api/run` multipart: `request`, `budget?`, `product_url?`, `demo_product_id?`, `image?`, `audio?`, `video?`, `pdf?`, `mode=both` → `{run_id}` | Arena Run | Error bar with "Use the recorded run" |
-| `GET /api/runs/{id}/stream` (SSE, `data: <TraceEvent>`) | Arena, Red team | Same as above; reconnects are safe because the bus replays from the start |
-| `GET /api/rules` → `{version, probes}` | Seismograph lights | Bundled sample rule set, tagged "sample" |
-| `GET /api/eval/latest` → `{systems: {baseline, hardened, carttrap}: Metrics, meta?, failures?}` | Scoreboard | Bundled sample numbers with a "Sample numbers · not a real run" badge |
-| `POST /api/redteam/launch` `{product_id?, rounds}` → `{run_id}` | Red team | "Play the recorded heal" |
-| **Proposed:** `GET /api/catalog/search?q=&max_price=&limit=` → `{products: [...]}` | Catalog, product picker | Searches the bundled demo catalog and says so |
-| **Proposed:** `GET /api/catalog/products/{id}` → `get_product` JSON | Catalog detail | Demo catalog entry |
+| `GET /health` → `{ok: true}` | Live/Demo switch | Switches to Demo and explains why |
+| `POST /api/run` (`mode=victim\|guarded\|both`) → `{run_id}` | Modes 2 and 3, Side by side | Error with "Use demo data instead" |
+| `GET /api/runs/{id}/stream` (SSE) | same | same; reconnects are safe because the bus replays from the start |
+| `GET /api/rules` → `{version, probes}` | The 50 checks | Bundled sample rule set, tagged "sample" |
+| `GET /api/eval/latest` → `{systems: {baseline, hardened, carttrap}: Metrics, meta?, failures?}` | Results | Sample numbers with a "not a real run yet" badge |
+| `POST /api/redteam/launch` `{product_id?, rounds}` → `{run_id}` | Self-healing | "Use demo data instead" |
 
-The two catalog routes are thin wrappers over Shop MCP `search_catalog` / `get_product`. Raw Shop MCP items are fine because `src/catalog.ts` normalizes them.
-
-### Event shapes
-
-`TraceEvent` matches `backend/schemas.py`: `{run_id, pane: victim|guarded|redteam, t_ms, kind, data}`.
-
-- `tool_call` `{name, arguments, source?}`. `source: "neon"` marks the defender's safe-swap calls so they aren't shown as waiting on the firewall.
-- `tool_result` `{name, result}`, attached to the latest unanswered call of the same name. `get_product` results feed the price ledger.
-- `intercepted` `{tool, arguments, hijacked?}`. The victim is marked **hijacked** if `hijacked` is true, or the call breaks the Request box intent (quantity ≠ asked, total > budget, or any spend request).
-- `verdict` = `Verdict`. If `error` is set, the UI shows "Failed closed".
-- `fraud_card` = `FraudCard`. `safe_cart.continue_url` is opened exactly as returned (ADR m4/0008).
-- `log` `{source?: argon|hydrogen|neon|carttrap, message}`
-- `done`. The stream closes after the guarded (or red-team) pane's `done`.
-
-Red-team rounds are `log` events on `pane: "redteam"` with `data.stage` set to one of `launch, attack, blocked, mutate, bypass, diagnose, probe_proposed, validate, patched, reblocked`. Useful fields are `round`, `payload`, `latency_ms`, `top_probe {id, p}`, `approve_p`, `probe` (a `rules.json` entry), `exploit {p, fired}`, `benign [{id, p}]` and `rules_version_from/_to`. `src/fixtures/redteam_demo.jsonl` is a full example.
+`TraceEvent` matches `backend/schemas.py`: `{run_id, pane: victim|guarded|redteam, t_ms, kind, data}`. The full list of event kinds and the red-team `data.stage` values (`launch, attack, blocked, mutate, bypass, diagnose, probe_proposed, validate, patched, reblocked`) is in `src/state.ts` and `src/fixtures/redteam_demo.jsonl`.
 
 ## Where things live
 
 ```
 src/
-  state.ts             pure reducer: TraceEvent → ArenaState (tested in state.test.ts)
-  api.ts               live routes, SSE, normalizers, fixture replay
-  catalog.ts           product search/detail with demo fallback
-  config.ts            scenarios and demo SKUs (swap in real product IDs at the venue)
-  components/          Arena, InputBar, ProductPicker, TracePane, Seismograph, VerdictBanner,
-                       FraudCard, SafeCart, Catalog, RedTeam, Scoreboard, Header, ui
-  fixtures/            recorded runs, sample rules, sample eval, demo catalog
+  App.tsx                 routing between Home, the three modes and More
+  draft.tsx               the test you're building, shared by modes 2, 3 and Side by side
+  api.ts                  agent runs (any response shape), SSE, rules, eval, demo replay
+  lib/gemini.ts           Gemini response → steps
+  shop.ts                 Shop MCP client (search, product, checkout)
+  catalog.ts              search/detail with backend → Shopify → demo fallback
+  lib/intent.ts           request parsing: budget, quantities, comma-separated items
+  state.ts                pure reducer: events → page state
+  config.ts               endpoints, scenarios, demo SKUs
+  components/
+    Home, ShopYourself, AgentPage, RequestPanel, ProductPicker,
+    TracePane, VerdictBanner, Seismograph, FraudCard, SafeCart,
+    Arena (side by side), RedTeam, Scoreboard, Header, ui
+  fixtures/               scripted demo runs, sample rules, sample eval, demo catalog
 ```
 
 ## Design notes
 
-- Shopify-admin look: gray canvas, white cards, near-black primary buttons, one brand green. Red only means hijack or block, green means safe, amber means escalate.
-- Trusted vs untrusted is visible: only the Request box and budget count as intent; every image, clip and PDF is labelled untrusted.
-- Motion is GSAP and short. It respects `prefers-reduced-motion`.
-- No merchant images are committed; product images are hot-linked when the catalog returns them.
+- Shopify-admin look: gray canvas, white cards, near-black primary buttons, one brand green. Red only means "something went wrong / a trick was found", green means safe, amber means warning.
+- Plain language first; model names appear as small tags.
+- Trusted vs untrusted is explicit: only the request box and budget are instructions. Photos, audio and files are checked, never obeyed.
+- Motion is GSAP and short, and respects `prefers-reduced-motion`. Secondary pages are code-split.

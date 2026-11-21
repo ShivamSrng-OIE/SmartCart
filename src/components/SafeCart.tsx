@@ -15,7 +15,7 @@ export function SafeCart({ cart, className }: { cart: SafeCartT; className?: str
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[13px] font-semibold text-safe">
-            <ShieldCheck className="size-4" /> Safe swap, ready to approve
+            <ShieldCheck className="size-4" /> A safer option, ready to buy
           </p>
           <p className="mt-1 truncate text-[15px] font-medium text-ink">{title}</p>
           <p className="truncate text-xs text-ink-2">

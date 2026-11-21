@@ -1,18 +1,35 @@
-import { useRef } from "react";
-import { Moon, Sun, Swords, Trophy, Radar, Store } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, Sun, Swords, Trophy, X } from "lucide-react";
 import type { Mode } from "../hooks/useBackend";
 import type { Theme } from "../hooks/useTheme";
 import { gsap, d } from "../lib/motion";
-import { Dot, Kbd, cx } from "./ui";
+import { Dot, cx } from "./ui";
 
-export type View = "arena" | "catalog" | "redteam" | "scoreboard";
+export type View = "home" | "shop" | "unprotected" | "protected" | "compare" | "redteam" | "results";
 
-export const VIEWS: { id: View; label: string; short: string; icon: typeof Radar; key: string }[] = [
-  { id: "arena", label: "Arena", short: "Arena", icon: Radar, key: "1" },
-  { id: "catalog", label: "Catalog", short: "Catalog", icon: Store, key: "2" },
-  { id: "redteam", label: "Red team", short: "Red team", icon: Swords, key: "3" },
-  { id: "scoreboard", label: "Scoreboard", short: "Scores", icon: Trophy, key: "4" },
+export interface NavItem {
+  id: View;
+  label: string;
+  short: string;
+  hint: string;
+  icon: typeof Bot;
+  key?: string;
+}
+
+/** The three modes: the main way through the site. */
+export const MODES: NavItem[] = [
+  { id: "shop", label: "Shop yourself", short: "Yourself", hint: "Search and buy on your own", icon: Search, key: "1" },
+  { id: "unprotected", label: "AI shopper", short: "AI shopper", hint: "An AI buys for you, no protection", icon: Bot, key: "2" },
+  { id: "protected", label: "AI + CartTrap", short: "+ CartTrap", hint: "The same AI, checked by CartTrap", icon: ShieldCheck, key: "3" },
 ];
+
+export const MORE: NavItem[] = [
+  { id: "compare", label: "Side by side", short: "Compare", hint: "Run modes 2 and 3 together", icon: Columns2 },
+  { id: "redteam", label: "Self-healing", short: "Learning", hint: "Watch CartTrap learn from a miss", icon: Swords },
+  { id: "results", label: "Results", short: "Results", hint: "How well it works on 50 tests", icon: Trophy },
+];
+
+export const ALL_VIEWS: View[] = ["home", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];
 
 export function Logo() {
   return (
@@ -40,7 +57,7 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
         onToggle();
       }}
       aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-      title="Toggle theme"
+      title={theme === "dark" ? "Light theme" : "Dark theme"}
       className="inline-flex size-9 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
     >
       <span className="inline-flex">{theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}</span>
@@ -50,23 +67,75 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
 function ModeSwitch({ mode, online, onChange }: { mode: Mode; online: boolean | null; onChange: (m: Mode) => void }) {
   return (
-    <div className="flex items-center rounded-lg bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]" role="radiogroup" aria-label="Data source">
+    <div className="flex items-center rounded-lg bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]" role="radiogroup" aria-label="AI shoppers: live or demo data">
       {(["live", "replay"] as Mode[]).map((m) => (
         <button
           key={m}
           role="radio"
           aria-checked={mode === m}
           onClick={() => onChange(m)}
-          title={m === "live" ? (online ? "Backend is up. Runs hit the real agents." : "Backend offline at :8000") : "Play recorded runs. Works with no network."}
-          className={cx(
-            "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium capitalize transition-all",
-            mode === m ? "bg-surface text-ink shadow-card" : "text-ink-3 hover:text-ink",
-          )}
+          title={m === "live" ? (online ? "AI shoppers run on the real Gemini APIs" : "The AI shopper APIs aren’t reachable right now") : "AI shoppers play scripted sample runs. Product search stays live."}
+          className={cx("inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all", mode === m ? "bg-surface text-ink shadow-card" : "text-ink-3 hover:text-ink")}
         >
           {m === "live" && <Dot tone={online ? "safe" : online === false ? "danger" : "neutral"} pulse={!!online && mode === "live"} />}
-          {m}
+          {m === "live" ? "Live" : "Demo"}
         </button>
       ))}
+    </div>
+  );
+}
+
+function MoreMenu({ view, onView }: { view: View; onView: (v: View) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const active = MORE.some((m) => m.id === view);
+  useEffect(() => {
+    if (!open) return;
+    gsap.fromTo(pop.current, { y: -4, opacity: 0 }, { y: 0, opacity: 1, duration: d(0.18), ease: "power2.out" });
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative hidden md:block">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={cx("inline-flex h-9 items-center gap-1 rounded-lg px-2.5 text-[13px] font-medium transition-colors hover:bg-surface-2", active ? "text-ink" : "text-ink-2")}
+      >
+        More <ChevronDown className={cx("size-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div ref={pop} role="menu" className="absolute top-[calc(100%+6px)] right-0 z-40 w-64 rounded-xl bg-surface p-1 shadow-[0_0_0_1px_var(--line),var(--shadow-lg)]">
+          {MORE.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.id}
+                role="menuitem"
+                onClick={() => {
+                  onView(m.id);
+                  setOpen(false);
+                }}
+                className={cx("flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-surface-2", view === m.id && "bg-surface-2")}
+              >
+                <Icon className="mt-0.5 size-4 shrink-0 text-ink-3" />
+                <span>
+                  <span className="block text-[13px] font-medium">{m.label}</span>
+                  <span className="block text-xs text-ink-3">{m.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -88,72 +157,104 @@ export function Header({
   online: boolean | null;
   onMode: (m: Mode) => void;
 }) {
+  const [sheet, setSheet] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sheet) gsap.fromTo(sheetRef.current, { yPercent: 100 }, { yPercent: 0, duration: d(0.4), ease: "expo.out" });
+  }, [sheet]);
+
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
         <div className="mx-auto flex h-14 max-w-[1920px] items-center gap-3 px-3 sm:px-5">
-          <a href="#/arena" onClick={() => onView("arena")} className="shrink-0" aria-label="CartTrap home">
+          <button onClick={() => onView("home")} className="shrink-0" aria-label="CartTrap home">
             <Logo />
-          </a>
-          <span className="hidden text-xs text-ink-3 lg:inline">Execution firewall for AI shopping agents</span>
+          </button>
 
-          <nav className="mx-auto hidden md:flex" aria-label="Views">
+          <nav className="mx-auto hidden md:flex" aria-label="Modes">
             <div className="flex items-center gap-0.5 rounded-[10px] bg-surface-2 p-0.5 shadow-[inset_0_0_0_1px_var(--line)]">
-              {VIEWS.map((v) => {
+              {MODES.map((v) => {
                 const Icon = v.icon;
+                const on = view === v.id;
                 return (
                   <button
                     key={v.id}
                     onClick={() => onView(v.id)}
-                    aria-current={view === v.id ? "page" : undefined}
-                    className={cx(
-                      "inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all",
-                      view === v.id ? "bg-surface text-ink shadow-card" : "text-ink-2 hover:text-ink",
-                    )}
+                    aria-current={on ? "page" : undefined}
+                    title={v.hint}
+                    className={cx("inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all", on ? "bg-surface text-ink shadow-card" : "text-ink-2 hover:text-ink")}
                   >
-                    <Icon className="size-4" />
+                    <span className={cx("flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold", on ? "bg-ink text-ink-inverse" : "bg-line text-ink-2")}>{v.key}</span>
+                    <Icon className="hidden size-4 lg:block" />
                     {v.label}
-                    <span className="hidden xl:inline-flex">
-                      <Kbd>{v.key}</Kbd>
-                    </span>
                   </button>
                 );
               })}
             </div>
           </nav>
 
-          <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+          <div className="ml-auto flex items-center gap-1 md:ml-0">
+            <MoreMenu view={view} onView={onView} />
             <ModeSwitch mode={mode} online={online} onChange={onMode} />
             <ThemeToggle theme={theme} onToggle={onTheme} />
           </div>
         </div>
       </header>
 
-      {/* phone: thumb-reach tab bar */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-        aria-label="Views"
-      >
+      {/* phones: thumb-reach tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} aria-label="Modes">
         <div className="grid h-16 grid-cols-4">
-          {VIEWS.map((v) => {
+          {MODES.map((v) => {
             const Icon = v.icon;
             const on = view === v.id;
             return (
-              <button
-                key={v.id}
-                onClick={() => onView(v.id)}
-                aria-current={on ? "page" : undefined}
-                className={cx("relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors", on ? "text-ink" : "text-ink-3")}
-              >
+              <button key={v.id} onClick={() => onView(v.id)} aria-current={on ? "page" : undefined} className={cx("relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors", on ? "text-ink" : "text-ink-3")}>
                 {on && <span className="absolute top-0 h-0.5 w-10 rounded-full bg-brand" />}
                 <Icon className="size-5" />
                 {v.short}
               </button>
             );
           })}
+          <button onClick={() => setSheet(true)} className={cx("relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium", ([...MORE.map((m) => m.id), "home"] as View[]).includes(view) ? "text-ink" : "text-ink-3")}>
+            <LayoutGrid className="size-5" />
+            More
+          </button>
         </div>
       </nav>
+
+      {sheet && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="More">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSheet(false)} />
+          <div ref={sheetRef} className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface p-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}>
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line-strong" />
+            <div className="mb-1 flex items-center justify-between px-2">
+              <span className="text-[15px] font-semibold">More</span>
+              <button onClick={() => setSheet(false)} aria-label="Close" className="inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2">
+                <X className="size-4" />
+              </button>
+            </div>
+            {[{ id: "home" as View, label: "Home", short: "Home", hint: "What each mode does", icon: Home }, ...MORE].map((m) => {
+              const Icon = m.icon;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    onView(m.id);
+                    setSheet(false);
+                  }}
+                  className={cx("flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-surface-2", view === m.id && "bg-surface-2")}
+                >
+                  <Icon className="size-5 text-ink-3" />
+                  <span>
+                    <span className="block text-[15px] font-medium">{m.label}</span>
+                    <span className="block text-[13px] text-ink-3">{m.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 }

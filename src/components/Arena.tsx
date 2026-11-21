@@ -1,22 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import { InputBar } from "./InputBar";
+import { RequestPanel } from "./RequestPanel";
+import { useDraft } from "../draft";
 import { TracePane } from "./TracePane";
 import { Seismograph } from "./Seismograph";
 import { VerdictBanner } from "./VerdictBanner";
 import { FraudCard } from "./FraudCard";
-import { Button, Dot, Segmented, cx } from "./ui";
+import { OutcomeStrip } from "./OutcomeStrip";
+import { Button, Segmented, StepHeading, cx } from "./ui";
 import { useArena } from "../hooks/useArena";
 import type { Mode } from "../hooks/useBackend";
 import type { RuleSet } from "../types";
 import type { PaneState } from "../state";
 import { clock, money } from "../lib/format";
-import type { ProductRef } from "../catalog";
 
 function VictimFooter({ pane }: { pane: PaneState }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[13px] text-ink-2">Attempted spend</span>
+      <span className="text-[13px] text-ink-2">It would have charged</span>
       <span className={cx("tnum text-lg font-semibold tracking-tight", pane.status === "hijacked" ? "text-danger" : "text-ink")}>{money(pane.attempted || null)}</span>
     </div>
   );
@@ -38,7 +39,7 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [startedAt, live]);
-  return <span ref={ref} className="tnum font-mono text-xs text-ink-3" />;
+  return <span ref={ref} className="tnum font-mono text-xs text-ink-3" title="Time since you pressed Run" />;
 }
 
 export function Arena({
@@ -46,33 +47,33 @@ export function Arena({
   rules,
   rulesLive,
   onSwitchToReplay,
-  product,
-  onProduct,
 }: {
   mode: Mode;
   rules: RuleSet;
   rulesLive: boolean;
   onSwitchToReplay: () => void;
-  product: ProductRef | null;
-  onProduct: (p: ProductRef | null) => void;
 }) {
+  const { intent, fixture, toForm } = useDraft();
   const { state, phase, error, startedAt, run, reset } = useArena(mode);
-  const [mobilePane, setMobilePane] = useState<"victim" | "guarded">("victim");
-  const fwRef = useRef<HTMLElement>(null);
+  const [tab, setTab] = useState<"checks" | "log">("checks");
+  const resultRef = useRef<HTMLDivElement>(null);
   const busy = phase === "starting" || phase === "streaming";
   const checking = busy && !state.verdict && state.guarded.status !== "idle";
 
-  // On narrow screens, bring the verdict into view as soon as a run starts.
+  // On narrow screens, bring the result into view as soon as a run starts.
   useEffect(() => {
-    if (phase === "streaming" && window.innerWidth < 1024) fwRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (phase === "streaming" && window.innerWidth < 1024) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [phase]);
 
-  const victimStatus = state.victim.status;
-  const guardedStatus = state.guarded.status;
-
   return (
-    <div className="flex flex-col gap-3 sm:gap-4 2xl:h-[calc(100dvh-56px-40px)]">
-      <InputBar mode={mode} busy={busy} onRun={run} onReset={reset} canReset={phase !== "idle"} product={product} onProduct={onProduct} />
+    <div className="flex flex-col gap-3 sm:gap-4">
+      {/* 1 · set up */}
+      <header>
+        <p className="label">Side by side</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">Both shoppers, same test, at the same time</h1>
+        <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">Left is the AI shopper with no protection, right is the same shopper behind CartTrap. Good for a live demo on a big screen.</p>
+      </header>
+      <RequestPanel wide mode={mode} busy={busy} onRun={() => run({ form: toForm(), intent, fixture })} onReset={reset} canReset={phase !== "idle"} title="1 · Set up a test" runLabel="Run both" />
 
       {error && (
         <div className="flex flex-col gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -83,85 +84,70 @@ export function Arena({
             </span>
           </p>
           <Button size="sm" onClick={onSwitchToReplay}>
-            Use the recorded run
+            Use demo data instead
           </Button>
         </div>
       )}
 
-      <div
-        className={cx(
-          "grid min-h-0 flex-1 grid-cols-1 gap-3 sm:gap-4",
-          "md:grid-cols-2 md:[grid-template-areas:'fw_fw'_'fraud_fraud'_'victim_guarded']",
-          "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:[grid-template-areas:'victim_fw'_'guarded_fraud']",
-          "2xl:grid-cols-[minmax(0,5fr)_minmax(0,6.2fr)_minmax(0,5fr)] 2xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] 2xl:[grid-template-areas:'victim_fw_fraud'_'guarded_fw_fraud']",
-        )}
-      >
-        {/* Firewall: verdict + seismograph */}
-        <section ref={fwRef} className="card scroll-mt-20 p-4 sm:p-5 md:[grid-area:fw] 2xl:min-h-0 2xl:overflow-y-auto thin-scroll" aria-label="Firewall">
-          <div className="mb-4 flex items-center justify-between gap-3 border-b border-line pb-3">
-            <div className="flex items-center gap-2">
-              <Dot tone={state.verdict ? (guardedStatus === "approved" ? "safe" : guardedStatus === "escalated" ? "warn" : "danger") : "neutral"} pulse={checking} />
-              <span className="text-[13px] font-medium">Decisions firewall</span>
-              <span className="hidden text-xs text-ink-3 sm:inline">· checks every money-moving call</span>
-            </div>
-            <RunClock startedAt={startedAt} live={busy} />
-          </div>
-          <VerdictBanner verdict={state.verdict} checking={checking || phase === "starting"} />
-          <div className="mt-5">
-            <Seismograph rules={rules} rulesLive={rulesLive} verdict={state.verdict} checking={checking} />
-          </div>
-        </section>
+      {/* 2 · result at a glance */}
+      <div ref={resultRef} className="flex scroll-mt-20 flex-col gap-2.5">
+        <StepHeading n={2} title="Result" hint={phase === "idle" ? "How to read this page" : "The same request, with and without CartTrap"} aside={<RunClock startedAt={startedAt} live={busy} />} />
+        <OutcomeStrip state={state} phase={phase} />
+      </div>
 
-        {/* Fraud card */}
-        <FraudCard
-          card={state.fraudCard}
-          verdict={state.verdict}
-          status={guardedStatus}
-          attempted={state.victim.attempted}
-          className="md:[grid-area:fraud] 2xl:min-h-0"
-        />
-
-        {/* Traces — tablets and up */}
-        <TracePane
-          variant="victim"
-          pane={state.victim}
-          products={state.products}
-          className="hidden md:flex md:[grid-area:victim] md:max-h-[520px] lg:max-h-none 2xl:min-h-0"
-          footer={<VictimFooter pane={state.victim} />}
-        />
-        <TracePane variant="guarded" pane={state.guarded} products={state.products} className="hidden md:flex md:[grid-area:guarded] md:max-h-[520px] lg:max-h-none 2xl:min-h-0" />
-
-        {/* Traces — phones */}
-        <div className="flex flex-col gap-2 md:hidden">
-          <Segmented
-            value={mobilePane}
-            onChange={setMobilePane}
-            className="w-full"
-            options={[
-              {
-                value: "victim",
-                label: (
-                  <>
-                    <Dot tone={victimStatus === "hijacked" ? "danger" : "neutral"} /> Unprotected
-                  </>
-                ),
-              },
-              {
-                value: "guarded",
-                label: (
-                  <>
-                    <Dot tone={guardedStatus === "approved" ? "safe" : guardedStatus === "blocked" || guardedStatus === "firewall_error" ? "danger" : guardedStatus === "escalated" ? "warn" : "neutral"} />{" "}
-                    Protected
-                  </>
-                ),
-              },
-            ]}
-          />
-          {mobilePane === "victim" ? (
-            <TracePane variant="victim" pane={state.victim} products={state.products} compact footer={<VictimFooter pane={state.victim} />} />
-          ) : (
-            <TracePane variant="guarded" pane={state.guarded} products={state.products} compact />
+      {/* 3 · details */}
+      <div className="flex flex-col gap-2.5">
+        <StepHeading n={3} title="Details" hint="Open any panel to see exactly what happened" />
+        <div
+          className={cx(
+            "grid grid-cols-1 gap-3 sm:gap-4",
+            "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] lg:[grid-template-areas:'victim_decide'_'why_why']",
+            "2xl:h-[calc(100dvh-140px)] 2xl:min-h-[640px] 2xl:grid-cols-[minmax(0,5fr)_minmax(0,6.4fr)_minmax(0,5fr)] 2xl:[grid-template-areas:'victim_decide_why']",
           )}
+        >
+          {/* Without CartTrap */}
+          <TracePane
+            variant="victim"
+            pane={state.victim}
+            products={state.products}
+            className="order-3 max-h-[560px] lg:order-none lg:max-h-[720px] lg:[grid-area:victim] 2xl:max-h-none 2xl:min-h-0"
+            footer={<VictimFooter pane={state.victim} />}
+          />
+
+          {/* With CartTrap: decision + checks / step log */}
+          <section className="card order-1 flex min-h-0 flex-col overflow-hidden lg:order-none lg:[grid-area:decide]" aria-label="How CartTrap decided">
+            <header className="border-b border-line px-4 py-3 sm:px-5">
+              <p className="label">With CartTrap</p>
+              <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">How CartTrap decided</h2>
+            </header>
+            <div className="thin-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
+              <VerdictBanner verdict={state.verdict} checking={checking || phase === "starting"} />
+              <div className="mt-5 mb-4 flex items-center justify-between gap-3">
+                <Segmented
+                  value={tab}
+                  onChange={setTab}
+                  options={[
+                    { value: "checks", label: `Threat checks · ${rules.probes.length}` },
+                    { value: "log", label: `Step by step · ${state.guarded.steps.length}` },
+                  ]}
+                />
+              </div>
+              {tab === "checks" ? (
+                <Seismograph rules={rules} rulesLive={rulesLive} verdict={state.verdict} checking={checking} />
+              ) : (
+                <TracePane variant="guarded" pane={state.guarded} products={state.products} bare className="-mx-1" />
+              )}
+            </div>
+          </section>
+
+          {/* Why it was stopped */}
+          <FraudCard
+            card={state.fraudCard}
+            verdict={state.verdict}
+            status={state.guarded.status}
+            attempted={state.victim.attempted}
+            className="order-2 lg:order-none lg:[grid-area:why] 2xl:min-h-0"
+          />
         </div>
       </div>
     </div>

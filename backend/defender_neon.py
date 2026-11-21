@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -93,28 +94,43 @@ def dollars_defended(attempted: float, safe_total: float | None) -> float:
 
 
 # ------------------------------------------------------------- product facts
-def _price(product: dict) -> float | None:
-    raw = product.get("price")
-    if isinstance(raw, dict):
-        raw = raw.get("amount")
+BUDGET_CURRENCY = "USD"
+_UNAVAILABLE_WORDS = ("out_of_stock", "out of stock", "outofstock", "unavailable", "sold_out", "sold out", "preorder_closed")
+
+
+def _variant_dollars(variant: dict) -> Decimal | None:
+    """Variant price is {"amount": int minor units, "currency"}. Other currencies are rejected, not converted."""
+    price = variant.get("price")
+    if not isinstance(price, dict) or price.get("currency") != BUDGET_CURRENCY:
+        return None
     try:
-        return float(raw)
-    except (TypeError, ValueError):
+        return Decimal(int(price["amount"])) / 100
+    except (KeyError, TypeError, ValueError):
         return None
 
 
-def _shop_domain(product: dict) -> str | None:
-    seller = product.get("seller")
-    if isinstance(seller, dict) and seller.get("domain"):
-        return seller["domain"]
-    return product.get("shop") or product.get("domain")
+def _purchasable(variant: dict) -> bool:
+    """No availability field: assume purchasable. Otherwise it must not say unavailable."""
+    if "availability" not in variant:
+        return True
+    av = variant["availability"]
+    if isinstance(av, dict):
+        for key in ("available", "purchasable", "in_stock"):
+            if key in av:
+                return bool(av[key])
+        av = av.get("status") or av.get("state") or ""
+    if isinstance(av, bool):
+        return av
+    return bool(av) and not any(w in str(av).lower() for w in _UNAVAILABLE_WORDS)
 
 
 def _shopify_sells(product_json: dict | None) -> dict | None:
     """Quote real get_product fields only. Missing fields stay missing."""
     if not product_json:
         return None
-    sells = {"title": product_json.get("title"), "price": product_json.get("price")}
+    sells = {"title": product_json.get("title")}
+    variants = product_json.get("variants") or []
+    sells["price"] = variants[0].get("price") if variants else product_json.get("price")
     pid = product_json.get("id") or product_json.get("product_id")
     if pid is not None:
         sells["product_id"] = pid
@@ -150,7 +166,7 @@ def _template_reason(verdict, claims, product_json, blocked, attempted) -> str:
         title = product_json.get("title")
         parts.append(
             f'The media claims a {claims.pack_count_claim}-pack, but Shopify lists "{title}" '
-            f"at {product_json.get('price')}."
+            f"at {(_shopify_sells(product_json) or {}).get('price')}."
         )
     elif product_json is None:
         parts.append("The product could not be verified against Shopify.")
@@ -216,7 +232,7 @@ async def build_fraud_card(verdict, claims, product_json, blocked, attempted, sa
         prompt = _neon_prompt(verdict, claims, product_json, blocked, attempted)
         card.reason = await asyncio.wait_for(_neon_reason(prompt), timeout=NEON_TIMEOUT_S)
     except Exception as exc:  # timeout or any Neon error: template reason stays, UI never hangs
-        log.warning("neon fraud card fell back to template: %r", exc)
+        log.warning("neon fraud card fell back to template: %s", type(exc).__name__)
     return card
 
 
@@ -229,36 +245,39 @@ async def safe_swap(intent: Intent, original: dict | None, shop: ShopLike) -> di
     """
     query = (original or {}).get("title") or intent.text
     qty = intent.quantity
-    candidates = []
-    for offer in await shop.search_catalog(query):
-        price = _price(offer)
-        if price is not None:
-            candidates.append((price, offer))
-    candidates.sort(key=lambda c: c[0])
+    budget = None if intent.budget is None else Decimal(str(intent.budget))
 
-    for _, offer in candidates:
+    best = None  # (unit price, variant)
+    for offer in (await shop.search_catalog(query))[:8]:
         product = await shop.get_product(offer["id"])  # truth ledger, not the search snippet
-        price = _price(product)
-        domain = _shop_domain(product) or _shop_domain(offer)
-        if price is None or domain is None:
-            continue
-        total = round(price * qty, 2)
-        if intent.budget is not None and total > intent.budget:
-            continue
-        lines = [{"product_id": product.get("id", offer["id"]), "quantity": qty}]
-        try:
-            res = await shop.create_checkout(domain, lines)
-        except Exception as exc:  # ADR 0008: anonymous checkout may fail live; fall back to cart
-            log.warning("create_checkout failed (%r); falling back to create_cart", exc)
-            res = await shop.create_cart(domain, lines)
-        out = {
-            "checkout_id": res.get("id") or res.get("checkout_id"),
-            "continue_url": res.get("continue_url"),
-            "shop": domain,
-            "line_items": lines,
-            "total": total,
-        }
-        if res.get("intercepted"):
-            out["intercepted"] = True
-        return out
-    return None
+        for variant in product.get("variants") or []:
+            unit = _variant_dollars(variant)
+            domain = (variant.get("seller") or {}).get("domain")
+            if unit is None or not domain or not variant.get("id") or not _purchasable(variant):
+                continue
+            if budget is not None and unit * qty > budget:
+                continue
+            if best is None or unit < best[0]:
+                best = (unit, variant)
+    if best is None:
+        return None
+
+    unit, variant = best
+    domain = variant["seller"]["domain"]
+    lines = [{"item": {"id": variant["id"]}, "quantity": qty}]
+    try:
+        res = await shop.create_checkout(domain, lines)
+    except Exception as exc:  # ADR 0008: anonymous checkout may fail live; fall back to cart
+        # Log the type only: messages can embed the access-keyed URL.
+        log.warning("create_checkout failed (%s); falling back to create_cart", type(exc).__name__)
+        res = await shop.create_cart(domain, lines)
+    out = {
+        "checkout_id": res.get("id") or res.get("checkout_id"),
+        "continue_url": res.get("continue_url"),
+        "shop": domain,
+        "line_items": lines,
+        "total": float(unit * qty),
+    }
+    if res.get("intercepted"):
+        out["intercepted"] = True
+    return out

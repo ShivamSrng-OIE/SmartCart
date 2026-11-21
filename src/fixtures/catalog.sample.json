@@ -1,0 +1,136 @@
+{
+  "products": [
+    {
+      "id": "gid://shopify/Product/8812001",
+      "title": "Alder & Oak Cold Brew Concentrate, 32 oz",
+      "price": 19.99,
+      "units": 1,
+      "vendor": "Alder & Oak",
+      "product_type": "Coffee",
+      "seller": { "domain": "alder-oak-coffee.example", "name": "Alder & Oak Coffee" },
+      "url": "https://alder-oak-coffee.example/products/cold-brew-32oz",
+      "description": "Single 32 oz bottle of cold brew concentrate. Mix 1:1 with water or milk. Makes about 16 servings."
+    },
+    {
+      "id": "gid://shopify/Product/5530217",
+      "title": "Northline Cold Brew Concentrate, 32 oz",
+      "price": 18.5,
+      "units": 1,
+      "vendor": "Northline Roasters",
+      "product_type": "Coffee",
+      "seller": { "domain": "northline-roasters.example", "name": "Northline Roasters" },
+      "url": "https://northline-roasters.example/products/cold-brew-concentrate",
+      "description": "Small-batch cold brew concentrate, single 32 oz bottle. Medium roast, notes of cocoa and dried cherry."
+    },
+    {
+      "id": "gid://shopify/Product/7120044",
+      "title": "Harbor Street Cold Brew, 64 oz",
+      "price": 31.0,
+      "units": 1,
+      "vendor": "Harbor Street",
+      "product_type": "Coffee",
+      "seller": { "domain": "harbor-street.example", "name": "Harbor Street Coffee" },
+      "url": "https://harbor-street.example/products/cold-brew-64",
+      "description": "Ready-to-drink cold brew in a 64 oz carafe. Keep refrigerated."
+    },
+    {
+      "id": "gid://shopify/Product/4410923",
+      "title": "Field Day Sparkling Water, Lime (single can)",
+      "price": 2.49,
+      "units": 1,
+      "vendor": "Field Day",
+      "product_type": "Beverages",
+      "seller": { "domain": "field-day-drinks.example", "name": "Field Day Drinks" },
+      "url": "https://field-day-drinks.example/products/lime-can",
+      "description": "One 12 fl oz can of lime sparkling water. No sugar, no sweeteners."
+    },
+    {
+      "id": "gid://shopify/Product/4410977",
+      "title": "Field Day Sparkling Water, Lime, 12-pack",
+      "price": 26.99,
+      "units": 12,
+      "vendor": "Field Day",
+      "product_type": "Beverages",
+      "seller": { "domain": "field-day-drinks.example", "name": "Field Day Drinks" },
+      "url": "https://field-day-drinks.example/products/lime-12-pack",
+      "description": "Twelve 12 fl oz cans of lime sparkling water."
+    },
+    {
+      "id": "gid://shopify/Product/6603318",
+      "title": "Kiln Studio Ceramic Mug, 12 oz",
+      "price": 24.0,
+      "units": 1,
+      "vendor": "Kiln Studio",
+      "product_type": "Kitchen",
+      "seller": { "domain": "kiln-studio.example", "name": "Kiln Studio" },
+      "url": "https://kiln-studio.example/products/mug-12oz",
+      "description": "Wheel-thrown stoneware mug with a matte glaze. Dishwasher safe."
+    },
+    {
+      "id": "gid://shopify/Product/6603390",
+      "title": "Kiln Studio Ceramic Mug, set of 4",
+      "price": 88.0,
+      "units": 4,
+      "vendor": "Kiln Studio",
+      "product_type": "Kitchen",
+      "seller": { "domain": "kiln-studio.example", "name": "Kiln Studio" },
+      "url": "https://kiln-studio.example/products/mug-set-4",
+      "description": "Four 12 oz stoneware mugs in mixed glazes."
+    },
+    {
+      "id": "gid://shopify/Product/3301442",
+      "title": "Trailhead Insulated Bottle, 20 oz",
+      "price": 29.0,
+      "units": 1,
+      "vendor": "Trailhead Supply",
+      "product_type": "Outdoor",
+      "seller": { "domain": "trailhead-supply.example", "name": "Trailhead Supply" },
+      "url": "https://trailhead-supply.example/products/insulated-bottle-20",
+      "description": "Double-wall vacuum insulated steel bottle. Keeps drinks cold for 24 hours."
+    },
+    {
+      "id": "gid://shopify/Product/9020114",
+      "title": "Volt USB-C Flash Drive, 64 GB",
+      "price": 14.99,
+      "units": 1,
+      "vendor": "Volt Labs",
+      "product_type": "Electronics",
+      "seller": { "domain": "volt-labs.example", "name": "Volt Labs" },
+      "url": "https://volt-labs.example/products/usb-c-64gb",
+      "description": "Compact USB-C flash drive, 64 GB capacity, USB 3.2 Gen 1."
+    },
+    {
+      "id": "gid://shopify/Product/9020188",
+      "title": "Volt USB-C Flash Drive, 256 GB",
+      "price": 39.99,
+      "units": 1,
+      "vendor": "Volt Labs",
+      "product_type": "Electronics",
+      "seller": { "domain": "volt-labs.example", "name": "Volt Labs" },
+      "url": "https://volt-labs.example/products/usb-c-256gb",
+      "description": "Compact USB-C flash drive, 256 GB capacity, USB 3.2 Gen 1."
+    },
+    {
+      "id": "gid://shopify/Product/2281930",
+      "title": "Meadow Oat Granola, 12 oz bag",
+      "price": 8.5,
+      "units": 1,
+      "vendor": "Meadow Pantry",
+      "product_type": "Pantry",
+      "seller": { "domain": "meadow-pantry.example", "name": "Meadow Pantry" },
+      "url": "https://meadow-pantry.example/products/oat-granola",
+      "description": "Toasted oat granola with almonds and maple. One 12 oz resealable bag."
+    },
+    {
+      "id": "gid://shopify/Product/2281977",
+      "title": "Meadow Oat Granola, case of 6",
+      "price": 47.0,
+      "units": 6,
+      "vendor": "Meadow Pantry",
+      "product_type": "Pantry",
+      "seller": { "domain": "meadow-pantry.example", "name": "Meadow Pantry" },
+      "url": "https://meadow-pantry.example/products/oat-granola-case",
+      "description": "Six 12 oz bags of oat granola."
+    }
+  ]
+}

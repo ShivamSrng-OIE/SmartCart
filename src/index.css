@@ -3,59 +3,74 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ------------------------------------------------------------------ tokens
-   Warm neutrals do almost all the work. Color only carries meaning:
-   danger = hijack/block, safe = approved/honest, warn = escalate/pending. */
+   Shopify-admin inspired (Polaris feel): neutral gray canvas, white cards, near-black
+   bevelled primary actions, one brand green. Color otherwise only carries meaning:
+   danger = hijack/block, safe = approved/honest (shares the brand green), warn = escalate. */
 :root {
-  --bg: #f6f5f2;
+  --bg: #f1f1f1;
   --surface: #ffffff;
-  --surface-2: #f0efeb;
-  --sunken: #ebe9e4;
-  --line: #e4e2dc;
-  --line-strong: #d2cfc7;
-  --ink: #161615;
-  --ink-2: #55534e;
-  --ink-3: #8b8880;
-  --ink-inverse: #f6f5f2;
+  --surface-2: #f7f7f7;
+  --sunken: #f3f3f3;
+  --line: #e3e3e3;
+  --line-strong: #cccccc;
+  --ink: #303030;
+  --ink-2: #616161;
+  --ink-3: #8a8a8a;
+  --ink-inverse: #ffffff;
+  --primary: #303030;
+  --primary-hover: #1a1a1a;
 
-  --danger: #d93a32;
-  --danger-soft: #fbeceb;
-  --danger-line: #f2c9c6;
-  --safe: #1d8456;
-  --safe-soft: #e8f4ee;
-  --safe-line: #bfe0cf;
-  --warn: #a86400;
-  --warn-soft: #fbf1e1;
-  --warn-line: #ecd3a8;
+  --brand: #008060;
+  --brand-ink: #ffffff;
 
-  --shadow: 0 1px 0 rgb(22 22 21 / 0.03), 0 1px 2px rgb(22 22 21 / 0.04);
-  --shadow-lg: 0 1px 0 rgb(22 22 21 / 0.03), 0 12px 32px -12px rgb(22 22 21 / 0.16);
+  --danger: #c70a24;
+  --danger-soft: #fee9e8;
+  --danger-line: #fdc8c3;
+  --safe: #008060;
+  --safe-soft: #e3f5ec;
+  --safe-line: #b4e1c9;
+  --warn: #8a6116;
+  --warn-soft: #fff1d6;
+  --warn-line: #f5d79a;
+
+  --shadow: 0 1px 0 0 rgb(26 26 26 / 0.07), 0 0 0 1px rgb(0 0 0 / 0.02);
+  --shadow-lg: 0 4px 6px -2px rgb(26 26 26 / 0.2);
+  --btn-bevel: inset 0 -1px 0 0 #000, inset 0 0 0 1px rgb(48 48 48), inset 0 0.5px 0 1.5px rgb(255 255 255 / 0.25);
+  --btn-bevel-2: inset 0 -1px 0 0 #b5b5b5, inset 0 0 0 1px rgb(0 0 0 / 0.1), inset 0 0.5px 0 1.5px #fff;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #0e0e0d;
-  --surface: #151514;
-  --surface-2: #1b1b1a;
-  --sunken: #111110;
-  --line: #262624;
-  --line-strong: #363532;
-  --ink: #f1f0eb;
-  --ink-2: #a9a79f;
-  --ink-3: #72706a;
-  --ink-inverse: #0e0e0d;
+  --bg: #141414;
+  --surface: #1e1e1e;
+  --surface-2: #262626;
+  --sunken: #181818;
+  --line: #2f2f2f;
+  --line-strong: #404040;
+  --ink: #e8e8e8;
+  --ink-2: #a8a8a8;
+  --ink-3: #7a7a7a;
+  --ink-inverse: #141414;
+  --primary: #f0f0f0;
+  --primary-hover: #ffffff;
 
-  --danger: #ff5c52;
-  --danger-soft: #2a1514;
-  --danger-line: #4d2320;
-  --safe: #3ccf8e;
-  --safe-soft: #12231b;
-  --safe-line: #1f4433;
-  --warn: #f2a93b;
-  --warn-soft: #2a2010;
-  --warn-line: #4a3816;
+  --brand: #2fb985;
+  --brand-ink: #0b1f17;
 
-  --shadow: 0 1px 0 rgb(0 0 0 / 0.3);
-  --shadow-lg: 0 1px 0 rgb(0 0 0 / 0.3), 0 16px 40px -16px rgb(0 0 0 / 0.6);
+  --danger: #ff6b5e;
+  --danger-soft: #2c1513;
+  --danger-line: #51241f;
+  --safe: #3fc893;
+  --safe-soft: #10241b;
+  --safe-line: #1d4434;
+  --warn: #ffc453;
+  --warn-soft: #2a2110;
+  --warn-line: #4b3a17;
+
+  --shadow: 0 1px 0 0 rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-lg: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --btn-bevel: inset 0 -1px 0 0 #bdbdbd, inset 0 0.5px 0 1px #fff;
+  --btn-bevel-2: inset 0 -1px 0 0 #111, inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 0.5px 0 1px rgb(255 255 255 / 0.06);
   color-scheme: dark;
 }
 
@@ -70,6 +85,10 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-ink-inverse: var(--ink-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-danger-line: var(--danger-line);
@@ -80,7 +99,7 @@
   --color-warn-soft: var(--warn-soft);
   --color-warn-line: var(--warn-line);
 
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --shadow-card: var(--shadow);
@@ -100,7 +119,8 @@
   }
   body {
     @apply bg-bg font-sans text-ink;
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: "cv11", "ss01", "ss03";
+    letter-spacing: -0.006em;
     min-height: 100dvh;
   }
   html.theme-anim,
@@ -136,6 +156,11 @@
     font: inherit;
     color: inherit;
   }
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 @layer components {
@@ -143,13 +168,37 @@
     font-variant-numeric: tabular-nums;
   }
   .card {
-    @apply rounded-2xl border border-line bg-surface shadow-card;
+    @apply rounded-xl bg-surface shadow-card;
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: var(--ink-inverse);
+    box-shadow: var(--btn-bevel);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--btn-bevel-2);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+  .btn-brand {
+    background: var(--brand);
+    color: var(--brand-ink);
+    box-shadow: inset 0 -1px 0 0 rgb(0 0 0 / 0.35), inset 0 0.5px 0 1.5px rgb(255 255 255 / 0.2);
+  }
+  .btn-brand:hover:not(:disabled) {
+    filter: brightness(1.06);
   }
   .label {
     @apply font-mono text-2xs font-medium tracking-[0.08em] text-ink-3 uppercase;
   }
   .field {
-    @apply w-full rounded-xl border border-line bg-surface-2/60 px-3.5 py-2.5 text-[15px] text-ink outline-none transition-colors placeholder:text-ink-3 hover:border-line-strong focus:border-ink focus:bg-surface;
+    @apply w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-3 hover:border-ink-3 focus:border-ink focus:shadow-[0_0_0_1px_var(--ink)];
   }
   .thin-scroll {
     scrollbar-width: thin;

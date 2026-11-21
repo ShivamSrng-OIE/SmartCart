@@ -14,7 +14,7 @@ export function useTheme() {
     const root = document.documentElement;
     root.classList.add("theme-anim");
     root.dataset.theme = t;
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", t === "dark" ? "#0e0e0d" : "#f6f5f2"));
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", t === "dark" ? "#141414" : "#f1f1f1"));
     try {
       localStorage.setItem(KEY, t);
     } catch {

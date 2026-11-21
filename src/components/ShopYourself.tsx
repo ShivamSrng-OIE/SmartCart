@@ -6,13 +6,12 @@ import { useCountry } from "../locale";
 import type { Mode } from "../hooks/useBackend";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
-import { gsap, useGSAP, d } from "../lib/motion";
+import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, Kbd, Segmented, cx } from "./ui";
 
 const SUGGESTIONS = ["cold brew", "sparkling water", "ceramic mug", "flash drive", "granola", "insulated bottle"];
-/** What the Shop page shows before you search: live sections, one search each. */
-const BROWSE = ["Coffee", "Mugs & cups", "Water bottles", "Snacks", "Tech accessories", "Home & kitchen"];
+import { BROWSE } from "../config";
 const PRICE_CAPS: { value: string; label: string; cap: number | null }[] = [
   { value: "any", label: "Any", cap: null },
   { value: "25", label: "Under $25", cap: 25 },
@@ -32,12 +31,21 @@ function sortItems(items: CatalogProduct[], sort: Sort): CatalogProduct[] {
 
 /* ------------------------------------------------------------------ cards */
 
-function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: number; onOpen: () => void; onAdd: () => void }) {
+function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: number; onOpen: () => void; onAdd: (from: Element | null) => void }) {
+  const [hover, setHover] = useState(false);
+  const thumbRef = useRef<HTMLDivElement>(null);
   return (
-    <div data-card className="group card flex flex-col overflow-hidden transition-shadow duration-200 hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]">
+    <div
+      data-card
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      className="group card flex h-full flex-col overflow-hidden transition-shadow duration-200 hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]"
+    >
       <button onClick={onOpen} className="flex flex-1 flex-col text-left" aria-label={`Open ${p.title}`}>
-        <div className="aspect-[4/3] w-full border-b border-line">
-          <ProductThumb product={p} className="rounded-none! shadow-none!" />
+        <div ref={thumbRef} className="aspect-[4/3] w-full border-b border-line">
+          <ProductThumb product={p} active={hover} className="rounded-none! shadow-none!" />
         </div>
         <div className="flex flex-1 flex-col gap-1 p-3 pb-2 sm:p-3.5 sm:pb-2">
           <p className="line-clamp-2 text-[14px] leading-snug font-medium text-ink">{p.title}</p>
@@ -60,7 +68,11 @@ function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: 
           {unitsLabel(p.units) && <span className="text-[11px] text-ink-3">{unitsLabel(p.units)}</span>}
         </span>
         <button
-          onClick={onAdd}
+          onClick={(e) => {
+            const btn = e.currentTarget;
+            gsap.fromTo(btn, { scale: 0.92 }, { scale: 1, duration: d(0.35), ease: "back.out(3)" });
+            onAdd(thumbRef.current);
+          }}
           disabled={p.available === false}
           aria-label={`Add ${p.title} to cart`}
           className={cx(
@@ -233,7 +245,9 @@ export function ShopYourself({
   onAskAI,
   onOpenProduct,
   initialQuery = "",
+  openCartTick = 0,
 }: {
+  openCartTick?: number;
   mode?: Mode;
   cart: Cart;
   onAskAI: (ref: ProductRef) => void;
@@ -269,10 +283,10 @@ export function ShopYourself({
         setLoading(true);
         try {
           if (!terms.length) {
-            const results = await Promise.all(BROWSE.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 4 })));
+            const results = await Promise.all(BROWSE.map((t) => searchCatalog(t, { maxPrice: capN, signal: ctrl.signal, limit: 6 })));
             const live = results.some((r) => r.source !== "demo");
             if (live) {
-              setGroups(BROWSE.map((term, i) => ({ term, items: results[i].items.slice(0, 4) })).filter((g) => g.items.length));
+              setGroups(BROWSE.map((term, i) => ({ term, items: results[i].items.slice(0, 6) })).filter((g) => g.items.length));
               setItems(results.flatMap((r) => r.items));
               setSource(results.find((r) => r.source !== "demo")!.source);
             } else {
@@ -354,14 +368,18 @@ export function ShopYourself({
     { scope: root, dependencies: [sorted.map((p) => p.id).join("|")] },
   );
 
-  const add = (p: CatalogProduct) => {
+  const add = (p: CatalogProduct, from?: Element | null) => {
     cart.add(p);
-    const badge = document.querySelector("[data-cart-badge]");
-    if (badge) gsap.fromTo(badge, { scale: 1.35 }, { scale: 1, duration: d(0.4), ease: "back.out(3)" });
+    flyToCart(from);
   };
 
+  // The header cart button opens the cart sheet on screens without the sidebar.
+  useEffect(() => {
+    if (openCartTick && window.innerWidth < 1024) setCartOpen(true);
+  }, [openCartTick]);
+
   return (
-    <div ref={root} className="mx-auto grid w-full max-w-[1400px] gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5">
+    <div ref={root} className="grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px] 2xl:gap-6">
       <div className="flex min-w-0 flex-col gap-4">
         {/* search */}
         <section className="card p-4 sm:p-5">
@@ -457,7 +475,7 @@ export function ShopYourself({
             ))}
 
             {loading && !sorted.length ? (
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
                 {Array.from({ length: 8 }, (_, i) => (
                   <CardSkeleton key={i} />
                 ))}
@@ -477,11 +495,22 @@ export function ShopYourself({
                       )}
                     </div>
                     {g.items.length ? (
-                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
-                        {sortItems(g.items, sort).map((p) => (
-                          <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={() => add(p)} />
-                        ))}
-                      </div>
+                      query ? (
+                        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
+                          {sortItems(g.items, sort).map((p) => (
+                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
+                          ))}
+                        </div>
+                      ) : (
+                        // Browse rows: one line of cards that fills any width and scrolls sideways.
+                        <div className="thin-scroll -mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 sm:gap-3">
+                          {sortItems(g.items, sort).map((p) => (
+                            <div key={p.id} className="w-[46%] shrink-0 snap-start sm:w-[31.5%] lg:w-[24%] 2xl:w-[19.3%] min-[1900px]:w-[16.1%]">
+                              <ProductCard p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
+                            </div>
+                          ))}
+                        </div>
+                      )
                     ) : (
                       <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-ink-3">Nothing found for “{g.term}”.</p>
                     )}
@@ -490,9 +519,9 @@ export function ShopYourself({
               </div>
             ) : sorted.length ? (
               <>
-                <div className={cx("grid grid-cols-2 gap-2.5 transition-opacity sm:grid-cols-3 sm:gap-3 xl:grid-cols-4", loading && "opacity-60")}>
+                <div className={cx("grid transition-opacity grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6", loading && "opacity-60")}>
                   {sorted.map((p) => (
-                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={() => add(p)} />
+                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
                   ))}
                 </div>
                 {cursor && (
@@ -520,19 +549,7 @@ export function ShopYourself({
       {/* cart: sidebar on desktop */}
       <CartPanel cart={cart} className="sticky top-[76px] hidden max-h-[calc(100dvh-96px)] lg:flex" />
 
-      {/* cart: floating button + sheet on phones/tablets */}
-      <button
-        onClick={() => setCartOpen(true)}
-        className="btn-primary fixed right-4 bottom-[84px] z-30 inline-flex h-12 items-center gap-2 rounded-full px-4 text-[14px] font-semibold shadow-float md:bottom-6 lg:hidden"
-        style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-        aria-label={`Open cart, ${cart.count} items`}
-      >
-        <ShoppingBag className="size-4" /> Cart
-        <span data-cart-badge className="tnum rounded-full bg-ink-inverse px-1.5 text-xs text-ink">
-          {cart.count}
-        </span>
-        {cart.count > 0 && <span className="tnum opacity-70">{money(cart.total)}</span>}
-      </button>
+      {/* cart sheet on phones/tablets (opened from the header cart button) */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Your cart">
           <div className="absolute inset-0 bg-black/40" onClick={() => setCartOpen(false)} />

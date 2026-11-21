@@ -4,6 +4,8 @@ import { ALL_VIEWS, Header, MODES, type View } from "./components/Header";
 import { HomePage } from "./components/Home";
 import { ShopYourself } from "./components/ShopYourself";
 import type { CatalogProduct } from "./catalog";
+import type { RouteDecision } from "./lib/router";
+import { parseIntent } from "./lib/intent";
 import { useBackend } from "./hooks/useBackend";
 import { useTheme } from "./hooks/useTheme";
 import { useCart } from "./hooks/useCart";
@@ -42,6 +44,7 @@ export default function App() {
   const [productSeed, setProductSeed] = useState<CatalogProduct | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const [shopQuery, setShopQuery] = useState("");
+  const [cartTick, setCartTick] = useState(0);
 
   const go = useCallback((v: View) => {
     setView(v);
@@ -115,10 +118,23 @@ export default function App() {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2">
         Skip to content
       </a>
-      <Header view={view} onView={go} theme={theme} onTheme={toggle} mode={backend.mode} online={backend.online} onMode={backend.setMode} />
+      <Header
+        view={view}
+        onView={go}
+        theme={theme}
+        onTheme={toggle}
+        mode={backend.mode}
+        online={backend.online}
+        onMode={backend.setMode}
+        cartCount={cart.count}
+        onCart={() => {
+          go("shop");
+          setCartTick((t) => t + 1);
+        }}
+      />
       {showOffline && (
         <div className="border-b border-warn-line bg-warn-soft">
-          <div className="mx-auto flex max-w-[1920px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5">
+          <div className="mx-auto flex max-w-[2400px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5 xl:px-8">
             <p className="flex items-center gap-2 text-[13px] text-warn">
               <WifiOff className="size-4 shrink-0" />
               <span>
@@ -136,13 +152,23 @@ export default function App() {
           </div>
         </div>
       )}
-      <main id="main" ref={mainRef} className="mx-auto w-full max-w-[1920px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8">
+      <main id="main" ref={mainRef} className="mx-auto w-full max-w-[2400px] px-3 pt-4 pb-28 sm:px-5 sm:pt-6 md:pb-8 xl:px-8">
         <div key={view} className="flex flex-col gap-4">
           <Suspense fallback={<PageLoading />}>
           {view === "home" && (
             <HomePage
               onView={go}
               onOpenProduct={openProduct}
+              onRoute={(d: RouteDecision) => {
+                if (d.route === "shop") {
+                  setShopQuery(d.text);
+                  go("shop");
+                  return;
+                }
+                const intent = parseIntent(d.text, "");
+                setDraft({ request: d.text, budget: intent.budget != null ? String(intent.budget) : "", product: null, scenarioId: null, media: {} });
+                go(d.route === "safe" ? "protected" : "unprotected");
+              }}
               onSearch={(q) => {
                 setShopQuery(q);
                 go("shop");
@@ -151,6 +177,7 @@ export default function App() {
           )}
           {view === "shop" && (
             <ShopYourself
+              openCartTick={cartTick}
               initialQuery={shopQuery}
               mode={backend.mode}
               cart={cart}

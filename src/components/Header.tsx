@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, Sun, Swords, Trophy, X } from "lucide-react";
+import { Bot, ChevronDown, Columns2, Home, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, Sun, Swords, Trophy, X } from "lucide-react";
 import type { Mode } from "../hooks/useBackend";
 import { COUNTRIES, setCountry, useCountry } from "../locale";
 import type { Theme } from "../hooks/useTheme";
@@ -206,7 +206,11 @@ export function Header({
   mode,
   online,
   onMode,
+  cartCount,
+  onCart,
 }: {
+  cartCount: number;
+  onCart: () => void;
   view: View;
   onView: (v: View) => void;
   theme: Theme;
@@ -224,7 +228,7 @@ export function Header({
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
-        <div className="mx-auto flex h-14 max-w-[1920px] items-center gap-3 px-3 sm:px-5">
+        <div className="mx-auto flex h-14 max-w-[2400px] items-center gap-3 px-3 sm:px-5 xl:px-8">
           <button onClick={() => onView("home")} className="shrink-0" aria-label="CartTrap home">
             <Logo />
           </button>
@@ -258,6 +262,24 @@ export function Header({
             <MoreMenu view={view} onView={onView} />
             <ModeSwitch mode={mode} online={online} onChange={onMode} />
             <ThemeToggle theme={theme} onToggle={onTheme} />
+            <button
+              data-cart-target
+              onClick={onCart}
+              aria-label={`Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`}
+              title="Cart"
+              className="relative inline-flex size-9 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              <ShoppingBag className="size-[18px]" />
+              <span
+                data-cart-badge
+                className={cx(
+                  "tnum absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold text-brand-ink transition-opacity",
+                  cartCount ? "opacity-100" : "opacity-0",
+                )}
+              >
+                {cartCount}
+              </span>
+            </button>
           </div>
         </div>
       </header>

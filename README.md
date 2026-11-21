@@ -17,7 +17,7 @@ Vite + React + TypeScript + Tailwind v4, GSAP for motion, vitest for the logic. 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 41 tests: event reducer, Gemini adapter, Shopify normalizer, request parsing
+npm test           # 51 tests: event reducer, Gemini adapter, Shopify normalizer, request parsing, search router
 npm run build      # type-check + production build into dist/
 ```
 
@@ -47,6 +47,23 @@ Your endpoint can answer in whichever shape is easiest. `src/lib/gemini.ts` turn
 4. Any of the above with CartTrap extras next to `candidates`: `verdict`, `fraud_card`, `intercepted`, or `events: TraceEvent[]`.
 
 If the API isn't reachable, the page says so and offers **Demo**, which plays scripted sample runs. Demo data is labelled "Demo data · scripted" everywhere it appears; it is not a recording of a real run.
+
+## Landing search router (Gemini Decisions API)
+
+The home search bar decides which page should handle what you typed: a product search goes to **Shop**, a task ("I have $30, buy anything nice") goes to the **Assistant** with the request and budget filled in, and a task that asks for verification goes to **Safe Checkout**.
+
+The decision comes from your backend at `VITE_ROUTER_URL` (default `/api/route`), which asks the Gemini Decisions API one `choice` question:
+
+```http
+POST /api/route
+{ "text": "I have $30, buy anything nice", "question": "Which page should handle this?",
+  "choices": [ {"id": "shop", "description": "..."}, {"id": "assistant", "description": "..."}, {"id": "safe", "description": "..."} ] }
+→ { "choice": "assistant", "probabilities": { "shop": 0.04, "assistant": 0.91, "safe": 0.05 } }
+```
+
+`{answers: {route: {choice, probabilities}}}` and `safe_checkout` are accepted too. If the route is missing, slow (> 1.2 s) or unreadable, local rules in `src/lib/router.ts` decide, and the page says "quick match" instead of "decided by Gemini Decisions".
+
+Requests can be budget-only: "anything under $30", "I have $30, get something nice", or an empty box with a budget, which is sent as "Buy anything under $30".
 
 ## Shopify
 

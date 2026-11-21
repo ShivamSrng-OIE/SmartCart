@@ -4,7 +4,7 @@ import { getProduct, refFromProduct, similarProducts, type CatalogProduct, type 
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
-import { gsap, useGSAP, d } from "../lib/motion";
+import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, cx } from "./ui";
 
@@ -259,6 +259,22 @@ function niceStep(raw: number): number {
   return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p;
 }
 
+function SimilarTile({ s, onOpen }: { s: CatalogProduct; onOpen: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button onClick={onOpen} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} className="card group flex flex-col overflow-hidden text-left">
+      <div className="aspect-square w-full border-b border-line">
+        <ProductThumb product={s} active={hover} className="rounded-none! shadow-none!" />
+      </div>
+      <div className="flex flex-1 flex-col gap-0.5 p-3">
+        <p className="line-clamp-2 text-[13px] leading-snug font-medium">{s.title}</p>
+        <p className="truncate text-xs text-ink-3">{s.shopName ?? s.vendor}</p>
+        <p className="tnum mt-auto pt-1.5 text-[14px] font-semibold">{money(s.price, false, s.currency)}</p>
+      </div>
+    </button>
+  );
+}
+
 /* ----------------------------------------------------------------- page */
 
 export function ProductPage({
@@ -284,6 +300,7 @@ export function ProductPage({
   const [copied, setCopied] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
+  const galleryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -319,7 +336,7 @@ export function ProductPage({
 
   if (!product) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
         <button onClick={onBack} className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-2 hover:text-ink">
           <ArrowLeft className="size-4" /> Back
         </button>
@@ -354,14 +371,15 @@ export function ProductPage({
   const simPrices = (similar ?? []).map((s) => s.price).filter((x): x is number => x != null).sort((a, b) => a - b);
   const typical = simPrices.length ? simPrices[Math.floor(simPrices.length / 2)] : null;
 
-  const addOffer = (o: Offer | null) => {
+  const addOffer = (o: Offer | null, from?: Element | null) => {
     cart.add(o ? offerAsProduct(p, o) : p);
+    flyToCart(from ?? galleryRef.current);
     setAdded(o?.variantId ?? p.id);
     window.setTimeout(() => setAdded(null), 1400);
   };
 
   return (
-    <div ref={root} className="mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8">
+    <div ref={root} className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 sm:gap-8">
       {/* breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-ink-3" aria-label="Breadcrumb">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink">
@@ -373,8 +391,10 @@ export function ProductPage({
       </nav>
 
       {/* hero */}
-      <section data-sec className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
-        <Gallery media={p.media} title={p.title} fallback={p} />
+      <section data-sec className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-14">
+        <div ref={galleryRef}>
+          <Gallery media={p.media} title={p.title} fallback={p} />
+        </div>
 
         <div className="flex min-w-0 flex-col gap-4">
           <div>
@@ -578,24 +598,15 @@ export function ProductPage({
       <section data-sec className="flex flex-col gap-3">
         <h2 className="text-[17px] font-semibold tracking-tight">Similar products</h2>
         {similar === null ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
             {Array.from({ length: 4 }, (_, i) => (
               <div key={i} className="card aspect-[4/5] animate-pulse" />
             ))}
           </div>
         ) : similar.length ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
-            {similar.slice(0, 8).map((s) => (
-              <button key={s.id} onClick={() => onOpen(s)} className="card group flex flex-col overflow-hidden text-left">
-                <div className="aspect-square w-full border-b border-line">
-                  <ProductThumb product={s} className="rounded-none! shadow-none!" sizes="(min-width: 640px) 25vw, 50vw" />
-                </div>
-                <div className="flex flex-1 flex-col gap-0.5 p-3">
-                  <p className="line-clamp-2 text-[13px] leading-snug font-medium">{s.title}</p>
-                  <p className="truncate text-xs text-ink-3">{s.shopName ?? s.vendor}</p>
-                  <p className="tnum mt-auto pt-1.5 text-[14px] font-semibold">{money(s.price, false, s.currency)}</p>
-                </div>
-              </button>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
+            {similar.slice(0, 12).map((s) => (
+              <SimilarTile key={s.id} s={s} onOpen={() => onOpen(s)} />
             ))}
           </div>
         ) : (

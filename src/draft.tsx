@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SCENARIOS, type FixtureName, type Scenario } from "./config";
 import { findDemo, firstLiveProduct, refFromProduct, type ProductRef } from "./catalog";
-import { cleanRequest, parseIntent } from "./lib/intent";
+import { parseIntent, requestText } from "./lib/intent";
 import type { Intent } from "./types";
 
 export type MediaKind = "image" | "audio" | "video" | "pdf";
@@ -101,7 +101,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       pickScenario,
       toForm: () => {
         const form = new FormData();
-        form.set("request", cleanRequest(draft.request).slice(0, 1000));
+        const budgetNum = Number.parseFloat(draft.budget);
+        form.set("request", requestText(draft.request, Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : null).slice(0, 1000));
         if (draft.budget.trim()) form.set("budget", draft.budget.trim());
         if (draft.product?.url) form.set("product_url", draft.product.url);
         if (draft.product?.id) {

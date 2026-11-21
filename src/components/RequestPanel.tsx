@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { AudioLines, Camera, FileText, Film, ImagePlus, Mic, Paperclip, Play, RotateCcw, Square, TriangleAlert, Video, X } from "lucide-react";
+import { AudioLines, Camera, FileText, Film, ImagePlus, Mic, Package, Paperclip, Play, RotateCcw, Square, TriangleAlert, Video, X } from "lucide-react";
 import { useCamera, useRecorder, useSpeech } from "../hooks/useMedia";
 import { SCENARIOS } from "../config";
 import { useDraft, type Attached, type MediaKind } from "../draft";
 import { money } from "../lib/format";
-import { parseItems } from "../lib/intent";
+import { isOpenEnded, parseItems } from "../lib/intent";
 import { gsap, d } from "../lib/motion";
 import type { Mode } from "../hooks/useBackend";
 import { ProductPicker } from "./ProductPicker";
@@ -65,8 +65,13 @@ export function RequestPanel({
   const speech = useSpeech(useCallback((text: string) => set({ request: text }), [set]));
   const recorder = useRecorder(useCallback((blob: Blob) => attach("audio", blob, "mic-clip.webm", "mic"), [attach]));
 
-  const canRun = draft.request.trim().length > 2 && !busy;
-  const items = parseItems(draft.request);
+  const budgetNum = Number.parseFloat(draft.budget);
+  const hasBudget = Number.isFinite(budgetNum) && budgetNum > 0;
+  const canRun = (draft.request.trim().length > 2 || hasBudget) && !busy;
+  const openEnded = isOpenEnded(draft.request);
+  const items = openEnded ? [] : parseItems(draft.request);
+  const [showPhoto, setShowPhoto] = useState(false);
+  const [showProduct, setShowProduct] = useState(false);
   const image = draft.media.image;
   const others = (["audio", "video", "pdf"] as MediaKind[]).map((k) => draft.media[k]).filter(Boolean) as Attached[];
 
@@ -233,7 +238,9 @@ export function RequestPanel({
       </div>
       <p className="text-xs text-ink-3">
         Understood as:{" "}
-        {items.length > 1 ? (
+        {openEnded ? (
+          <span className="text-ink-2">anything that fits</span>
+        ) : items.length > 1 ? (
           <span className="text-ink-2">{items.map((i) => `${i.quantity} × ${i.name}`).join(", ")}</span>
         ) : (
           <>
@@ -343,22 +350,143 @@ export function RequestPanel({
   );
 
   if (!wide) {
-    // Stacked: the Run button is pinned to the bottom so it never scrolls out of view.
+    // Stacked (Assistant pages): the request first, optional photo/product behind toggles,
+    // and the Run button pinned to the bottom so it never scrolls out of view.
+    const photoOpen = showPhoto || !!image || cam.state === "live";
+    const toggle = (on: boolean, label: string, Icon: typeof Camera, onClick: () => void, set?: boolean) => (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={on}
+        className={cx(
+          "inline-flex h-[42px] items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors",
+          on ? "border-ink bg-surface-2 text-ink" : "border-line-strong text-ink-2 hover:border-ink-3 hover:text-ink",
+        )}
+      >
+        <Icon className="size-4" />
+        {label}
+        {set && <span className="size-1.5 rounded-full bg-brand" />}
+      </button>
+    );
     return (
       <section ref={root} className={cx("card flex flex-col overflow-hidden lg:max-h-[calc(100dvh-96px)]", className)} aria-label={title}>
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+          <h2 className="text-[15px] font-semibold tracking-tight">What do you need?</h2>
           <ModeBadge mode={mode} />
         </div>
-        <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          {scenarios}
-          <div className="h-px shrink-0 bg-line" />
-          {request}
-          {budgetAndProduct}
-          {photo}
-          {attachments}
+        <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
+          <div className="relative">
+            <textarea
+              id="request"
+              data-fill
+              value={draft.request}
+              onChange={(e) => set({ request: e.target.value })}
+              rows={3}
+              maxLength={1000}
+              placeholder="e.g. one pack of these under $25 · or just: anything nice under $30"
+              aria-label="What do you need?"
+              className="field min-h-[96px] resize-none pr-12 text-base leading-relaxed"
+            />
+            {speech.supported && (
+              <IconButton
+                label={speech.listening ? "Stop listening" : "Speak your request"}
+                onClick={speech.listening ? speech.stop : speech.start}
+                active={speech.listening}
+                className={cx("absolute top-2 right-2", speech.listening && "text-danger")}
+              >
+                {speech.listening ? <Square className="size-3.5 fill-current" /> : <Mic className="size-4" />}
+              </IconButton>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex w-[112px] flex-col gap-1">
+              <span className="text-xs text-ink-3">Budget</span>
+              <span className="relative" data-fill>
+                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-3">$</span>
+                <input
+                  inputMode="decimal"
+                  value={draft.budget}
+                  onChange={(e) => set({ budget: e.target.value.replace(/[^\d.]/g, "") })}
+                  placeholder="any"
+                  className="field tnum h-[42px] pl-7"
+                  aria-label="Budget in dollars"
+                />
+              </span>
+            </label>
+            {toggle(photoOpen, "Photo", Camera, () => setShowPhoto((v) => !v || !!image), !!image)}
+            {toggle(showProduct, "Product", Package, () => setShowProduct((v) => !v), !!draft.product)}
+          </div>
+
+          <p className="-mt-1 text-xs text-ink-3">
+            {openEnded ? (
+              <>
+                Anything that fits{hasBudget || intent.budget != null ? (
+                  <>
+                    , up to <span className="font-medium text-ink-2">{money(intent.budget ?? budgetNum)}</span>
+                  </>
+                ) : (
+                  " · add a budget so it knows your limit"
+                )}
+              </>
+            ) : (
+              <>
+                {items.length > 1 ? items.map((i) => `${i.quantity} × ${i.name}`).join(", ") : `Buy ${intent.quantity}`}
+                {intent.budget != null ? (
+                  <>
+                    , up to <span className="font-medium text-ink-2">{money(intent.budget)}</span>
+                  </>
+                ) : (
+                  ", no budget"
+                )}
+              </>
+            )}
+          </p>
+
+          {showProduct ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-ink-3">A specific product (optional)</span>
+              <ProductPicker value={draft.product} onChange={(product) => set({ product })} />
+            </div>
+          ) : (
+            draft.product && (
+              <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-2 text-[13px]">
+                <span className="text-ink-3">For</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{draft.product.title}</span>
+                <button onClick={() => set({ product: null })} aria-label="Remove product" className="inline-flex size-6 items-center justify-center rounded-md text-ink-3 hover:bg-line hover:text-ink">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )
+          )}
+
+          {photoOpen && (
+            <div className="flex flex-col gap-2">
+              {photo}
+              {attachments}
+            </div>
+          )}
         </div>
-        <div className="border-t border-line bg-surface p-3">{actions}</div>
+        <div className="flex flex-col gap-2 border-t border-line bg-surface p-3">
+          {actions}
+          <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-ink-3">
+            Try:
+            {SCENARIOS.map((sc, i) => (
+              <span key={sc.id} className="inline-flex items-center gap-1.5">
+                {i > 0 && <span aria-hidden>·</span>}
+                <button
+                  onClick={() => {
+                    pickScenario(sc);
+                    flashFields();
+                  }}
+                  className={cx("underline-offset-2 hover:text-ink hover:underline", scenario?.id === sc.id && "font-medium text-ink-2")}
+                >
+                  {sc.title}
+                </button>
+              </span>
+            ))}
+          </p>
+        </div>
       </section>
     );
   }

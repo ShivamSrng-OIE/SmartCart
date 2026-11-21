@@ -55,6 +55,9 @@ export const SCENARIOS: Scenario[] = [
   },
 ];
 
+/** Categories the storefront browses before you search: one live Shopify search each. */
+export const BROWSE = ["Coffee", "Mugs & cups", "Water bottles", "Snacks", "Tech accessories", "Home & kitchen"];
+
 /** Replay speed for demo runs (1 = real time). */
 export const REPLAY_SPEED = 1;
 
@@ -82,6 +85,8 @@ export const ENDPOINTS = {
   },
   both: { run: "/api/run", mode: "both" },
   stream: env.VITE_STREAM_URL ?? "/api/runs/{id}/stream",
+  /** landing-search router (Gemini Decisions API on the backend); empty string disables it */
+  router: env.VITE_ROUTER_URL ?? "/api/route",
 };
 
 export const streamUrl = (runId: string) => ENDPOINTS.stream.replace("{id}", encodeURIComponent(runId));

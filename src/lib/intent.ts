@@ -9,7 +9,7 @@ export interface IntentItem {
   name: string;
 }
 
-const BUDGET_RE = /(?:\$\s*|\b(?:under|below|max(?:imum)?|less than|up to|budget(?: of)?)\s+\$?)(\d+(?:\.\d+)?)/gi;
+const BUDGET_RE = /(?:\$\s*|\b(?:under|below|max(?:imum)?|less than|up to|within|budget(?: of)?|i have|i've got|spend)\s+\$?)(\d+(?:\.\d+)?)/gi;
 const VERB_RE = /^(?:please\s+)?(?:can you\s+)?(?:buy|get|order|grab|purchase|add|i want|i need|find)\s+(?:me\s+)?/i;
 
 /** Normalize messy typing: collapse whitespace, smart quotes, stray separators. */
@@ -46,6 +46,29 @@ export function parseItems(text: string): IntentItem[] {
   });
 }
 
+const OPEN_ENDED = /\b(anything|something|whatever|surprise me|any item|any product|you choose|your choice|up to you|a gift|gift ideas?)\b/i;
+
+/**
+ * "I have $30, buy anything under that": the shopper gave a budget, not a product.
+ * True when the request names no specific item (or only open-ended words like "anything").
+ */
+export function isOpenEnded(text: string): boolean {
+  const t = cleanRequest(text);
+  if (!t) return true;
+  if (OPEN_ENDED.test(t)) return true;
+  const items = parseItems(t).filter(
+    (i) => !/^(it|that|this|these|them|one|stuff|things?)$/i.test(i.name) && !/^(i have|i've got|here is|here's|with)\b/i.test(i.name),
+  );
+  return items.length === 0;
+}
+
+/** The request sent to the assistant: an empty box with a budget becomes "anything under $X". */
+export function requestText(text: string, budget: number | null): string {
+  const t = cleanRequest(text);
+  if (!t && budget != null) return `Buy anything under $${budget}`;
+  return t;
+}
+
 /**
  * Display-side twin of backend intent.parse_intent: the budget field wins, then "$25" / "under 25"
  * in the text. With several comma-separated items, quantity is the total number of units.
@@ -58,7 +81,7 @@ export function parseIntent(text: string, budgetField: string | number | null | 
     const m = [...cleanRequest(text).matchAll(BUDGET_RE)][0];
     if (m) budget = Number.parseFloat(m[1]);
   }
-  const items = parseItems(text);
+  const items = isOpenEnded(text) ? [] : parseItems(text);
   const quantity = items.length ? items.reduce((n, i) => n + i.quantity, 0) : 1;
   return { text: cleanRequest(text), budget, quantity: Math.max(1, quantity) };
 }

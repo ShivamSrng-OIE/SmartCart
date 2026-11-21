@@ -59,7 +59,7 @@ export function Scoreboard({ results, source }: { results: EvalResults; source: 
   );
 
   return (
-    <div ref={root} className="mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-5">
+    <div ref={root} className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:gap-5">
       {/* heading */}
       <div data-reveal className="flex flex-wrap items-end justify-between gap-3">
         <div>

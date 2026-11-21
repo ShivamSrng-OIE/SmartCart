@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { cleanRequest, parseIntent, parseItems } from "./intent";
+import { cleanRequest, isOpenEnded, parseIntent, parseItems, requestText } from "./intent";
+
+describe("budget-only requests", () => {
+  it("recognizes 'anything under' style requests", () => {
+    expect(isOpenEnded("I have $30, buy anything under that")).toBe(true);
+    expect(isOpenEnded("get me something nice under $50")).toBe(true);
+    expect(isOpenEnded("")).toBe(true);
+    expect(isOpenEnded("buy 2 mugs under $40")).toBe(false);
+  });
+
+  it("reads the budget from 'I have $30'", () => {
+    expect(parseIntent("I have $30, buy anything under that", "")).toMatchObject({ budget: 30, quantity: 1 });
+  });
+
+  it("spells out an empty request from the budget", () => {
+    expect(requestText("", 30)).toBe("Buy anything under $30");
+    expect(requestText("  buy a mug ", 30)).toBe("buy a mug");
+  });
+});
 
 describe("parseIntent", () => {
   it("reads budget and quantity from a plain request", () => {

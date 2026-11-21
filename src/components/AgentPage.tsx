@@ -6,14 +6,16 @@ import { Seismograph } from "./Seismograph";
 import { VerdictBanner } from "./VerdictBanner";
 import { FraudCard } from "./FraudCard";
 import { describeCall } from "./OutcomeStrip";
-import { Button, Chip, Segmented, cx } from "./ui";
+import { Button, Segmented, cx } from "./ui";
 import { useAgentRun } from "../hooks/useAgentRun";
 import { useDraft } from "../draft";
 import type { AgentKind } from "../config";
 import type { Mode } from "../hooks/useBackend";
 import type { RuleSet } from "../types";
-import { clock, money } from "../lib/format";
-import { gsap, useGSAP, d } from "../lib/motion";
+import { clock, money, shortId } from "../lib/format";
+import { ProductThumb } from "./ProductThumb";
+import type { ArenaState, Step } from "../state";
+import { countTo, gsap, useGSAP, d } from "../lib/motion";
 
 type Tone = "neutral" | "danger" | "safe" | "warn";
 
@@ -55,7 +57,85 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
   return <span ref={ref} className="tnum font-mono text-xs text-ink-3" title="Time since you pressed Run" />;
 }
 
-function ResultCard({ tone, icon, eyebrow, headline, body, action, pending }: { tone: Tone; icon: ReactNode; eyebrow: string; headline: string; body: ReactNode; action?: ReactNode; pending?: boolean }) {
+/** The cart the assistant put together: item drops in, quantity and total roll up. */
+function OrderCard({ step, products, held }: { step: Step; products: ArenaState["products"]; held: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const qtyRef = useRef<HTMLSpanElement>(null);
+  const totalRef = useRef<HTMLSpanElement>(null);
+  const args = step.args ?? {};
+  const lines = (args.lines ?? args.line_items) as Record<string, unknown>[] | undefined;
+  const first = Array.isArray(lines) ? lines[0] : undefined;
+  const pid = String(first?.product_id ?? (first?.item as Record<string, unknown> | undefined)?.id ?? "");
+  const prod = products[pid] as Record<string, unknown> | undefined;
+  const title = (prod?.title as string | undefined) ?? (pid ? shortId(pid) : step.title.replace(/_/g, " "));
+  const media = Array.isArray(prod?.media) ? (prod!.media as Record<string, unknown>[]) : [];
+  const image = (prod?.image_url as string | undefined) ?? (media[0]?.url as string | undefined) ?? null;
+  const qty = step.quantity ?? (first?.quantity as number | undefined) ?? 1;
+  const total = step.spend ?? null;
+  const wrong = step.tone === "danger";
+
+  useGSAP(
+    () => {
+      const tl = gsap.timeline();
+      tl.from(ref.current, { y: -18, opacity: 0, scale: 0.96, duration: d(0.5), ease: "back.out(1.8)" });
+      tl.add(() => {
+        countTo(qtyRef.current, qty, (n) => String(Math.max(1, Math.round(n))), { from: 1, duration: qty > 5 ? 1.4 : 0.5 });
+        if (total != null) countTo(totalRef.current, total, (n) => money(n), { from: total / Math.max(qty, 1), duration: qty > 5 ? 1.4 : 0.5 });
+      });
+      if (wrong) tl.fromTo(qtyRef.current, { scale: 1 }, { scale: 1.25, duration: 0.18, yoyo: true, repeat: 1, ease: "power2.out" }, "+=1.3");
+      if (held) tl.from("[data-stamp]", { scale: 1.8, rotate: -24, opacity: 0, duration: d(0.45), ease: "back.out(2.2)" }, "+=0.15");
+    },
+    { scope: ref, dependencies: [step.id] },
+  );
+
+  return (
+    <div ref={ref} className={cx("relative w-full overflow-hidden rounded-xl border bg-surface p-3 sm:w-[300px]", wrong && !held ? "border-danger-line" : "border-line")}>
+      <p className="label mb-2">Order</p>
+      <div className="flex items-center gap-3">
+        <div className="size-14 shrink-0">
+          <ProductThumb product={{ title, image, vendor: (prod?.vendor as string | undefined) ?? null }} className="size-14 rounded-lg" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-[13px] leading-snug font-medium">{title}</p>
+          <p className="mt-0.5 text-xs text-ink-3">
+            Qty <span ref={qtyRef} className={cx("tnum inline-block font-semibold", wrong ? "text-danger" : "text-ink")}>{qty}</span>
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex items-baseline justify-between border-t border-line pt-2.5">
+        <span className="text-xs text-ink-3">Total</span>
+        <span ref={totalRef} className={cx("tnum text-lg font-semibold tracking-tight", wrong && !held ? "text-danger" : "text-ink")}>
+          {money(total)}
+        </span>
+      </div>
+      {held && (
+        <span data-stamp className="pointer-events-none absolute top-3 right-3 rotate-[-8deg] rounded-md border-2 border-warn px-2 py-0.5 font-mono text-[11px] font-bold tracking-widest text-warn">
+          HELD
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ResultCard({
+  tone,
+  icon,
+  eyebrow,
+  headline,
+  body,
+  action,
+  pending,
+  aside,
+}: {
+  tone: Tone;
+  icon: ReactNode;
+  eyebrow: string;
+  headline: string;
+  body: ReactNode;
+  action?: ReactNode;
+  pending?: boolean;
+  aside?: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useGSAP(() => {
     gsap.fromTo(ref.current!.querySelectorAll("[data-r]"), { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: d(0.4), stagger: 0.06, ease: "power2.out" });
@@ -63,7 +143,8 @@ function ResultCard({ tone, icon, eyebrow, headline, body, action, pending }: { 
   const toneCls = { neutral: "text-ink", danger: "text-danger", safe: "text-safe", warn: "text-warn" }[tone];
   const edge = { neutral: "before:bg-line-strong", danger: "before:bg-danger", safe: "before:bg-safe", warn: "before:bg-warn" }[tone];
   return (
-    <section ref={ref} className={cx("card relative overflow-hidden p-4 before:absolute before:inset-y-0 before:left-0 before:w-1 sm:p-5 sm:pl-6", edge)} aria-live="polite">
+    <section ref={ref} className={cx("card relative flex flex-col gap-4 overflow-hidden p-4 before:absolute before:inset-y-0 before:left-0 before:w-1 sm:flex-row sm:items-start sm:justify-between sm:p-5 sm:pl-6", edge)} aria-live="polite">
+      <div className="min-w-0 flex-1">
       <p data-r className="label">
         {eyebrow}
       </p>
@@ -79,6 +160,8 @@ function ResultCard({ tone, icon, eyebrow, headline, body, action, pending }: { 
           {action}
         </div>
       )}
+      </div>
+      {aside}
     </section>
   );
 }
@@ -101,12 +184,23 @@ export function AgentPage({
   const copy = COPY[kind];
   const { intent, fixture, toForm } = useDraft();
   const { state, phase, error, startedAt, run, reset, pane } = useAgentRun(kind, mode);
-  const [tab, setTab] = useState<"checks" | "log">("checks");
+  const [tab, setTab] = useState<"review" | "checks" | "log">("log");
+  const [tabPicked, setTabPicked] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
   const busy = phase === "starting" || phase === "streaming";
   const p = state[pane];
   const verdict = state.verdict;
   const checking = busy && !verdict;
+
+  useEffect(() => {
+    if (phase === "starting") {
+      setTabPicked(false);
+      setTab("log");
+    }
+  }, [phase]);
+  useEffect(() => {
+    if (!tabPicked && (state.fraudCard || state.verdict?.action === "approve_checkout")) setTab(state.fraudCard ? "review" : "checks");
+  }, [state.fraudCard, state.verdict, tabPicked]);
 
   useEffect(() => {
     if (phase === "starting" && window.innerWidth < 1024) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -118,6 +212,13 @@ export function AgentPage({
       {copy.other}
     </Button>
   );
+
+  // The cart the shopper tried to place: intercepted (Assistant) or the call Safe Checkout checked.
+  const orderStep =
+    kind === "unprotected"
+      ? [...state.victim.steps].reverse().find((x) => x.kind === "intercepted")
+      : [...state.guarded.steps].reverse().find((x) => x.kind === "tool_call" && x.verdict && /cart|checkout/.test(x.title));
+  const held = kind === "protected" && !!verdict && verdict.action !== "approve_checkout";
 
   /* ---------------------------------------------------------- the headline */
   let result: Parameters<typeof ResultCard>[0];
@@ -170,23 +271,20 @@ export function AgentPage({
       };
   }
 
+  const Intro = ({ className }: { className?: string }) => (
+    <header className={cx("flex flex-col gap-1", className)}>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-[26px]">{copy.title}</h1>
+      <p className="max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
+      <p className="text-xs text-ink-3">Powered by {copy.models.join(" · ")}</p>
+    </header>
+  );
+
+  const steps = kind === "unprotected" ? state.victim.steps.length : state.guarded.steps.length;
+
   return (
-    <div className="mx-auto w-full max-w-[1600px]">
-          <header className="mb-4 flex flex-col gap-2 lg:hidden">
-            <div className="min-w-0">
-              <p className="label">{copy.step}</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">{copy.title}</h1>
-              <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
-            </div>
-            <div className="flex flex-wrap gap-1.5 sm:justify-end">
-              {copy.models.map((m) => (
-                <Chip key={m} className="h-6" mono={false}>
-                  {m}
-                </Chip>
-              ))}
-            </div>
-          </header>
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+    <div className="w-full">
+      <Intro className="mb-4 lg:hidden" />
+      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] 2xl:grid-cols-[440px_minmax(0,1fr)] 2xl:gap-6">
         <RequestPanel
           mode={mode}
           busy={busy}
@@ -198,20 +296,8 @@ export function AgentPage({
         />
 
         <div ref={resultRef} className="flex min-w-0 scroll-mt-20 flex-col gap-4">
-          <header className="hidden flex-col gap-2 lg:flex xl:flex-row xl:items-end xl:justify-between">
-            <div className="min-w-0">
-              <p className="label">{copy.step}</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">{copy.title}</h1>
-              <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
-            </div>
-            <div className="flex flex-wrap gap-1.5 sm:justify-end">
-              {copy.models.map((m) => (
-                <Chip key={m} className="h-6" mono={false}>
-                  {m}
-                </Chip>
-              ))}
-            </div>
-          </header>
+          <Intro className="hidden lg:flex" />
+
           {error && (
             <div className="flex flex-col gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="flex items-start gap-2 text-sm text-danger">
@@ -226,53 +312,46 @@ export function AgentPage({
             </div>
           )}
 
-          <div className="relative">
-            <span className="absolute top-3 right-4 z-10">
-              <RunClock startedAt={startedAt} live={busy} />
-            </span>
-            <ResultCard {...result} />
-          </div>
+          {/* 1. the outcome, with the order beside it: the only place the money is shown */}
+          <ResultCard {...result} aside={orderStep ? <OrderCard step={orderStep} products={state.products} held={held} /> : undefined} />
 
-          {kind === "unprotected" ? (
-            <TracePane
-              variant="victim"
-              pane={state.victim}
-              products={state.products}
-              className="max-h-[70dvh] min-h-[320px]"
-              footer={
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[13px] text-ink-2">Order total</span>
-                  <span className={cx("tnum text-lg font-semibold tracking-tight", state.victim.status === "hijacked" ? "text-danger" : "text-ink")}>{money(state.victim.attempted || null)}</span>
-                </div>
-              }
-            />
-          ) : (
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-              <section className="card flex min-h-0 flex-col overflow-hidden" aria-label="Verification">
-                <header className="border-b border-line px-4 py-3 sm:px-5">
-                  <h2 className="text-[15px] font-semibold tracking-tight">Verification</h2>
-                </header>
-                <div className="flex flex-col p-4 sm:p-5">
-                  <VerdictBanner verdict={verdict} checking={checking} size="md" />
-                  <div className="mt-5 mb-4">
-                    <Segmented
-                      value={tab}
-                      onChange={setTab}
-                      options={[
-                        { value: "checks", label: `Checks · ${rules.probes.length}` },
-                        { value: "log", label: `Activity · ${state.guarded.steps.length}` },
-                      ]}
-                    />
-                  </div>
-                  {tab === "checks" ? (
+          {/* 2. one details card with tabs */}
+          {phase !== "idle" && (
+            <section className="card flex min-h-0 flex-col overflow-hidden" aria-label="Details">
+              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5 sm:px-5">
+                {kind === "protected" ? (
+                  <Segmented
+                    value={tab}
+                    onChange={(v) => {
+                      setTab(v);
+                      setTabPicked(true);
+                    }}
+                    options={[
+                      { value: "review", label: "Review" },
+                      { value: "checks", label: `Checks · ${rules.probes.length}` },
+                      { value: "log", label: `Activity · ${steps}` },
+                    ]}
+                  />
+                ) : (
+                  <h2 className="text-[15px] font-semibold tracking-tight">
+                    Activity <span className="tnum text-[13px] font-normal text-ink-3">· {steps} steps</span>
+                  </h2>
+                )}
+                <RunClock startedAt={startedAt} live={busy} />
+              </header>
+              <div className="min-h-0 p-4 sm:p-5">
+                {kind === "unprotected" || tab === "log" ? (
+                  <TracePane variant={kind === "unprotected" ? "victim" : "guarded"} pane={kind === "unprotected" ? state.victim : state.guarded} products={state.products} bare quiet className="-mx-1 max-h-[60dvh]" />
+                ) : tab === "checks" ? (
+                  <div className="flex flex-col gap-5">
+                    <VerdictBanner verdict={verdict} checking={checking} size="md" />
                     <Seismograph rules={rules} rulesLive={rulesLive} verdict={verdict} checking={checking} />
-                  ) : (
-                    <TracePane variant="guarded" pane={state.guarded} products={state.products} bare className="-mx-1 max-h-[60dvh]" />
-                  )}
-                </div>
-              </section>
-              <FraudCard card={state.fraudCard} verdict={verdict} status={state.guarded.status} attempted={state.victim.attempted} className="2xl:self-start" />
-            </div>
+                  </div>
+                ) : (
+                  <FraudCard card={state.fraudCard} verdict={verdict} status={state.guarded.status} attempted={state.victim.attempted} bare />
+                )}
+              </div>
+            </section>
           )}
         </div>
       </div>

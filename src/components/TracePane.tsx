@@ -11,23 +11,23 @@ type Variant = "victim" | "guarded";
 const STATUS: Record<Variant, Record<PaneState["status"], { label: string; tone: "neutral" | "danger" | "safe" | "warn" }>> = {
   victim: {
     idle: { label: "Waiting", tone: "neutral" },
-    running: { label: "Shopping", tone: "neutral" },
-    hijacked: { label: "Hijacked", tone: "danger" },
-    intercepted: { label: "Cart attempted", tone: "neutral" },
-    blocked: { label: "Blocked", tone: "danger" },
-    escalated: { label: "Escalated", tone: "warn" },
-    approved: { label: "Approved", tone: "safe" },
-    firewall_error: { label: "Error", tone: "danger" },
+    running: { label: "Working", tone: "neutral" },
+    hijacked: { label: "Unexpected order", tone: "danger" },
+    intercepted: { label: "Cart ready", tone: "neutral" },
+    blocked: { label: "Held", tone: "warn" },
+    escalated: { label: "Alternative", tone: "warn" },
+    approved: { label: "Verified", tone: "safe" },
+    firewall_error: { label: "On hold", tone: "warn" },
   },
   guarded: {
     idle: { label: "Waiting", tone: "neutral" },
-    running: { label: "Checking", tone: "neutral" },
-    hijacked: { label: "Hijacked", tone: "danger" },
-    intercepted: { label: "Intercepted", tone: "warn" },
-    blocked: { label: "Blocked", tone: "danger" },
-    escalated: { label: "Escalated", tone: "warn" },
-    approved: { label: "Approved", tone: "safe" },
-    firewall_error: { label: "Firewall error", tone: "danger" },
+    running: { label: "Working", tone: "neutral" },
+    hijacked: { label: "Unexpected order", tone: "danger" },
+    intercepted: { label: "Prepared", tone: "warn" },
+    blocked: { label: "Held", tone: "warn" },
+    escalated: { label: "Alternative", tone: "warn" },
+    approved: { label: "Verified", tone: "safe" },
+    firewall_error: { label: "On hold", tone: "warn" },
   },
 };
 
@@ -100,9 +100,29 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-function StepRow({ step, products, variant }: { step: Step; products: ProductLedger; variant: Variant }) {
+function StepRow({ step, products, variant, quiet }: { step: Step; products: ProductLedger; variant: Variant; quiet?: boolean }) {
   const [open, setOpen] = useState(false);
   const source = typeof step.data.source === "string" ? step.data.source : undefined;
+
+  // Quiet mode (Assistant pages): the order card already shows this, so keep the row compact.
+  if (step.kind === "intercepted" && quiet) {
+    return (
+      <li data-step className="flex items-start gap-3 py-1.5">
+        <span className="tnum w-12 shrink-0 pt-0.5 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+        <span className="mt-[7px] shrink-0">
+          <Dot tone={step.tone === "danger" ? "danger" : "neutral"} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-medium">Order prepared</span>
+          <span className="block truncate text-[13px] text-ink-2">
+            {summarize(step, products) ?? "—"}
+            <span className="text-ink-3"> · not submitted (sandbox)</span>
+          </span>
+        </span>
+        {step.spend != null && <span className={cx("tnum shrink-0 font-mono text-xs", step.tone === "danger" ? "text-danger" : "text-ink-2")}>{money(step.spend)}</span>}
+      </li>
+    );
+  }
 
   // The hijacked call: the moment the left pane exists to show.
   if (step.kind === "intercepted") {
@@ -224,7 +244,9 @@ export function TracePane({
   footer,
   compact,
   bare,
+  quiet,
 }: {
+  quiet?: boolean;
   variant: Variant;
   pane: PaneState;
   products: ProductLedger;
@@ -278,7 +300,7 @@ export function TracePane({
     ) : (
       <ol ref={listRef} className="relative flex flex-col gap-0.5">
         {pane.steps.map((s) => (
-          <StepRow key={s.id} step={s} products={products} variant={variant} />
+          <StepRow key={s.id} step={s} products={products} variant={variant} quiet={quiet} />
         ))}
       </ol>
     );

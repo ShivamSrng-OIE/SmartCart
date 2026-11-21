@@ -30,7 +30,10 @@ export function FraudCard({
   status,
   attempted,
   className,
+  bare,
 }: {
+  /** no card chrome or header (inside the Assistant page's Review tab) */
+  bare?: boolean;
   card?: FraudCardT;
   verdict?: Verdict;
   status: PaneStatus;
@@ -58,12 +61,12 @@ export function FraudCard({
     const approved = status === "approved";
     const waiting = verdict && !approved;
     return (
-      <section ref={root} className={cx("card flex flex-col overflow-hidden", className)} aria-label="Order review">
-        <header className="border-b border-line px-4 py-3 sm:px-5">
+      <section ref={root} className={cx(!bare && "card", "flex flex-col overflow-hidden", className)} aria-label="Order review">
+        <header className={cx("border-b border-line px-4 py-3 sm:px-5", bare && "hidden")}>
           <p className="label">Order review</p>
           <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why was this held?</h2>
         </header>
-        <div className="flex flex-1 flex-col justify-center p-5">
+        <div className={cx("flex flex-1 flex-col justify-center", bare ? "py-2" : "p-5")}>
         {approved ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <ShieldCheck className="size-7 text-safe" />
@@ -99,12 +102,12 @@ export function FraudCard({
   const attemptedShown = attempted > 0 ? attempted : card.dollars_defended + safeTotal;
 
   return (
-    <section ref={root} className={cx("card flex min-h-0 flex-col overflow-hidden", className)} aria-label="Order review">
-        <header className="border-b border-line px-4 py-3 sm:px-5">
+    <section ref={root} className={cx(!bare && "card", "flex min-h-0 flex-col overflow-hidden", className)} aria-label="Order review">
+        <header className={cx("border-b border-line px-4 py-3 sm:px-5", bare && "hidden")}>
           <p className="label">Order review</p>
           <h2 className="mt-0.5 text-[15px] font-semibold tracking-tight">Why was this held?</h2>
         </header>
-      <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
+      <div className={cx("thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto", !bare && "p-4 sm:p-5")}>
         {/* dollars */}
         <div data-fc className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 border-b border-line pb-4">
           <div>

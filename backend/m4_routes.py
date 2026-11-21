@@ -49,8 +49,7 @@ def _latest_result_file() -> Path | None:
     candidates = [path for path in RESULTS_DIR.glob("*.json") if path.name != "sample.json"]
     if candidates:
         return max(candidates, key=lambda path: path.stat().st_mtime_ns)
-    sample = RESULTS_DIR / "sample.json"
-    return sample if sample.is_file() else None
+    return None
 
 
 @m4_router.get("/api/eval/latest")

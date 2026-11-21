@@ -62,5 +62,22 @@ async def test_image_upload_saved(client, tmp_path, monkeypatch):
     assert (tmp_path / r.json()["run_id"] / "image.png").read_bytes() == b"\x89PNG fake"
 
 
+async def test_run_prefers_product_id_over_demo_id_and_url(client, monkeypatch):
+    seen = {}
+
+    async def capture(intent, media, product_ref, bus, run_id):
+        seen["product_ref"] = product_ref
+
+    monkeypatch.setitem(app.state.pipelines, "victim", capture)
+    response = await client.post(
+        "/api/run",
+        data={"request": "buy one", "mode": "victim", "product_id": "sku-selected",
+              "demo_product_id": "sku-demo", "product_url": "https://shop.example/product"},
+    )
+    await app.state.bus.wait_done(response.json()["run_id"])
+
+    assert seen["product_ref"] == "sku-selected"
+
+
 async def test_unknown_run_404(client):
     assert (await client.get("/api/runs/nope/stream")).status_code == 404

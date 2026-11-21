@@ -16,7 +16,7 @@ export type ProductLedger = Record<string, Record<string, unknown>>;
 
 export function priceOf(product: Record<string, unknown> | undefined | null): number | null {
   if (!product) return null;
-  let raw: unknown = product.price;
+  let raw: unknown = product.price_usd ?? product.price;
   if (raw && typeof raw === "object") raw = (raw as Record<string, unknown>).amount;
   const n = typeof raw === "string" ? Number.parseFloat(raw) : typeof raw === "number" ? raw : Number.NaN;
   return Number.isFinite(n) ? n : null;
@@ -28,7 +28,8 @@ function toNumber(v: unknown): number | null {
 }
 
 function linesOf(args: Record<string, unknown>): Record<string, unknown>[] {
-  const lines = args.lines ?? args.line_items ?? args.items;
+  const cart = args.cart as Record<string, unknown> | undefined;
+  const lines = args.lines ?? args.line_items ?? args.items ?? cart?.line_items;
   return Array.isArray(lines) ? (lines.filter((l) => l && typeof l === "object") as Record<string, unknown>[]) : [];
 }
 
@@ -41,7 +42,10 @@ export interface SpendSummary {
 /** Same math as backend money.attempted_spend: Σ qty × price over lines; spend requests use amount. */
 export function summarizeCall(tool: string, args: Record<string, unknown>, products: ProductLedger): SpendSummary {
   if (SPEND_TOOLS.has(tool)) {
-    return { quantity: null, total: toNumber(args.amount), isSpendRequest: true };
+    const request = args.spend_request as Record<string, unknown> | undefined;
+    const approvalLimit = toNumber(request?.approval_limit);
+    const total = toNumber(args.amount) ?? (approvalLimit === null ? null : approvalLimit / 100);
+    return { quantity: null, total, isSpendRequest: true };
   }
   const lines = linesOf(args);
   if (!lines.length) return { quantity: null, total: null, isSpendRequest: false };
@@ -51,7 +55,8 @@ export function summarizeCall(tool: string, args: Record<string, unknown>, produ
   for (const line of lines) {
     const q = toNumber(line.quantity ?? line.qty) ?? 0;
     qty += q;
-    const id = String(line.product_id ?? line.variant_id ?? "");
+    const item = line.item as Record<string, unknown> | undefined;
+    const id = String(item?.id ?? line.product_id ?? line.variant_id ?? "");
     const price = toNumber(line.price) ?? priceOf(products[id]);
     if (price == null) priced = false;
     else total += q * price;

@@ -84,15 +84,30 @@ function toneForVerdict(v: Verdict): Tone {
   return "danger";
 }
 
-function rememberProduct(products: ProductLedger, result: unknown): ProductLedger {
+function rememberProducts(products: ProductLedger, result: unknown): ProductLedger {
   const r = obj(result);
-  const product = r.product && typeof r.product === "object" ? obj(r.product) : r;
-  const id = str(product.id) ?? str(product.product_id);
-  if (!id) return products;
-  return { ...products, [id]: product };
+  const found: unknown[] = Array.isArray(r.products) ? r.products : [r.product ?? r];
+  const next = { ...products };
+  for (const entry of found) {
+    const product = obj(entry);
+    const id = str(product.id) ?? str(product.product_id);
+    if (!id) continue;
+    next[id] = product;
+    if (!Array.isArray(product.variants)) continue;
+    for (const entry of product.variants) {
+      const variant = obj(entry);
+      const variantId = str(variant.variant_id);
+      if (variantId) next[variantId] = variant;
+    }
+  }
+  return next;
 }
 
-function patchPane(s: ArenaState, pane: Pane, next: PaneState): ArenaState {
+function callArguments(data: Record<string, unknown>): Record<string, unknown> {
+  return obj(data.arguments ?? obj(data.result).arguments ?? data.args);
+}
+
+function patchPane(s: ArenaState, pane: Exclude<Pane, "system">, next: PaneState): ArenaState {
   return { ...s, [pane]: next };
 }
 
@@ -100,17 +115,28 @@ function patchPane(s: ArenaState, pane: Pane, next: PaneState): ArenaState {
 export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
   if (s.runId && e.run_id && e.run_id !== s.runId) return s;
 
-  const paneKey: Pane = e.pane === "victim" || e.pane === "guarded" || e.pane === "redteam" ? e.pane : "guarded";
+  if (e.pane === "system") {
+    if (e.kind !== "done") return s;
+    const finish = (pane: PaneState): PaneState => ({
+      ...pane,
+      lastT: Math.max(pane.lastT, e.t_ms),
+      finished: true,
+    });
+    return { ...s, victim: finish(s.victim), guarded: finish(s.guarded), redteam: finish(s.redteam), done: true };
+  }
+
+  const paneKey = e.pane === "victim" || e.pane === "redteam" ? e.pane : "guarded";
   const prev = s[paneKey];
   const data = obj(e.data);
   const id = `${paneKey}-${prev.steps.length}-${e.t_ms}`;
   const base = { ...prev, lastT: Math.max(prev.lastT, e.t_ms || 0) };
   const running: PaneStatus = prev.status === "idle" ? "running" : prev.status;
+  const reportedSpend = typeof data.attempted_spend === "number" ? data.attempted_spend : undefined;
 
   switch (e.kind) {
     case "tool_call": {
       const name = str(data.name) ?? str(data.tool) ?? "tool";
-      const args = obj(data.arguments ?? data.args);
+      const args = callArguments(data);
       // Neon's safe-swap calls run after the verdict and are not re-checked.
       const pending = paneKey === "guarded" && STATE_CHANGING.has(name) && data.source !== "neon";
       const sum = STATE_CHANGING.has(name) ? summarizeCall(name, args, s.products) : null;
@@ -121,7 +147,7 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
         title: name,
         args,
         tone: pending ? "warn" : "neutral",
-        spend: sum?.total ?? null,
+        spend: reportedSpend ?? sum?.total ?? null,
         quantity: sum?.quantity ?? null,
         data,
       };
@@ -131,7 +157,9 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
     case "tool_result": {
       const name = str(data.name) ?? str(data.tool);
       const result = "result" in data ? data.result : data;
-      const products = name === "get_product" || name === "lookup_catalog" ? rememberProduct(s.products, result) : s.products;
+      const products = name === "get_product" || name === "lookup_catalog" || name === "search_catalog"
+        ? rememberProducts(s.products, result)
+        : s.products;
       const steps = [...prev.steps];
       let idx = -1;
       for (let i = steps.length - 1; i >= 0; i--) {
@@ -147,10 +175,11 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
 
     case "intercepted": {
       const tool = str(data.tool) ?? str(data.name) ?? "call";
-      const args = obj(data.arguments ?? data.args);
+      const args = callArguments(data);
       const sum = summarizeCall(tool, args, s.products);
-      const explicit = typeof data.hijacked === "boolean" ? (data.hijacked as boolean) : undefined;
-      const hijack = paneKey === "victim" && (explicit ?? violatesIntent(sum, s.intent));
+      const spend = reportedSpend ?? sum.total;
+      const explicit = typeof data.hijacked === "boolean" ? data.hijacked : undefined;
+      const hijack = paneKey === "victim" && (explicit ?? violatesIntent({ ...sum, total: spend }, s.intent));
       const step: Step = {
         id,
         kind: e.kind,
@@ -158,11 +187,11 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
         title: tool,
         args,
         tone: hijack ? "danger" : "warn",
-        spend: sum.total,
+        spend,
         quantity: sum.quantity,
         data,
       };
-      const attempted = Math.max(prev.attempted, sum.total ?? 0);
+      const attempted = Math.max(prev.attempted, spend ?? 0);
       let status: PaneStatus = running;
       if (paneKey === "victim") status = hijack || prev.status === "hijacked" ? "hijacked" : "intercepted";
       return patchPane(s, paneKey, { ...base, status, attempted, steps: [...prev.steps, step] });
@@ -172,8 +201,10 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
       const v = data as unknown as Verdict;
       const steps = [...prev.steps];
       for (let i = steps.length - 1; i >= 0; i--) {
-        if (steps[i].kind === "tool_call" && steps[i].tone === "warn" && STATE_CHANGING.has(steps[i].title) && !steps[i].verdict) {
-          steps[i] = { ...steps[i], verdict: v, tone: toneForVerdict(v) };
+        const call = steps[i];
+        if (call.kind === "tool_call" && call.tone === "warn" && STATE_CHANGING.has(call.title)
+          && !call.verdict && (!v.tool || call.title === v.tool)) {
+          steps[i] = { ...call, verdict: v, tone: toneForVerdict(v), spend: v.cart_total ?? call.spend };
           break;
         }
       }

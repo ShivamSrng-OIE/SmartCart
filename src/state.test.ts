@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { applyEvent, initialState, parseJsonl, replayAll } from "./state";
+import { normalizeEval, runAgent, streamRun } from "./api";
 import type { TraceEvent } from "./types";
 
 const ev = (pane: TraceEvent["pane"], kind: TraceEvent["kind"], data: Record<string, unknown> = {}, t_ms = 0): TraceEvent => ({
@@ -65,6 +66,71 @@ describe("applyEvent", () => {
     expect(last.kind).toBe("intercepted");
   });
 
+  it("uses the backend's intercepted cart spend and hijack flag", () => {
+    const s = applyEvent(
+      initialState({ text: "buy ten", budget: 400, quantity: 10 }),
+      ev("victim", "intercepted", {
+        tool: "create_cart",
+        arguments: { cart: { line_items: [{ item: { id: "v1" }, quantity: 10 }] } },
+        attempted_spend: 379.5,
+        hijacked: true,
+      }),
+    );
+    expect(s.victim.status).toBe("hijacked");
+    expect(s.victim.attempted).toBe(379.5);
+    expect(s.victim.steps[0]).toMatchObject({ spend: 379.5, quantity: 10 });
+  });
+
+  it("computes spend from a nested interception and compact catalog variants", () => {
+    const s = replayAll(
+      [
+        ev("victim", "tool_result", {
+          tool: "search_catalog",
+          result: { products: [{ product_id: "p1", variants: [{ variant_id: "v1", price_usd: 37.95 }] }] },
+        }),
+        ev("victim", "intercepted", {
+          tool: "create_cart",
+          result: { arguments: { cart: { line_items: [{ item: { id: "v1" }, quantity: 1 }] } } },
+        }),
+      ],
+      { text: "buy one under $30", budget: 30, quantity: 1 },
+    );
+    expect(s.victim.steps.at(-1)).toMatchObject({ spend: 37.95, quantity: 1 });
+    expect(s.victim.status).toBe("hijacked");
+  });
+
+  it("honors explicit zero spend and a false hijack flag", () => {
+    const s = applyEvent(
+      initialState(),
+      ev("victim", "intercepted", {
+        tool: "create_cart",
+        arguments: { lines: [{ product_id: "p1", quantity: 2, price: 10 }] },
+        attempted_spend: 0,
+        hijacked: false,
+      }),
+    );
+    expect(s.victim.status).toBe("intercepted");
+    expect(s.victim.steps[0].spend).toBe(0);
+  });
+
+  it("accepts nested tool-call arguments and prefers the reported spend", () => {
+    const args = { spend_request: { approval_limit: 37950 } };
+    const s = applyEvent(initialState(), ev("victim", "tool_call", {
+      tool: "create_spend_request",
+      result: { arguments: args },
+      attempted_spend: 380,
+    }));
+    expect(s.victim.steps[0]).toMatchObject({ args, spend: 380 });
+  });
+
+  it("converts the nested spend request approval limit from cents", () => {
+    const s = applyEvent(initialState(), ev("victim", "tool_call", {
+      tool: "create_spend_request",
+      arguments: { spend_request: { approval_limit: 37950 } },
+    }));
+    expect(s.victim.steps[0].spend).toBe(379.5);
+  });
+
   it("a spend request is always a hijack, even without a known intent", () => {
     let s = initialState();
     s = applyEvent(s, ev("victim", "intercepted", { tool: "create_spend_request", arguments: { amount: 400 } }));
@@ -86,6 +152,17 @@ describe("applyEvent", () => {
     expect(s.verdicts).toHaveLength(1);
     expect(s.guarded.status).toBe("blocked");
     expect(s.firewallError).toBeUndefined();
+  });
+
+  it("back-fills cart_total on the matching pending tool call", () => {
+    const v = verdict({ tool: "create_cart", cart_total: 379.5, model: null, confidence: 0.95 });
+    const s = replayAll([
+      ev("guarded", "tool_call", { tool: "create_cart" }),
+      ev("guarded", "tool_call", { tool: "create_checkout" }),
+      ev("guarded", "verdict", v),
+    ]);
+    expect(s.guarded.steps[0]).toMatchObject({ spend: 379.5, verdict: v, tone: "danger" });
+    expect(s.guarded.steps[1]).toMatchObject({ spend: null, tone: "warn" });
   });
 
   it("verdict with error shows firewall error", () => {
@@ -127,6 +204,20 @@ describe("applyEvent", () => {
     expect(s.done).toBe(true);
   });
 
+  it("system done finishes every pane without adding a step", () => {
+    const s = replayAll([
+      ev("victim", "log", { message: "Victim started" }),
+      ev("guarded", "log", { message: "Guarded started" }),
+      ev("system", "done", {}, 128),
+    ]);
+    expect(s.done).toBe(true);
+    expect(s.victim).toMatchObject({ finished: true, lastT: 128 });
+    expect(s.guarded).toMatchObject({ finished: true, lastT: 128 });
+    expect(s.redteam.finished).toBe(true);
+    expect(s.victim.steps).toHaveLength(1);
+    expect(s.guarded.steps).toHaveLength(1);
+  });
+
   it("ignores events from another run once a run id is set", () => {
     let s = initialState();
     s = { ...s, runId: "r_a" };
@@ -139,6 +230,61 @@ describe("applyEvent", () => {
     const s1 = applyEvent(s0, ev("victim", "tool_call", { name: "search_catalog", arguments: {} }));
     expect(s0.victim.steps).toHaveLength(0);
     expect(s1).not.toBe(s0);
+  });
+});
+
+describe("API contract", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("closes a stream on system done even with a pane-specific closeOn", () => {
+    const source = { close: vi.fn(), onmessage: null as ((msg: MessageEvent) => void) | null };
+    vi.stubGlobal("EventSource", class {
+      constructor() {
+        return source;
+      }
+    });
+    let state = initialState();
+    streamRun("r_test", (event) => { state = applyEvent(state, event); }, undefined, { closeOn: ["victim"] });
+
+    source.onmessage?.(new MessageEvent("message", { data: JSON.stringify(ev("system", "done")) }));
+
+    expect(source.close).toHaveBeenCalledTimes(1);
+    expect(state.victim.finished).toBe(true);
+    expect(state.guarded.finished).toBe(true);
+  });
+
+  it("does not synthesize a pane done after an agent returns system done", async () => {
+    const done = ev("system", "done");
+    vi.stubGlobal("fetch", async () => Response.json({ run_id: done.run_id, events: [done] }));
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    runAgent("unprotected", new FormData(), { onStart: vi.fn(), onEvent, onError });
+
+    await vi.waitFor(() => expect(onEvent).toHaveBeenCalled());
+    expect(onEvent.mock.calls).toEqual([[done]]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  const metrics = { asr: 0, benign_completion: 1, p50_ms: 120, p95_ms: 220, dollars_defended: 22, n_attack: 2, n_benign: 2 };
+
+  it("preserves per-modality metrics and error counts in official results", () => {
+    const report = {
+      systems: { carttrap: metrics },
+      by_modality: { carttrap: { image: metrics } },
+      n_errors: { carttrap: 1 },
+      meta: { n_fail_closed: 2 },
+    };
+    expect(normalizeEval(report)).toMatchObject(report);
+  });
+
+  it("treats a marked sample report as empty", () => {
+    expect(normalizeEval({
+      systems: { carttrap: metrics },
+      by_modality: { carttrap: { image: metrics } },
+      n_errors: { carttrap: 1 },
+      meta: { sample: true },
+      failures: [{ case_id: "sample_case" }],
+    })).toEqual({ systems: {} });
   });
 });
 

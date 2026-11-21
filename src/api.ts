@@ -62,7 +62,7 @@ export function streamRun(
     const events = toEvents(payload, { runId, pane: opts.pane ?? "guarded", now: () => performance.now() - t0 });
     for (const e of events) {
       onEvent(e);
-      if (e.kind === "done" && closeOn.includes(e.pane)) close();
+      if (e.kind === "done" && (e.pane === "system" || closeOn.includes(e.pane))) close();
     }
   };
   es.onerror = () => {
@@ -97,7 +97,7 @@ export function runAgent(kind: AgentKind, form: FormData, h: AgentRunHandlers): 
   form.set("mode", ep.mode);
 
   const emit = (e: TraceEvent) => {
-    if (e.kind === "done" && e.pane === pane) sawDone = true;
+    if (e.kind === "done" && (e.pane === "system" || e.pane === pane)) sawDone = true;
     h.onEvent(e);
   };
   const finish = (runId: string) => {
@@ -226,7 +226,9 @@ const SYSTEM_KEYS = ["baseline", "hardened", "carttrap"] as const;
 
 export function normalizeEval(raw: unknown): EvalResults {
   const r = (raw ?? {}) as Record<string, unknown>;
+  const meta = (r.meta as EvalResults["meta"]) ?? undefined;
   const systems: EvalResults["systems"] = {};
+  if (meta?.sample === true) return { systems };
   const src = (r.systems ?? r.results ?? r) as unknown;
   if (Array.isArray(src)) {
     for (const row of src as Record<string, unknown>[]) {
@@ -241,7 +243,9 @@ export function normalizeEval(raw: unknown): EvalResults {
   }
   return {
     systems,
-    meta: (r.meta as EvalResults["meta"]) ?? undefined,
+    by_modality: r.by_modality as EvalResults["by_modality"],
+    n_errors: r.n_errors as EvalResults["n_errors"],
+    meta,
     failures: Array.isArray(r.failures) ? (r.failures as EvalResults["failures"]) : undefined,
   };
 }

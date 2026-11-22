@@ -133,7 +133,7 @@ export function Settings() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
       <div>
         <p className="label mb-1">Settings</p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">AI models &amp; your key</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">AI models &amp; keys</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
           Pick where the agents get their intelligence. The model for each job is chosen automatically: on OpenRouter only free models are used, the best one for each job first, with the next ones as backup if it is busy.
         </p>

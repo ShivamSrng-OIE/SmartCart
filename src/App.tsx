@@ -136,7 +136,7 @@ export default function App() {
       dataset: "Dataset · Tote",
       merchant: "Sell · Tote",
       trust: "Marketplace trust · Tote",
-      settings: "AI models & your key · Tote",
+      settings: "AI models & keys · Tote",
     };
     document.title = titles[view];
   }, [view, productSeed?.title]);

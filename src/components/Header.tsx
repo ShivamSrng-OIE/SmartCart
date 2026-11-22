@@ -30,7 +30,7 @@ export const MORE: NavItem[] = [
   { id: "redteam", label: "Safety updates", short: "Updates", hint: "How Safe Checkout learns new checks", icon: Swords },
   { id: "results", label: "Results", short: "Results", hint: "How Safe Checkout performs, in numbers", icon: Trophy },
   { id: "dataset", label: "Dataset", short: "Dataset", hint: "The poisoned orders we test against", icon: Database },
-  { id: "settings", label: "AI models & your key", short: "AI & key", hint: "Which AI runs the checks, and using your own key", icon: SlidersHorizontal },
+  { id: "settings", label: "AI models & keys", short: "AI & keys", hint: "Which AI runs the checks, and using your own key", icon: SlidersHorizontal },
 ];
 
 export const ALL_VIEWS: View[] = ["home", "product", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];

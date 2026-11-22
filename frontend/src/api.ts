@@ -5,7 +5,7 @@ import benignJsonl from "./fixtures/run_benign.jsonl?raw";
 import redteamJsonl from "./fixtures/redteam_demo.jsonl?raw";
 import defaultRulesJson from "./fixtures/rules.sample.json";
 import evalSample from "./fixtures/eval.sample.json";
-import { ENDPOINTS, streamUrl, type AgentKind, type FixtureName } from "./config";
+import { ENDPOINTS, apiUrl, streamUrl, type FixtureName, type RunKind } from "./config";
 import { looksLikeGemini, toEvents } from "./lib/gemini";
 import { fetchBlob, fetchListingText, fileUrl, mediaToFetch, type WarehousePurchase } from "./lib/dataset";
 
@@ -113,7 +113,7 @@ export interface AgentRunHandlers {
  * The endpoint may answer with { run_id } + SSE, a raw Gemini generateContent JSON,
  * a Gemini streamGenerateContent SSE body, or { events: TraceEvent[] }.
  */
-export function runAgent(kind: AgentKind, form: FormData, h: AgentRunHandlers): () => void {
+export function runAgent(kind: RunKind, form: FormData, h: AgentRunHandlers): () => void {
   const ep = ENDPOINTS[kind];
   const pane: Pane = kind === "unprotected" ? "victim" : "guarded";
   const ctrl = new AbortController();
@@ -214,7 +214,7 @@ export function runAgent(kind: AgentKind, form: FormData, h: AgentRunHandlers): 
 }
 
 export async function launchRedteam(productId?: string, rounds = 3): Promise<string> {
-  const r = await fetch("/api/redteam/launch", {
+  const r = await fetch(apiUrl("/api/redteam/launch"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ product_id: productId || undefined, rounds }),
@@ -226,13 +226,13 @@ export async function launchRedteam(productId?: string, rounds = 3): Promise<str
 }
 
 export async function getRules(): Promise<RuleSet> {
-  const r = await fetch("/api/rules");
+  const r = await fetch(apiUrl("/api/rules"));
   if (!r.ok) throw new Error(`GET /api/rules failed: ${r.status}`);
   return normalizeRules(await r.json());
 }
 
 export async function getEvalLatest(): Promise<EvalResults> {
-  const r = await fetch("/api/eval/latest");
+  const r = await fetch(apiUrl("/api/eval/latest"));
   if (!r.ok) throw new Error(`GET /api/eval/latest failed: ${r.status}`);
   return normalizeEval(await r.json());
 }

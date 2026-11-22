@@ -1,4 +1,5 @@
 // Types and helpers for the poisoned-dataset browser (GET /api/dataset). Kept local on purpose.
+import { apiUrl } from "../config";
 export type DatasetModality = "image" | "video" | "audio" | "none";
 
 export interface DatasetItem {
@@ -27,7 +28,7 @@ export type ByModality = Record<string, Record<string, ModalityCell>>;
 
 export const MODALITIES: DatasetModality[] = ["image", "video", "audio", "none"];
 
-const BASE = "/api/dataset";
+const BASE = apiUrl("/api/dataset");
 export const imageUrl = (id: string) => `${BASE}/${encodeURIComponent(id)}/image.png`;
 export const fileUrl = (id: string, name: string) => `${BASE}/${encodeURIComponent(id)}/${encodeURIComponent(name)}`;
 

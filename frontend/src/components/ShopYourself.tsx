@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Bot, Check, Info, Loader2, Minus, PackageSearch, Plus, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
-import { isUrl, searchCatalog, splitQueries, type CatalogProduct, type ProductRef } from "../catalog";
+import { ArrowUpRight, Bot, Check, Info, Loader2, Minus, PackageSearch, Plus, Search, ShieldAlert, ShoppingBag, Star, Trash2, X } from "lucide-react";
+import { isFlagged, isUrl, searchCatalog, splitQueries, type CatalogProduct, type ProductRef } from "../catalog";
 import { createCheckoutMcp, type ShopMessage } from "../shop";
 import { useCountry } from "../locale";
 import type { Mode } from "../hooks/useBackend";
@@ -10,6 +10,8 @@ import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { AutoRail } from "./AutoRail";
 import { Button, Kbd, Segmented, cx } from "./ui";
+import { HeldDialog, TrustChip } from "./TrustBadge";
+import { useCartChecker, type CheckResult } from "../hooks/useCartChecker";
 
 const SUGGESTIONS = ["cold brew", "sparkling water", "ceramic mug", "flash drive", "granola", "insulated bottle"];
 import { BROWSE } from "../config";
@@ -32,9 +34,13 @@ function sortItems(items: CatalogProduct[], sort: Sort): CatalogProduct[] {
 
 /* ------------------------------------------------------------------ cards */
 
-function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: number; onOpen: () => void; onAdd: (from: Element | null) => void }) {
+function ProductCard({ p, inCart, check, onOpen, onAdd, onHeld }: { p: CatalogProduct; inCart: number; check?: CheckResult; onOpen: () => void; onAdd: (from: Element | null) => void; onHeld: () => void }) {
   const [hover, setHover] = useState(false);
   const thumbRef = useRef<HTMLDivElement>(null);
+  const flagged = isFlagged(p);
+  const checking = check?.phase === "checking";
+  const held = check?.phase === "held" || check?.phase === "error";
+  const lowered = !!p.rating && !!p.trust && (p.trust.merchantStatus !== "trusted" || p.trust.productStatus !== "clear");
   return (
     <div
       data-card
@@ -42,23 +48,32 @@ function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: 
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      className="group card flex h-full flex-col overflow-hidden transition-shadow duration-200 hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]"
+      className={cx(
+        "group card flex h-full flex-col overflow-hidden transition-shadow duration-200",
+        flagged ? "shadow-[0_0_0_1px_var(--danger-line)] hover:shadow-[0_0_0_1px_var(--danger),0_12px_24px_-16px_rgb(199_10_36/0.35)]" : "hover:shadow-[0_0_0_1px_var(--line-strong),0_12px_24px_-16px_rgb(0_0_0/0.35)]",
+      )}
     >
       <button onClick={onOpen} className="flex flex-1 flex-col text-left" aria-label={`Open ${p.title}`}>
-        <div ref={thumbRef} className="aspect-[4/3] w-full border-b border-line">
-          <ProductThumb product={p} active={hover} className="rounded-none! shadow-none!" />
+        <div ref={thumbRef} className={cx("relative aspect-[4/3] w-full border-b border-line", flagged && "border-danger-line")}>
+          <ProductThumb product={p} active={hover} className={cx("rounded-none! shadow-none!", flagged && "opacity-70 saturate-50")} />
+          {flagged && (
+            <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-md bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white shadow">
+              <ShieldAlert className="size-3" /> Flagged
+            </span>
+          )}
         </div>
         <div className="flex flex-1 flex-col gap-1 p-3 pb-2 sm:p-3.5 sm:pb-2">
           <p className="line-clamp-2 text-[14px] leading-snug font-medium text-ink">{p.title}</p>
           <p className="truncate text-xs text-ink-3">{p.shopName ?? p.shop ?? p.vendor ?? "Shopify store"}</p>
-          {(p.rating || p.available === false) && (
-            <p className="flex items-center gap-2 text-[11px] text-ink-3">
+          {(p.rating || p.available === false || p.trust) && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
               {p.rating && (
-                <span className="inline-flex items-center gap-0.5">
-                  <Star className="size-3 fill-current text-warn" /> {p.rating.value.toFixed(1)} <span className="opacity-70">({p.rating.count})</span>
+                <span className={cx("inline-flex items-center gap-0.5", lowered && "text-danger")}>
+                  <Star className={cx("size-3 fill-current", lowered ? "text-danger" : "text-warn")} /> {p.rating.value.toFixed(1)} <span className="opacity-70">({p.rating.count})</span>
                 </span>
               )}
               {p.available === false && <span className="text-danger">Sold out</span>}
+              <TrustChip p={p} />
             </p>
           )}
         </div>
@@ -68,22 +83,28 @@ function ProductCard({ p, inCart, onOpen, onAdd }: { p: CatalogProduct; inCart: 
           <span className="tnum text-[15px] font-semibold">{money(p.price, false, p.currency)}</span>
           {unitsLabel(p.units) && <span className="text-[11px] text-ink-3">{unitsLabel(p.units)}</span>}
         </span>
-        <button
-          onClick={(e) => {
-            const btn = e.currentTarget;
-            gsap.fromTo(btn, { scale: 0.92 }, { scale: 1, duration: d(0.35), ease: "back.out(3)" });
-            onAdd(thumbRef.current);
-          }}
-          disabled={p.available === false}
-          aria-label={`Add ${p.title} to cart`}
-          className={cx(
-            "inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] font-semibold transition-colors",
-            inCart ? "bg-safe-soft text-safe shadow-[inset_0_0_0_1px_var(--safe-line)]" : "btn-secondary",
-          )}
-        >
-          {inCart ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
-          {inCart ? `${inCart} in cart` : "Add"}
-        </button>
+        {held ? (
+          <button onClick={onHeld} className="inline-flex h-8 items-center gap-1 rounded-lg bg-danger-soft px-2.5 text-[12px] font-semibold text-danger shadow-[inset_0_0_0_1px_var(--danger-line)]" aria-label={`Why ${p.title} was held`}>
+            <ShieldAlert className="size-3.5" /> Held · why?
+          </button>
+        ) : (
+          <button
+            onClick={(e) => {
+              const btn = e.currentTarget;
+              gsap.fromTo(btn, { scale: 0.92 }, { scale: 1, duration: d(0.35), ease: "back.out(3)" });
+              onAdd(thumbRef.current);
+            }}
+            disabled={p.available === false || checking}
+            aria-label={checking ? `Checking ${p.title}` : `Add ${p.title} to cart`}
+            className={cx(
+              "inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] font-semibold transition-colors",
+              inCart ? "bg-safe-soft text-safe shadow-[inset_0_0_0_1px_var(--safe-line)]" : "btn-secondary",
+            )}
+          >
+            {checking ? <Loader2 className="size-3.5 animate-spin" /> : inCart ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+            {checking ? "Checking…" : inCart ? `${inCart} in cart` : "Add"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -109,7 +130,8 @@ function CheckoutButton({ shop, lines }: { shop: string; lines: Cart["lines"] })
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
   const [msg, setMsg] = useState<string | null>(null);
   const name = lines[0]?.shopName ?? shop;
-  const real = lines.every((l) => l.variantId) && !/\.example$/.test(shop);
+  const demoStore = /(^|\.)warehouse\.local$/.test(shop);
+  const real = lines.every((l) => l.variantId) && !/\.example$/.test(shop) && !demoStore;
   const fallbackUrl = lines.find((l) => l.url)?.url ?? null;
 
   const go = async () => {
@@ -130,6 +152,14 @@ function CheckoutButton({ shop, lines }: { shop: string; lines: Cart["lines"] })
     }
   };
 
+  if (demoStore) {
+    return (
+      <p className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
+        <Info className="mt-0.5 size-3.5 shrink-0" />
+        <span><span className="font-medium text-ink">{name}</span> is a demo store, so there is no payment step. Safe Checkout already approved these items.</span>
+      </p>
+    );
+  }
   if (!real) {
     return fallbackUrl ? (
       <a href={fallbackUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary inline-flex h-10 items-center justify-center gap-2 rounded-[10px] text-[13px] font-semibold">
@@ -359,7 +389,16 @@ export function ShopYourself({
     { scope: root, dependencies: [sorted.map((p) => p.id).join("|")] },
   );
 
+  // Warehouse listings are checked the moment they are added; Shopify products go straight in.
+  const flyFrom = useRef(new Map<string, Element | null>());
+  const checker = useCartChecker(cart, (p) => flyToCart(flyFrom.current.get(p.id) ?? null));
+  const [held, setHeld] = useState<CatalogProduct | null>(null);
   const add = (p: CatalogProduct, from?: Element | null) => {
+    if (p.source === "warehouse") {
+      flyFrom.current.set(p.id, from ?? null);
+      checker.check(p);
+      return;
+    }
     cart.add(p);
     flyToCart(from);
   };
@@ -493,14 +532,14 @@ export function ShopYourself({
                       query ? (
                         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6">
                           {sortItems(g.items, sort).map((p) => (
-                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
+                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} check={checker.results[p.id]} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} onHeld={() => setHeld(p)} />
                           ))}
                         </div>
                       ) : (
                         // Browse rows: a gently auto-scrolling rail that pauses on hover.
                         <AutoRail label={`${g.term} products`} speed={24 + (g.term.length % 3) * 4}>
                           {sortItems(g.items, sort).map((p) => (
-                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
+                            <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} check={checker.results[p.id]} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} onHeld={() => setHeld(p)} />
                           ))}
                         </AutoRail>
                       )
@@ -514,7 +553,7 @@ export function ShopYourself({
               <>
                 <div className={cx("grid transition-opacity grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6", loading && "opacity-60")}>
                   {sorted.map((p) => (
-                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} />
+                    <ProductCard key={p.id} p={p} inCart={cart.qtyOf(p.id)} check={checker.results[p.id]} onOpen={() => onOpenProduct(p)} onAdd={(from) => add(p, from)} onHeld={() => setHeld(p)} />
                   ))}
                 </div>
                 {cursor && (
@@ -541,6 +580,8 @@ export function ShopYourself({
 
       {/* cart: sidebar on desktop */}
       <CartPanel cart={cart} className="sticky top-[76px] hidden max-h-[calc(100dvh-96px)] lg:flex" />
+
+      {held && checker.results[held.id] && <HeldDialog product={held} result={checker.results[held.id]} onClose={() => setHeld(null)} />}
 
       {/* cart sheet on phones/tablets (opened from the header cart button) */}
       {cartOpen && (

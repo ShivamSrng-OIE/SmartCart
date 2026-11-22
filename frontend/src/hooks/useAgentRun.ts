@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fixtureEvents, replay, runAgent } from "../api";
 import { applyEvent, initialState, type ArenaState } from "../state";
 import type { Intent, TraceEvent } from "../types";
-import { REPLAY_SPEED, type AgentKind, type FixtureName } from "../config";
+import { REPLAY_SPEED, type FixtureName, type RunKind } from "../config";
 import type { Mode } from "./useBackend";
 import type { Phase } from "./useArena";
 
 /** One AI shopper (mode 2 or 3): live against its endpoint, or the scripted demo for its pane. */
-export function useAgentRun(kind: AgentKind, mode: Mode) {
+export function useAgentRun(kind: RunKind, mode: Mode) {
   const pane = kind === "unprotected" ? "victim" : "guarded";
   const [state, setState] = useState<ArenaState>(() => initialState());
   const [phase, setPhase] = useState<Phase>("idle");

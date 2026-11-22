@@ -22,8 +22,9 @@ export function useModelLabels(): ModelLabels | null {
     let live = true;
     getLlmSettings()
       .then((s) => {
-        const first = (role: string) => shortModel(s.roles.find((r) => r.id === role)?.models[s.provider]?.[0] ?? "");
-        const value: ModelLabels = { provider: s.provider, shopper: first("shopper"), perception: first("perception"), firewall: first("firewall"), defender: first("defender") };
+        const running = s.active ?? s.provider; // while free OpenRouter models are rate limited, Gemini does the work
+        const first = (role: string) => shortModel(s.roles.find((r) => r.id === role)?.models[running]?.[0] ?? "");
+        const value: ModelLabels = { provider: running, shopper: first("shopper"), perception: first("perception"), firewall: first("firewall"), defender: first("defender") };
         cached = { at: Date.now(), value };
         if (live) setLabels(value);
       })

@@ -66,7 +66,7 @@ function summarize(step: Step, products: ProductLedger): ReactNode {
       const n = Array.isArray(r.products) ? r.products.length : Array.isArray(step.result) ? (step.result as unknown[]).length : null;
       return (
         <>
-          “{String(a.query ?? "")}”{n != null && <span className="text-ink-3"> → {n} results</span>}
+          “{String(a.query ?? obj(a.catalog).query ?? "")}”{n != null && <span className="text-ink-3"> → {n} result{n === 1 ? "" : "s"}</span>}
         </>
       );
     }

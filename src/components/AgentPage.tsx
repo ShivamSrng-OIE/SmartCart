@@ -10,7 +10,7 @@ import { Button, Segmented, cx } from "./ui";
 import { useAgentRun } from "../hooks/useAgentRun";
 import { useModelLabels } from "../hooks/useModelLabels";
 import { useDraft } from "../draft";
-import type { AgentKind } from "../config";
+import { assetUrl, type AgentKind } from "../config";
 import type { Mode } from "../hooks/useBackend";
 import type { RuleSet } from "../types";
 import { clock, money, shortId } from "../lib/format";
@@ -67,10 +67,15 @@ function OrderCard({ step, products, held }: { step: Step; products: ArenaState[
   const args = step.args ?? {};
   const first = linesOf(args)[0];
   const pid = String(first?.product_id ?? (first?.item as Record<string, unknown> | undefined)?.id ?? "");
-  const prod = products[pid] as Record<string, unknown> | undefined;
+  // a cart line names a variant: find the product it belongs to
+  const owner = Object.values(products).find((p) => {
+    const vs = (p as Record<string, unknown>)?.variants;
+    return Array.isArray(vs) && (vs as Record<string, unknown>[]).some((v) => (v?.variant_id ?? v?.id) === pid);
+  });
+  const prod = (owner ?? products[pid]) as Record<string, unknown> | undefined;
   const title = (prod?.title as string | undefined) ?? (pid ? shortId(pid) : step.title.replace(/_/g, " "));
   const media = Array.isArray(prod?.media) ? (prod!.media as Record<string, unknown>[]) : [];
-  const image = (prod?.image_url as string | undefined) ?? (media[0]?.url as string | undefined) ?? null;
+  const image = assetUrl((prod?.image_url as string | undefined) ?? (media[0]?.url as string | undefined) ?? null);
   const qty = step.quantity ?? (first?.quantity as number | undefined) ?? 1;
   const total = step.spend ?? null;
   const wrong = step.tone === "danger";

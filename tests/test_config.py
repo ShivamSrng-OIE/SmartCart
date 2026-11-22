@@ -13,4 +13,5 @@ def test_config_defaults():
 
 
 def test_health():
-    assert TestClient(app).get("/health").json() == {"ok": True}
+    body = TestClient(app).get("/health").json()
+    assert body["ok"] is True and body["provider"] in ("gemini", "openrouter") and isinstance(body["model_key"], bool)

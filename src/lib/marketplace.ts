@@ -183,28 +183,18 @@ export interface LlmRole {
   name: string;
   label: string;
   needs: string[];
+  /** the models for this job on each provider, best first (OpenRouter: free ones only, the rest are backups) */
+  models: Record<string, string[]>;
 }
 
 export interface LlmSettings {
   provider: "gemini" | "openrouter";
   providers: string[];
-  models: Record<string, Record<string, string>>;
-  defaults: Record<string, Record<string, string>>;
   roles: LlmRole[];
   keys: Record<string, boolean>;
 }
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  input: string[];
-  tools: boolean;
-  json: boolean;
-  context?: number | null;
-}
-
 export const getLlmSettings = () => request<LlmSettings>("/api/settings/llm", {}, false);
-export const putLlmSettings = (body: { provider?: string; models?: Record<string, Record<string, string>> }) => request<LlmSettings>("/api/settings/llm", { method: "PUT", body: JSON.stringify(body) });
+export const putLlmSettings = (provider: string) => request<LlmSettings>("/api/settings/llm", { method: "PUT", body: JSON.stringify({ provider }) });
 export const putLlmKey = (provider: string, key: string, persist: boolean) => request<LlmSettings>("/api/settings/llm/key", { method: "POST", body: JSON.stringify({ provider, key, persist }) });
-export const getModelList = async (provider: string) => (await request<{ models: ModelInfo[] }>(`/api/settings/llm/models?provider=${provider}`, {}, false)).models;
 export const testRole = (role: string) => request<{ ok: boolean; model: string; provider: string; ms: number; reply?: string; error?: string }>("/api/settings/llm/test", { method: "POST", body: JSON.stringify({ role }) });

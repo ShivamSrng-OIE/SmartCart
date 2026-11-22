@@ -1,21 +1,25 @@
-"""Which provider and model runs each agent role. Changed at runtime from the Settings page.
+"""Which provider (Gemini or OpenRouter) runs the agents, and which model does each job.
+
+Models are NOT user-selectable. Each job (role) has a fixed, ordered list of the best models for it, chosen by
+measuring them on the app's real tasks (reading the sticky-note photo, tool calling, JSON, the real firewall
+prompt). The first model is used; if it fails (free endpoints are rate limited and sometimes down) the next one
+is tried, ending at OpenRouter's free router. On OpenRouter every model is free (ids end in ':free'); a paid
+model can never be configured or called. Only the provider can be switched, from the Models page.
 
 Roles (the names the team used during the hackathon in brackets):
     shopper     (Hydrogen)  the autonomous shopping agent: tool calling + photos
     perception  (Argon)     reads listing photos, video frames and text into Claims
-    listener    (Argon)     transcribes audio and video voice-overs
+    listener    (Argon)     transcribes audio clips and video voice-overs
     firewall    (Decisions) scores every money-moving call against the probe rules
-    defender    (Neon)      writes the "why is this fraud" explanation
-    carbon      (Carbon)    self-healing: studies incidents, drafts new checks
+    defender    (Neon)      writes the "why is this blocked" explanation
+    carbon      (Carbon)    studies incidents and drafts new checks
 
-The provider choice and model ids are saved to data/state/llm_settings.json (no secrets).
-API keys come from backend/.env; the Settings page can set them for the running process and,
-if asked, write them to backend/.env (which git ignores).
+The provider choice is saved to data/state/llm_settings.json (no secrets). API keys come from backend/.env;
+the Models page can set one for the running process and, if asked, write it to backend/.env (git ignores it).
 """
 from __future__ import annotations
 
 import json
-import re
 import threading
 from dataclasses import dataclass
 
@@ -29,7 +33,7 @@ class Role:
     id: str
     name: str
     label: str
-    needs: tuple[str, ...]  # capabilities a good model for this role should have
+    needs: tuple[str, ...]  # what a good model for this job has to do
 
 
 ROLES: tuple[Role, ...] = (
@@ -37,67 +41,60 @@ ROLES: tuple[Role, ...] = (
     Role("perception", "Argon", "Reads listing photos, video frames and descriptions", ("image",)),
     Role("listener", "Argon (audio)", "Transcribes audio clips and video voice-overs", ("audio",)),
     Role("firewall", "Firewall", "Scores each cart against the probe rules before money moves", ("json",)),
-    Role("defender", "Neon", "Explains a block in plain words and finds a safe swap", ()),
-    Role("carbon", "Carbon", "Self-healing: studies incidents and drafts new checks", ("json",)),
+    Role("defender", "Neon", "Explains a block in plain words", ()),
+    Role("carbon", "Carbon", "Studies incidents and drafts new checks", ("json",)),
 )
 ROLE_IDS = tuple(r.id for r in ROLES)
 
-# One equivalent model per role and provider. Gemini ids are the hackathon models (overridable
-# with MODEL_* in .env); OpenRouter ids are free models that cover the same capabilities.
-DEFAULTS: dict[str, dict[str, str]] = {
-    "gemini": {
-        "shopper": config.MODELS["victim"],
-        "perception": config.MODELS["perception"],
-        "listener": config.MODELS["perception"],
-        "firewall": config.MODELS["firewall"],
-        "defender": config.MODELS["defender"],
-        "carbon": config.MODELS["redteam"],
-    },
-    "openrouter": {
-        "shopper": "google/gemma-4-31b-it:free",
-        "perception": "google/gemma-4-31b-it:free",
-        "listener": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "firewall": "google/gemma-4-26b-a4b-it:free",
-        "defender": "google/gemma-4-26b-a4b-it:free",
-        "carbon": "google/gemma-4-31b-it:free",
-    },
+ROUTER = "openrouter/free"  # OpenRouter's own router across free models: the last resort for every job
+
+# Free OpenRouter models per job, best first. Measured with a real key (see docs/models.md):
+#  - nemotron-3.5-super-vl: reads the photo and flags the instruction, calls tools, returns JSON, in 1-3 s
+#  - particle-1: the only free model that passed the real firewall prompt (blocked the poisoned listing,
+#    approved the clean one); also reads photos
+#  - nemotron-3-ultra: the strongest text model, clear plain-language explanations
+#  - nemotron-3-nano-omni: the only free model that accepts audio
+OPENROUTER_CHAINS: dict[str, tuple[str, ...]] = {
+    "shopper": ("nvidia/nemotron-3.5-super-vl:free", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+                "google/gemma-4-31b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free", ROUTER),
+    "perception": ("nvidia/nemotron-3.5-super-vl:free", "particle-ai/particle-1:free",
+                   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "google/gemma-4-31b-it:free", ROUTER),
+    "listener": ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",),
+    "firewall": ("particle-ai/particle-1:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free",
+                 "inclusionai/ling-3.2-flash:free", "nvidia/nemotron-3.5-super-vl:free", ROUTER),
+    "defender": ("nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-super-vl:free",
+                 "baidu/ernie-5.5-flash-preview:free", ROUTER),
+    "carbon": ("nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-super-vl:free",
+               "baidu/ernie-5.5-flash-preview:free", ROUTER),
+}
+
+# Gemini: the hackathon models (overridable with MODEL_* in .env, see config.py).
+GEMINI_MODELS: dict[str, str] = {
+    "shopper": config.MODELS["victim"],
+    "perception": config.MODELS["perception"],
+    "listener": config.MODELS["perception"],
+    "firewall": config.MODELS["firewall"],
+    "defender": config.MODELS["defender"],
+    "carbon": config.MODELS["redteam"],
 }
 
 _SETTINGS_FILE = paths.STATE / "llm_settings.json"
-_MODEL_ID = re.compile(r"^[A-Za-z0-9._:/@+-]{1,120}$")
 _lock = threading.Lock()
 _state: dict | None = None
 _keys: dict[str, str | None] = {"gemini": config.GEMINI_API_KEY, "openrouter": config.OPENROUTER_API_KEY}
 
 
-def _env_defaults() -> dict:
-    models = {p: dict(m) for p, m in DEFAULTS.items()}
-    import os
-
-    for role in ROLE_IDS:  # OPENROUTER_MODEL_SHOPPER=... etc.
-        env = os.getenv(f"OPENROUTER_MODEL_{role.upper()}")
-        if env:
-            models["openrouter"][role] = env
-    provider = config.LLM_PROVIDER if config.LLM_PROVIDER in PROVIDERS else "openrouter"
-    return {"provider": provider, "models": models}
-
-
 def _load() -> dict:
     global _state
     if _state is None:
-        state = _env_defaults()
+        provider = config.LLM_PROVIDER if config.LLM_PROVIDER in PROVIDERS else "openrouter"
         try:
             saved = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
             if saved.get("provider") in PROVIDERS:
-                state["provider"] = saved["provider"]
-            for provider, models in (saved.get("models") or {}).items():
-                if provider in PROVIDERS and isinstance(models, dict):
-                    for role, model in models.items():
-                        if role in ROLE_IDS and isinstance(model, str) and _MODEL_ID.fullmatch(model):
-                            state["models"][provider][role] = model
+                provider = saved["provider"]
         except (OSError, ValueError):
             pass
-        _state = state
+        _state = {"provider": provider}
     return _state
 
 
@@ -112,9 +109,18 @@ def provider() -> str:
     return _load()["provider"]
 
 
+def models_for(role: str, provider_name: str | None = None) -> tuple[str, ...]:
+    """The models for a job on a provider, best first. Gemini has one; OpenRouter an ordered list of free ones."""
+    if role not in ROLE_IDS:
+        raise KeyError(role)
+    if (provider_name or provider()) == "openrouter":
+        return OPENROUTER_CHAINS[role]
+    return (GEMINI_MODELS[role],)
+
+
 def model_for(role: str, provider_name: str | None = None) -> str:
-    state = _load()
-    return state["models"][provider_name or state["provider"]][role]
+    """The first-choice model for a job."""
+    return models_for(role, provider_name)[0]
 
 
 def api_key(provider_name: str | None = None) -> str | None:
@@ -122,42 +128,23 @@ def api_key(provider_name: str | None = None) -> str | None:
 
 
 def snapshot() -> dict:
-    """What the Settings page shows. Keys are reported as set/unset only, never echoed."""
-    state = _load()
+    """What the Models page shows (read-only). Keys are reported as set/unset only, never echoed."""
     return {
-        "provider": state["provider"],
+        "provider": provider(),
         "providers": list(PROVIDERS),
-        "models": {p: dict(m) for p, m in state["models"].items()},
-        "defaults": {p: dict(m) for p, m in DEFAULTS.items()},
-        "roles": [{"id": r.id, "name": r.name, "label": r.label, "needs": list(r.needs)} for r in ROLES],
+        "roles": [{"id": r.id, "name": r.name, "label": r.label, "needs": list(r.needs),
+                   "models": {p: list(models_for(r.id, p)) for p in PROVIDERS}} for r in ROLES],
         "keys": {p: bool(_keys.get(p)) for p in PROVIDERS},
     }
 
 
-def update(provider_name: str | None = None, models: dict | None = None) -> dict:
+def update(provider_name: str) -> dict:
+    """Switch the provider. (Models are fixed; there is nothing else to change.)"""
+    if provider_name not in PROVIDERS:
+        raise ValueError(f"provider must be one of {PROVIDERS}")
     with _lock:
         state = _load()
-        if provider_name is not None:
-            if provider_name not in PROVIDERS:
-                raise ValueError(f"provider must be one of {PROVIDERS}")
-            state["provider"] = provider_name
-        for prov, roles in (models or {}).items():
-            if prov not in PROVIDERS or not isinstance(roles, dict):
-                raise ValueError(f"unknown provider {prov!r}")
-            for role, model in roles.items():
-                if role not in ROLE_IDS:
-                    raise ValueError(f"unknown role {role!r}")
-                if not isinstance(model, str) or not _MODEL_ID.fullmatch(model):
-                    raise ValueError(f"invalid model id for {role}")
-                state["models"][prov][role] = model
-        _save(state)
-    return snapshot()
-
-
-def reset(provider_name: str) -> dict:
-    with _lock:
-        state = _load()
-        state["models"][provider_name] = dict(DEFAULTS[provider_name])
+        state["provider"] = provider_name
         _save(state)
     return snapshot()
 

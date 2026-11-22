@@ -1,4 +1,4 @@
-"""Provider/model settings: defaults per role, saved choices, keys never echoed."""
+"""Provider settings: fixed best-free models per job, ordered fallbacks, only the provider is switchable, keys never echoed."""
 import json
 
 import pytest
@@ -16,40 +16,52 @@ def isolated(tmp_path, monkeypatch):
     settings._reset_for_tests(None)
 
 
-def test_every_role_has_a_default_model_for_both_providers():
-    for provider in settings.PROVIDERS:
-        assert set(settings.DEFAULTS[provider]) == set(settings.ROLE_IDS)
+def test_every_job_has_models_on_both_providers():
+    for role in settings.ROLE_IDS:
+        assert settings.OPENROUTER_CHAINS[role] and role in settings.GEMINI_MODELS
 
 
-def test_openrouter_defaults_are_free_models():
-    assert all(m.endswith(":free") or m == "openrouter/free" for m in settings.DEFAULTS["openrouter"].values())
+def test_every_openrouter_model_is_free_and_each_chain_ends_at_the_free_router_or_is_audio_only():
+    for role, chain in settings.OPENROUTER_CHAINS.items():
+        assert all(openrouter.is_free_model(m) for m in chain), role
+        assert chain[-1] == settings.ROUTER or role == "listener"
+        assert len(set(chain)) == len(chain)  # no model listed twice
 
 
-def test_update_switches_provider_and_model_and_persists(tmp_path):
-    snap = settings.update("openrouter", {"openrouter": {"shopper": "google/gemma-4-26b-a4b-it:free"}})
-    assert snap["provider"] == "openrouter" and settings.model_for("shopper") == "google/gemma-4-26b-a4b-it:free"
-    saved = json.loads((tmp_path / "llm_settings.json").read_text())
-    assert saved["provider"] == "openrouter" and "key" not in json.dumps(saved).lower()
+def test_the_first_choice_is_the_best_measured_model():
+    assert settings.model_for("shopper", "openrouter") == "nvidia/nemotron-3.5-super-vl:free"
+    assert settings.model_for("firewall", "openrouter") == "particle-ai/particle-1:free"  # the one that passed the real firewall prompt
+    assert settings.models_for("shopper", "openrouter")[0] != settings.models_for("shopper", "openrouter")[-1]
+
+
+def test_gemini_uses_one_model_per_job():
+    assert all(len(settings.models_for(r, "gemini")) == 1 for r in settings.ROLE_IDS)
+
+
+def test_only_the_provider_can_be_switched_and_it_persists(tmp_path):
+    assert settings.update("openrouter")["provider"] == "openrouter"
+    assert json.loads((tmp_path / "llm_settings.json").read_text()) == {"provider": "openrouter"}
     settings._reset_for_tests(None)  # a fresh process reads the same choice
-    assert settings.model_for("shopper") == "google/gemma-4-26b-a4b-it:free"
-
-
-@pytest.mark.parametrize("bad", [
-    {"provider_name": "claude"},
-    {"models": {"openrouter": {"nonsense": "x"}}},
-    {"models": {"openrouter": {"shopper": "bad model id!"}}},
-])
-def test_update_rejects_bad_input(bad):
+    assert settings.provider() == "openrouter"
     with pytest.raises(ValueError):
-        settings.update(**bad)
+        settings.update("claude")
+    with pytest.raises(TypeError):
+        settings.update("openrouter", {"openrouter": {"shopper": "openai/gpt-4o"}})  # there is no way to choose a model
+
+
+def test_the_snapshot_is_read_only_and_never_contains_keys(monkeypatch):
+    monkeypatch.setitem(settings._keys, "openrouter", "sk-or-v1-secret")
+    snap = settings.snapshot()
+    assert "secret" not in json.dumps(snap) and snap["keys"]["openrouter"] is True
+    shopper = next(r for r in snap["roles"] if r["id"] == "shopper")
+    assert shopper["models"]["openrouter"][0].endswith(":free")
 
 
 def test_keys_are_reported_as_set_or_not_never_echoed(monkeypatch):
     monkeypatch.setitem(settings._keys, "openrouter", None)
     assert settings.snapshot()["keys"]["openrouter"] is False
     settings.set_key("openrouter", "sk-or-v1-secret", persist=True)
-    snap = settings.snapshot()
-    assert snap["keys"]["openrouter"] is True and "secret" not in json.dumps(snap)
+    assert settings.snapshot()["keys"]["openrouter"] is True
     assert "OPENROUTER_API_KEY=sk-or-v1-secret" in paths.ENV_FILE.read_text()
 
 

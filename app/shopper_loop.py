@@ -252,14 +252,15 @@ async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, 
     from app.llm import media as llm_media
     from app.llm import openrouter
 
-    model = llm_settings.model_for("shopper")
+    models = llm_settings.models_for("shopper", "openrouter")
+    used: str | None = None
     parts, _ = await llm_media.build_parts(ctx.media)
     messages: list[dict] = [{"role": "system", "content": system_prompt},
                             {"role": "user", "content": [{"type": "text", "text": text}, *parts]}]
     tools = _openai_tools()
     for _ in range(MAX_STEPS):
         try:
-            msg = await openrouter.chat(model, messages, tools=tools, timeout=120)
+            msg, used = await openrouter.chat_chain(models, messages, tools=tools, timeout=120, prefer=used)
         except openrouter.OpenRouterError as exc:
             ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"level": "error", "event": "model",
                                                        "message": f"The shopping model did not answer: {exc}"})

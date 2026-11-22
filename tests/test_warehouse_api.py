@@ -191,15 +191,17 @@ def test_reset_needs_the_operator():
 
 
 # ------------------------------------------------------------------ settings, proxy, cors
-def test_settings_switch_provider_and_models_without_leaking_keys():
+def test_settings_switch_the_provider_only_and_never_leak_keys():
     snap = client.get("/api/settings/llm").json()
     assert set(snap["providers"]) == {"gemini", "openrouter"} and {r["id"] for r in snap["roles"]} >= {"shopper", "firewall", "carbon"}
-    put = client.put("/api/settings/llm", json={"provider": "openrouter", "models": {"openrouter": {"shopper": "google/gemma-4-26b-a4b-it:free"}}})
+    assert all(m.endswith(":free") or m == "openrouter/free" for r in snap["roles"] for m in r["models"]["openrouter"])
+    put = client.put("/api/settings/llm", json={"provider": "openrouter"})
     assert put.status_code == 200 and put.json()["provider"] == "openrouter"
     key = client.post("/api/settings/llm/key", json={"provider": "openrouter", "key": "sk-or-v1-supersecret"})
     assert key.json()["keys"]["openrouter"] is True and "supersecret" not in key.text
     assert client.get("/health").json()["provider"] == "openrouter"
     assert client.put("/api/settings/llm", json={"provider": "bogus"}).status_code == 422
+    assert client.get("/api/settings/llm/models").status_code in (404, 405)  # there is no model picker
 
 
 def test_settings_test_reports_a_missing_key_instead_of_failing(monkeypatch):

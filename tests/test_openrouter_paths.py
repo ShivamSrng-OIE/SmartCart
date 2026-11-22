@@ -25,8 +25,14 @@ def on_openrouter(monkeypatch):
     settings.update("openrouter")
     monkeypatch.setitem(settings._keys, "openrouter", "sk-or-test")
     monkeypatch.setattr(openrouter.asyncio, "sleep", _instant)
+    monkeypatch.setattr(openrouter, "capabilities", _full_caps)  # no model-list request in these tests
+    api._last_good.clear()
     yield
     monkeypatch.setattr(openrouter, "_client", None)
+
+
+async def _full_caps(model):
+    return {"id": model, "input": ["text", "image"], "tools": True, "json": True}
 
 
 async def _instant(*_a, **_k):
@@ -37,7 +43,7 @@ def serve(monkeypatch, handler):
     seen: list[dict] = []
 
     def wrapped(request: httpx.Request) -> httpx.Response:
-        seen.append(json.loads(request.content))
+        seen.append(json.loads(request.content) if request.content else {})
         return handler(request, len(seen))
 
     monkeypatch.setattr(openrouter, "_client", httpx.AsyncClient(transport=httpx.MockTransport(wrapped), base_url=openrouter.BASE_URL))
@@ -104,7 +110,7 @@ async def test_complete_json_reads_json_out_of_chatty_replies(monkeypatch):
     serve(monkeypatch, lambda r, n: ok('Sure! ```json\n{"reason": "because"}\n```'))
     monkeypatch.setattr(openrouter, "capabilities", _caps_without_json)
     data, model = await api.complete_json("defender", "sys", "prompt", {"type": "object"})
-    assert data == {"reason": "because"} and model == settings.model_for("defender")
+    assert data == {"reason": "because"} and model == settings.model_for("defender")  # the first model in the job's list answered
 
 
 async def _caps_without_json(model):
@@ -234,3 +240,97 @@ async def test_the_openrouter_firewall_gets_its_longer_deadline():
     assert fw.timeout_ms() == 45000 and fw.effective_backend() == "json_llm"
     settings.update("gemini")
     assert fw.effective_backend() == "decisions" and fw.timeout_ms() == 2500
+
+
+# ------------------------------------------------------------------ free models only
+@pytest.mark.parametrize("model", ["openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemma-4-31b-it", "x/y:free-but-not", ":free", ""])
+async def test_a_paid_model_is_never_called(monkeypatch, model):
+    seen = serve(monkeypatch, lambda r, n: ok())
+    with pytest.raises(openrouter.OpenRouterError, match="not a free model"):
+        await openrouter.chat(model, [])
+    assert seen == []  # refused before any request left the process
+
+
+@pytest.mark.parametrize("model", ["google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-super-vl:free", "openrouter/free"])
+def test_free_models_are_recognised(model):
+    assert openrouter.is_free_model(model)
+
+
+async def test_the_model_list_offers_only_free_models(monkeypatch):
+    rows = [{"id": "a/free-one:free", "pricing": {"prompt": "0", "completion": "0"}, "architecture": {"input_modalities": ["text"]}},
+            {"id": "b/paid-one", "pricing": {"prompt": "0.000001", "completion": "0.000002"}, "architecture": {"input_modalities": ["text"]}},
+            {"id": "c/looks-free:free", "pricing": {"prompt": "0.5", "completion": "0"}, "architecture": {"input_modalities": ["text"]}}]
+    serve(monkeypatch, lambda r, n: httpx.Response(200, json={"data": rows}))
+    monkeypatch.setattr(openrouter, "_models_cache", None)
+    assert [m["id"] for m in await openrouter.list_models()] == ["a/free-one:free"]
+
+
+def test_every_model_the_app_can_choose_on_openrouter_is_free():
+    assert all(openrouter.is_free_model(m) for chain in settings.OPENROUTER_CHAINS.values() for m in chain)
+
+
+# ------------------------------------------------------------------ ordered free-model fallback
+def fails(model_name):
+    return lambda request, n: httpx.Response(429, json={"error": {"code": 429, "message": f"{model_name} busy"}})
+
+
+async def test_a_busy_model_is_skipped_for_the_next_free_one(monkeypatch):
+    chain = ("a/first:free", "b/second:free", "openrouter/free")
+
+    def handler(request, n):
+        model = json.loads(request.content)["model"]
+        return httpx.Response(429, json={"error": {"code": 429, "message": "busy"}}) if model == "a/first:free" else ok(f"from {model}")
+
+    seen = serve(monkeypatch, handler)
+    msg, used = await openrouter.chat_chain(chain, [], timeout=60)
+    assert used == "b/second:free" and openrouter.message_text(msg) == "from b/second:free"
+    assert [s["model"] for s in seen][-1] == "b/second:free" and all(s["model"] in chain for s in seen)
+
+
+async def test_the_model_that_answered_last_time_is_tried_first(monkeypatch):
+    seen = serve(monkeypatch, lambda r, n: ok("hi"))
+    await openrouter.chat_chain(("a/one:free", "b/two:free"), [], prefer="b/two:free")
+    assert seen[0]["model"] == "b/two:free"
+
+
+async def test_a_model_that_cannot_call_tools_is_skipped_for_tool_jobs(monkeypatch):
+    async def caps(model):
+        return {"id": model, "input": ["text"], "tools": model != "a/no-tools:free", "json": True}
+
+    monkeypatch.setattr(openrouter, "capabilities", caps)
+    seen = serve(monkeypatch, lambda r, n: ok("hi"))
+    _msg, used = await openrouter.chat_chain(("a/no-tools:free", "b/tools:free"), [], tools=[{"type": "function"}])
+    assert used == "b/tools:free" and [s["model"] for s in seen] == ["b/tools:free"]
+
+
+async def test_a_bad_key_stops_the_whole_list(monkeypatch):
+    seen = serve(monkeypatch, lambda r, n: httpx.Response(401, json={"error": {"code": 401, "message": "no auth"}}))
+    with pytest.raises(openrouter.OpenRouterError):
+        await openrouter.chat_chain(("a/one:free", "b/two:free", "c/three:free"), [])
+    assert len(seen) == 1  # no point trying more models with a bad key
+
+
+async def test_when_every_free_model_fails_the_error_says_so(monkeypatch):
+    serve(monkeypatch, lambda r, n: httpx.Response(500, json={"error": {"code": 500, "message": "down"}}))
+    with pytest.raises(openrouter.OpenRouterError, match="down"):
+        await openrouter.chat_chain(("a/one:free", "b/two:free"), [], timeout=40)
+
+
+async def test_audio_falls_back_to_gemini_when_free_audio_is_not_available(monkeypatch):
+    serve(monkeypatch, lambda r, n: httpx.Response(402, json={"error": {"code": 402, "message": "requires at least $0.50 in balance"}}))
+    monkeypatch.setitem(settings._keys, "gemini", "AIza-test")
+    asked = {}
+
+    async def gemini(model, system, parts, *, json_out, timeout):
+        asked["model"] = model
+        return "hello from gemini"
+
+    monkeypatch.setattr(api, "_gemini_generate", gemini)
+    assert await api.transcribe_wav(b"RIFF" + b"0" * 100) == "hello from gemini" and asked["model"] == settings.model_for("listener", "gemini")
+
+
+async def test_audio_without_any_free_route_raises_instead_of_guessing(monkeypatch):
+    serve(monkeypatch, lambda r, n: httpx.Response(402, json={"error": {"code": 402, "message": "requires balance"}}))
+    monkeypatch.setitem(settings._keys, "gemini", None)
+    with pytest.raises(openrouter.OpenRouterError):
+        await api.transcribe_wav(b"RIFF" + b"0" * 100)

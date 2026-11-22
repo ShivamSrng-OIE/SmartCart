@@ -66,20 +66,24 @@ async def run_cart_check(*, product_id: str, variant_id: str | None, quantity: i
     media = warehouse_shop.listing_media(product) if warehouse else []
     listing_text = product.get("listing_text") or ""
     claims = None
-    if media:
+    # Argon reads the listing while the firewall judges the same media, so the two waits overlap. The
+    # firewall sees the raw photos and text itself; Argon's reading is then applied on top (a listing whose
+    # media tells the agent what to do is held even if the cart itself matches).
+    reading = asyncio.create_task(asyncio.wait_for(perceive(media), timeout=LISTING_PERCEPTION_S)) if media else None
+
+    public = warehouse_shop.public_view(product) if warehouse else product
+    cart_total = attempted_spend(call, ctx.variants)
+    verdict = await decide(intent, media, public, call, None, rules.current(), cart_total)
+    if reading is not None:
         try:
-            claims = await asyncio.wait_for(perceive(media), timeout=LISTING_PERCEPTION_S)
+            claims = await reading
             bus.emit(run_id, PANE, "log", {
                 "event": "perception", "model": config.MODELS["perception"],
                 "message": f"Argon read the listing: instructions_detected={claims.instructions_detected}",
                 "instructions_detected": claims.instructions_detected, "visible_text": claims.visible_text[:5],
                 "pack_count_claim": claims.pack_count_claim, "notes": claims.notes})
-        except Exception:  # noqa: BLE001 - the firewall still sees the raw media
+        except Exception:  # noqa: BLE001 - the firewall still saw the raw media
             log.warning("cart check perception failed", exc_info=True)
-
-    public = warehouse_shop.public_view(product) if warehouse else product
-    cart_total = attempted_spend(call, ctx.variants)
-    verdict = await decide(intent, media, public, call, claims, rules.current(), cart_total)
     verdict = hold_if_agent_instructions(verdict, claims)
     bus.emit(run_id, PANE, "verdict", {**verdict.model_dump(), "tool": call.name, "cart_total": cart_total,
                                        "product_id": product.get("id")})

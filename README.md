@@ -182,7 +182,7 @@ npm install
 npm run dev
 ```
 
-No key yet? Everything except the model-backed parts still works (browsing, the merchant portal, the rule scan, trust). Add a key on the web app's **More → Models** page and pick a provider there.
+No key yet? Everything except the model-backed parts still works (browsing, the merchant portal, the rule scan, trust). Add a key on the web app's **More → Models** page (or in `backend/.env`) and pick a provider there.
 
 **Tests and checks**
 
@@ -214,9 +214,11 @@ Shopify doesn't (yet) list fraudulent merchants, so the demo includes a **local 
 
 ---
 
-## 🔀 Models: Gemini or OpenRouter
+## 🔀 Models: OpenRouter (free) or Gemini
 
-The **More → Models** page switches the provider and picks a model for each agent: shopper (Hydrogen), perception and audio listener (Argon), firewall, defender (Neon) and Carbon. Free OpenRouter models are the default for OpenRouter. With OpenRouter, video is read as sampled frames (including every scene change, so a one-frame flash is caught) and audio as a transcript; the firewall asks one JSON question through the chosen model instead of the Decisions API (which only exists on Gemini). It still **fails closed**.
+The **More → Models** page switches the provider. **Models are not user-selectable**: each job (shopper, photo reader, audio listener, firewall, explainer, Carbon) has a fixed, ordered list of the best models for it, with the next ones used automatically when the first is busy. On OpenRouter **only free models are ever used**: the code refuses any id that does not end in `:free`, so a paid model can never be called. OpenRouter is the default whenever its key is set; Gemini stays available while that access lasts. See [`docs/models.md`](docs/models.md) for how the models were chosen and measured.
+
+With OpenRouter, video is read as sampled frames (including every scene change, so a one-frame flash is caught) and audio as a transcript (free OpenRouter models can't take audio, so Gemini transcribes it while a Gemini key is set). The firewall asks one JSON question through the chosen model instead of the Decisions API (Gemini only), and it still **fails closed**. A free-model firewall check takes roughly 15 to 40 s; on Gemini about 1 s.
 
 ---
 
@@ -242,9 +244,9 @@ Backend (`backend/.env`, never committed):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` | `gemini` (`openrouter` if only an OpenRouter key is set) | Starting provider. The Models page overrides it |
+| `LLM_PROVIDER` | `openrouter` when its key is set, else `gemini` | Starting provider. The Models page overrides it |
 | `GEMINI_API_KEY`, `OPENROUTER_API_KEY` | – | Provider keys (can also be set on the Models page) |
-| `OPENROUTER_MODEL_<ROLE>`, `MODEL_<ROLE>` | see `app/llm/settings.py`, `app/config.py` | Override a model per role (`SHOPPER`, `PERCEPTION`, `LISTENER`, `FIREWALL`, `DEFENDER`, `CARBON`) |
+| `MODEL_<ROLE>` | see `app/config.py` | Override a Gemini model (OpenRouter's free models are fixed, see `docs/models.md`) |
 | `FIREWALL_TIMEOUT_MS` / `OPENROUTER_FIREWALL_TIMEOUT_MS` | `2500` / `45000` | Firewall deadline; it fails closed after it |
 | `SHOP_MCP_URL` | `https://mcp.shop.com/` | Shopify Shop MCP endpoint |
 | `WAREHOUSE_IN_AGENT` | `1` | The autonomous shopper also finds warehouse listings |

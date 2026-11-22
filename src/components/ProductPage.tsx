@@ -741,7 +741,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
             {product.type && <Chip mono={false}>{product.type}</Chip>}
             {product.rating && <Stars value={product.rating.value} count={product.rating.count} size="md" />}
           </div>
-          <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[32px] xl:text-[36px]">{product.title}</h1>
+          <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[32px]">{product.title}</h1>
           <p className="tnum text-[28px] font-semibold tracking-tight">{money(price, false, product.currency)}</p>
 
           {product.offers.length > 1 && (
@@ -999,7 +999,7 @@ export function ProductPage({
         <div className="flex min-w-0 flex-col gap-4">
           <div>
             <p className="text-sm text-ink-3">{p.vendor ?? best?.seller.name ?? p.shopName}</p>
-            <h1 className="mt-1 text-2xl leading-tight font-semibold tracking-tight sm:text-[32px]">{p.title}</h1>
+            <h1 className="mt-1 text-[26px] leading-tight font-semibold tracking-tight sm:text-[32px]">{p.title}</h1>
             {p.rating && (
               <div className="mt-2">
                 <Stars value={p.rating.value} count={p.rating.count} size="md" />
@@ -1260,7 +1260,7 @@ export function ProductPage({
         {showRaw && (
           <div className="mt-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs text-ink-3">
-              <span className="truncate font-mono">{p.id}</span>
+              <span className="truncate">{p.id}</span>
               <button
                 onClick={() => {
                   void navigator.clipboard?.writeText(p.id);

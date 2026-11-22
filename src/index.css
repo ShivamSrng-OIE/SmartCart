@@ -200,7 +200,7 @@
     filter: brightness(1.06);
   }
   .label {
-    @apply font-mono text-2xs font-medium tracking-[0.08em] text-ink-3 uppercase;
+    @apply font-sans text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase;
   }
   .field {
     @apply w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-3 hover:border-ink-3 focus:border-ink focus:shadow-[0_0_0_1px_var(--ink)];

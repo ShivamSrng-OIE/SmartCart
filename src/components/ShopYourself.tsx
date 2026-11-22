@@ -462,7 +462,7 @@ export function ShopYourself({
           <section className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div className="min-w-0">
               <p className="text-[15px] font-medium">That looks like a product link</p>
-              <p className="truncate font-mono text-xs text-ink-3">{query}</p>
+              <p className="truncate text-xs text-ink-3">{query}</p>
             </div>
             <div className="flex gap-2">
               <a href={query.startsWith("http") ? query : `https://${query}`} target="_blank" rel="noopener noreferrer" className="btn-secondary inline-flex h-11 items-center gap-2 rounded-[10px] px-4 text-[14px] font-medium">

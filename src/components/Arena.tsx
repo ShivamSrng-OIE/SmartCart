@@ -39,7 +39,7 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [startedAt, live]);
-  return <span ref={ref} className="tnum font-mono text-xs text-ink-3" title="Time since you pressed Run" />;
+  return <span ref={ref} className="tnum text-xs text-ink-3" title="Time since you pressed Run" />;
 }
 
 export function Arena({
@@ -66,7 +66,7 @@ export function Arena({
       {/* 1 · set up */}
       <header>
         <p className="label">Compare</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">Assistant and Safe Checkout, side by side</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Assistant and Safe Checkout, side by side</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">One request, sent to both at once.</p>
       </header>
       <RequestPanel wide mode={mode} busy={busy} onRun={() => run({ form: toForm(), intent, fixture })} onReset={reset} canReset={phase !== "idle"} title="Your request" runLabel="Ask both" />

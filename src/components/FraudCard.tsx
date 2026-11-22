@@ -27,10 +27,31 @@ function fmtSells(key: string, v: unknown): string {
 
 const AGENT_RE = /\b(agent|agents|AI shop|bot|assistant|set quantity|qty|spend[_ ]request|promo[_ ]code)\b/i;
 
-function rankClaims(lines: string[], evidence: EvidenceItem[]): { text: string; hidden: boolean }[] {
-  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Text read from a photo often comes back one word per line ("OVERRIDE", "QUANTITY", "TO", "10"). Where
+ * consecutive lines together make up one of the flagged phrases, show them as that one phrase.
+ */
+export function joinSplitPhrases(lines: string[], needles: string[]): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    let best = i;
+    for (let j = i + 1; j < lines.length; j++) {
+      const run = norm(lines.slice(i, j + 1).join(" "));
+      if (!needles.some((m) => m.includes(run))) break;
+      best = j;
+    }
+    out.push(best > i ? lines.slice(i, best + 1).join(" ") : lines[i]);
+    i = best + 1;
+  }
+  return out;
+}
+
+export function rankClaims(lines: string[], evidence: EvidenceItem[]): { text: string; hidden: boolean }[] {
   const needles = evidence.map((e) => norm(e.modality === "audio" ? e.transcript : e.text)).filter((x) => x.length > 2);
-  const rows = lines.map((text) => {
+  const rows = joinSplitPhrases(lines, needles).map((text) => {
     const n = norm(text);
     const hidden = AGENT_RE.test(text) || (n.length > 2 && needles.some((m) => m.includes(n) || n.includes(m)));
     return { text, hidden };
@@ -153,7 +174,7 @@ export function FraudCard({
               <span ref={dollarsRef}>{money(card.dollars_defended)}</span>
             </p>
           </div>
-          <p className="tnum pb-1 font-mono text-[12px] text-ink-3">
+          <p className="tnum pb-1 text-[12px] text-ink-3">
             <span className="text-danger">{money(attemptedShown)}</span> held − <span className="text-safe">{money(safeTotal)}</span> alternative
           </p>
         </div>
@@ -174,20 +195,20 @@ export function FraudCard({
         {/* reason */}
         <div data-fc>
           <p className="label mb-1.5">Summary</p>
-          <p className="text-[16px] leading-relaxed text-ink sm:text-[17px]">{card.reason}</p>
+          <p className="text-[15px] leading-relaxed text-ink">{card.reason}</p>
         </div>
 
         {/* evidence */}
         <div data-fc className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div className="rounded-xl border border-danger-line p-3.5">
-            <p className="label mb-2 text-danger!">Text found in your files</p>
+            <p className="label mb-2 text-danger!">Text found in the listing</p>
             {claims.length ? (
               <ul className="flex flex-col gap-1.5">
                 {/* hidden instructions first and always; ordinary lines (the rest of the description) fold away */}
                 {(showAllText ? claims : [...claims.filter((x) => x.hidden), ...claims.filter((x) => !x.hidden).slice(0, 2)]).map(({ text: c, hidden }, i) => (
                   <li key={i} data-claim className={cx("flex gap-2 text-[14px]", hidden ? "font-bold text-danger" : "text-ink")}>
                     <Quote className="mt-1 size-3 shrink-0 text-danger" />
-                    <span className="font-mono text-[13px] leading-snug">
+                    <span className="text-[13px] leading-snug">
                       {c}
                       {hidden && <span className="ml-2 rounded bg-danger px-1.5 py-0.5 align-middle font-sans text-[10px] font-bold tracking-wide text-white uppercase">hidden instruction</span>}
                     </span>
@@ -212,7 +233,7 @@ export function FraudCard({
                 {SELLS_KEYS.filter(([k]) => sells[k] != null).map(([k, label]) => (
                   <div key={k} data-sells className="flex items-baseline justify-between gap-3 text-[14px]">
                     <dt className="shrink-0 text-ink-3">{label}</dt>
-                    <dd className={cx("min-w-0 text-right text-ink", k === "title" ? "truncate font-medium" : "tnum font-mono text-[13px]")}>{fmtSells(k, sells[k])}</dd>
+                    <dd className={cx("min-w-0 text-right text-ink", k === "title" ? "truncate font-medium" : "tnum text-[13px]")}>{fmtSells(k, sells[k])}</dd>
                   </div>
                 ))}
               </dl>
@@ -230,7 +251,7 @@ export function FraudCard({
               {top.map((p) => (
                 <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
                   <span className="truncate text-[14px] text-ink">{checkLabel(p.id)}</span>
-                  <span className={cx("tnum font-mono text-[13px] font-semibold", p.fired ? "text-danger" : "text-ink-2")}>{prob(p.p)}</span>
+                  <span className={cx("tnum text-[13px] font-semibold", p.fired ? "text-danger" : "text-ink-2")}>{prob(p.p)}</span>
                   <span className="col-span-2 h-1 overflow-hidden rounded-full bg-surface-2">
                     <span data-bar className={cx("block h-full rounded-full", p.fired ? "bg-danger" : "bg-ink-3")} style={{ width: `${Math.max(2, p.p * 100)}%` }} />
                   </span>

@@ -45,7 +45,7 @@ function IncidentRow({ i, name }: { i: Incident; name: string }) {
         {i.query ? ` · after searching “${i.query}”` : ""}
       </p>
       {i.reasons.length > 0 && <p className="text-[13px] text-ink-2">{i.reasons.map(reasonLabel).join(" · ")}</p>}
-      {i.quotes[0] && <p className="rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 font-mono text-[12px] break-words text-danger">“{i.quotes[0]}”</p>}
+      {i.quotes[0] && <p className="rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-[12px] break-words text-danger">“{i.quotes[0]}”</p>}
     </li>
   );
 }
@@ -149,7 +149,7 @@ export function Trust() {
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-xl bg-surface-2 shadow-[inset_0_0_0_1px_var(--line)]"><Bot className="size-5 text-ink-2" /></span>
             <div>
-              <h2 className="text-[16px] font-semibold tracking-tight">Carbon’s briefing</h2>
+              <h2 className="text-[17px] font-semibold tracking-tight">Carbon’s briefing</h2>
               <p className="text-xs text-ink-3">The analyst that studies these incidents and decides what to demote.</p>
             </div>
           </div>
@@ -204,7 +204,7 @@ export function Trust() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <section className="card overflow-hidden" aria-label="Sellers">
           <div className="border-b border-line px-4 py-3 sm:px-5">
-            <h2 className="text-[16px] font-semibold tracking-tight">Sellers</h2>
+            <h2 className="text-[17px] font-semibold tracking-tight">Sellers</h2>
             <p className="text-xs text-ink-3">Lowest trust first.</p>
           </div>
           <ul className="divide-y divide-line">
@@ -227,7 +227,7 @@ export function Trust() {
 
         <section className="card" aria-label="Recent incidents">
           <div className="border-b border-line px-4 py-3 sm:px-5">
-            <h2 className="text-[16px] font-semibold tracking-tight">Recent incidents</h2>
+            <h2 className="text-[17px] font-semibold tracking-tight">Recent incidents</h2>
             <p className="text-xs text-ink-3">Updates automatically.</p>
           </div>
           {data.incidents.length ? (

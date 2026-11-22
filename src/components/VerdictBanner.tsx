@@ -97,7 +97,7 @@ export function VerdictBanner({ verdict, checking, size = "lg" }: { verdict?: Ve
               <span className="text-sm font-medium text-ink-3">/3</span>
             </dd>
           </div>
-          <dd className="col-span-3 mt-1 font-mono text-[11px] text-ink-3">
+          <dd className="col-span-3 mt-1 text-[11px] text-ink-3">
             {TIER_LABEL[verdict.tier] ?? verdict.tier} · needs 92% confidence{verdict.latency_ms > 400 && ` · slow (${ms(verdict.latency_ms)})`}
           </dd>
         </dl>

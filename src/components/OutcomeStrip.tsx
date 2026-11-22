@@ -75,7 +75,7 @@ export function OutcomeStrip({ state, phase }: { state: ArenaState; phase: "idle
           const Icon = s.icon;
           return (
             <div key={s.title} className="flex items-start gap-3 sm:p-4">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 font-mono text-xs font-semibold text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]">{i + 1}</span>
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold text-ink-2 shadow-[inset_0_0_0_1px_var(--line)]">{i + 1}</span>
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 text-[14px] font-semibold">
                   <Icon className="size-3.5 text-ink-3" /> {s.title}

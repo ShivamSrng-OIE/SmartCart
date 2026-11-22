@@ -27,7 +27,7 @@ function RoleRow({ role, provider, test, onTest }: { role: LlmRole; provider: Pr
         <p className="text-[13px] leading-snug text-ink-3">{role.label}</p>
       </div>
       <div className="min-w-0">
-        <p className="truncate font-mono text-[13px] text-ink" title={first}>{first ? shortModel(first) : "—"}</p>
+        <p className="truncate text-[13px] text-ink" title={first}>{first ? shortModel(first) : "—"}</p>
         {rest.length > 0 && provider === "openrouter" && (
           <p className="truncate text-xs text-ink-3" title={rest.join(", ")}>
             if busy: {rest.slice(0, 2).map(shortModel).join(" → ")}{rest.length > 2 ? " → …" : ""}
@@ -141,7 +141,7 @@ export function Settings() {
       <section className="card flex flex-col gap-4 p-4 sm:p-5" aria-label="Provider">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-[16px] font-semibold tracking-tight">Provider</h2>
+            <h2 className="text-[17px] font-semibold tracking-tight">Provider</h2>
             <p className="text-xs text-ink-3">{provider === "openrouter" ? "Free models only. Slower than Gemini, and they can be briefly rate limited." : "Uses the Gemini API key on the server."}</p>
           </div>
           <Segmented value={provider} onChange={(v) => setProvider(v)} options={(["openrouter", "gemini"] as Provider[]).map((p) => ({ value: p, label: PROVIDER_LABEL[p] }))} />
@@ -179,7 +179,7 @@ export function Settings() {
 
       <section className="card p-4 sm:p-5" aria-label="Models">
         <div>
-          <h2 className="text-[16px] font-semibold tracking-tight">What runs each job</h2>
+          <h2 className="text-[17px] font-semibold tracking-tight">What runs each job</h2>
           <p className="text-xs text-ink-3">
             {provider === "openrouter"
               ? "Chosen from the free models by testing them on the app’s real tasks. Audio needs Gemini: free OpenRouter models can’t take audio."

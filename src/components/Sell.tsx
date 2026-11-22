@@ -45,7 +45,7 @@ function LoginCard({ onSignedIn }: { onSignedIn: () => void }) {
         <span className="flex size-11 items-center justify-center rounded-xl bg-brand text-brand-ink">
           <Store className="size-6" />
         </span>
-        <h1 className="text-[28px] leading-tight font-semibold tracking-tight sm:text-[34px]">Sell on Tote</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Sell on Tote</h1>
         <p className="text-[15px] leading-relaxed text-ink-2">
           Shoppers never need an account. Sellers do: sign in to manage your store, add products with as many photos as you like, and see how Safe Checkout reads each listing.
         </p>
@@ -108,7 +108,7 @@ function ReviewPanel({ review, className }: { review: Review; className?: string
       {review.quotes.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1.5">
           {review.quotes.slice(0, 4).map((q, i) => (
-            <li key={i} className="rounded-md border border-danger-line bg-surface px-2.5 py-1.5 font-mono text-[12px] break-words text-danger">
+            <li key={i} className="rounded-md border border-danger-line bg-surface px-2.5 py-1.5 text-[12px] break-words text-danger">
               “{q.quote}”
               <span className="ml-2 font-sans text-[11px] text-ink-3">{reasonLabel(q.category)}</span>
             </li>
@@ -404,7 +404,7 @@ function ListingRow({ l, onEdit, onDelete, onReview, busy }: { l: Listing; onEdi
           {l.incidents > 0 && <Chip tone="warn" mono={false}>{l.incidents} incident{l.incidents === 1 ? "" : "s"}</Chip>}
         </div>
         {l.review.flagged && l.review.quotes[0] && (
-          <p className="mt-2 rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 font-mono text-[12px] break-words text-danger">“{l.review.quotes[0].quote}”</p>
+          <p className="mt-2 rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-[12px] break-words text-danger">“{l.review.quotes[0].quote}”</p>
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:flex-col sm:items-stretch">
@@ -481,7 +481,7 @@ function Portal({ session, onSignOut }: { session: Session; onSignOut: () => voi
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-ink"><Store className="size-6" /></span>
           <div className="min-w-0">
             <p className="label">{session.role === "admin" ? "Operator" : "Merchant"}</p>
-            <h1 className="truncate text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
+            <h1 className="truncate text-2xl leading-tight font-semibold tracking-tight">{title}</h1>
             {session.merchant?.tagline && <p className="truncate text-[13px] text-ink-3">{session.merchant.tagline}</p>}
           </div>
         </div>

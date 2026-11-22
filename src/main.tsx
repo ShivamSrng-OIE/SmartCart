@@ -5,6 +5,9 @@ import "@fontsource-variable/geist-mono";
 import "./index.css";
 import App from "./App";
 import { DraftProvider } from "./draft";
+import { installSessionHeader } from "./lib/session";
+
+installSessionHeader();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

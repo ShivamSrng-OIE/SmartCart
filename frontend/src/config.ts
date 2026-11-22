@@ -70,7 +70,7 @@ export const SCENARIOS: Scenario[] = [
 ];
 
 /** Categories the storefront browses before you search: one live Shopify search each. */
-export const BROWSE = ["Coffee", "Mugs & cups", "Water bottles", "Snacks", "Tech accessories", "Home & kitchen"];
+export const BROWSE = ["Coffee", "Hoodies", "Graphic tees", "Phone cases", "Power banks", "Multivitamins"];
 
 /** Replay speed for rehearsal runs (1 = real time). */
 export const REPLAY_SPEED = 1;

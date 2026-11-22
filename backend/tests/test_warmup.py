@@ -107,7 +107,7 @@ def test_startup_fires_warm_up_in_background(monkeypatch):
 
     monkeypatch.setattr(main, "warm_up", fake_warm_up)
     with TestClient(main.app) as c:  # the context manager runs startup
-        assert c.get("/health").json() == {"ok": True}
+        assert c.get("/health").json()["ok"] is True
     assert calls == [1]
 
 

@@ -1,13 +1,25 @@
-.PHONY: dev backend frontend test
+.PHONY: install dev backend frontend test test-backend test-frontend build
+
+install:
+	cd backend && uv sync
+	cd frontend && npm install
 
 dev:
 	$(MAKE) -j2 backend frontend
 
 backend:
-	uv run uvicorn backend.main:app --reload --port 8000
+	cd backend && uv run uvicorn app.main:app --reload --port 8000
 
 frontend:
 	cd frontend && npm run dev
 
-test:
-	uv run pytest -v
+test: test-backend test-frontend
+
+test-backend:
+	cd backend && uv run pytest -q
+
+test-frontend:
+	cd frontend && npx tsc -b --noEmit && npx vitest run
+
+build:
+	cd frontend && npm run build

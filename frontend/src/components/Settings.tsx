@@ -22,7 +22,8 @@ function RoleRow({ role, provider, value, models, dirty, test, onChange, onTest 
   role: LlmRole; provider: Provider; value: string; models: ModelInfo[]; dirty: boolean; test?: TestState; onChange: (v: string) => void; onTest: () => void;
 }) {
   const known = models.some((m) => m.id === value);
-  const [custom, setCustom] = useState(!known);
+  // "custom" only when the person picks "Enter a model id…"; a current value the list doesn't know is just shown as an option
+  const [custom, setCustom] = useState(false);
   const recommended = models.filter((m) => suits(role, m));
   const others = models.filter((m) => !suits(role, m));
   const current = models.find((m) => m.id === value);
@@ -58,7 +59,7 @@ function RoleRow({ role, provider, value, models, dirty, test, onChange, onTest 
               {others.map((m) => <option key={m.id} value={m.id}>{optionLabel(m)}</option>)}
             </optgroup>
           )}
-          {!known && !custom && <option value={value}>{value}</option>}
+          {!known && !custom && value && <option value={value}>{value} (current)</option>}
           <option value={CUSTOM}>Enter a model id…</option>
         </select>
         {custom && (

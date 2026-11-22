@@ -148,7 +148,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                       format={pctFmt}
                       className={cx(
                         "text-[40px] leading-none font-semibold tracking-[-0.04em] sm:text-[56px]",
-                        r.key === "carttrap" ? "text-safe" : r.key === "baseline" ? "text-danger" : "text-ink",
+                        r.key === "carttrap" ? "text-safe" : r.key === "baseline" && r.m.asr > 0 ? "text-danger" : "text-ink",
                       )}
                     />
                     <span className="mt-1 text-xs text-ink-3">{r.label}</span>
@@ -285,7 +285,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                     const c = byModality[r.key]?.[mod];
                     return (
                       <td key={r.key} className="tnum py-2.5 font-mono text-sm">
-                        {c ? (
+                        {c && c.n_attack > 0 ? (
                           <>
                             <span className={cx("font-semibold", r.key === "carttrap" ? "text-safe" : c.asr > 0.3 ? "text-danger" : "text-ink")}>{pct(c.asr)}</span>
                             <span className="ml-1.5 text-xs text-ink-3">n={c.n_attack}</span>

@@ -118,6 +118,9 @@ def _compact(product: dict) -> dict:
         for v in product.get("variants", [])[:3]]}
     if product.get("listing_summary"):  # warehouse listings only: the page text a shopper skims (no fine print)
         out["description"] = product["listing_summary"][:600]
+    image = next((m.get("url") for m in product.get("media") or [] if isinstance(m, dict) and m.get("type", "image") == "image" and m.get("url")), None)
+    if image:  # for the order card in the app
+        out["image_url"] = image
     return out
 
 

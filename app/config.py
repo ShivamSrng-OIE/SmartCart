@@ -5,7 +5,10 @@ from typing import Literal
 
 from dotenv import load_dotenv
 
-load_dotenv()
+from app.paths import BACKEND, ENV_FILE
+
+load_dotenv(ENV_FILE)  # backend/.env first, then a repo-root .env for older setups
+load_dotenv(BACKEND.parent / ".env")
 
 
 def _flag(name: str, default: str = "0") -> bool:
@@ -45,6 +48,16 @@ FIREWALL_IMAGE_RESOLUTION: str = os.getenv("FIREWALL_IMAGE_RESOLUTION", "high")
 FIREWALL_IMAGE_MAX_PX: int = int(os.getenv("FIREWALL_IMAGE_MAX_PX", "1024"))
 
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
+# Which model provider runs the agents: "gemini" or "openrouter". The Settings page can switch it
+# at runtime (app/llm/settings.py); this is only the starting value.
+LLM_PROVIDER: str = (os.getenv("LLM_PROVIDER") or ("gemini" if GEMINI_API_KEY and not OPENROUTER_API_KEY else "openrouter")).lower()
+# Free OpenRouter models are much slower than the hackathon Gemini endpoints, so the firewall gets
+# a longer deadline there. It still fails closed when the deadline passes.
+OPENROUTER_FIREWALL_TIMEOUT_MS: int = int(os.getenv("OPENROUTER_FIREWALL_TIMEOUT_MS", "45000"))
+# The merchant portal's demo login (fictional local warehouse). Override in backend/.env.
+MERCHANT_USERNAME: str = os.getenv("MERCHANT_USERNAME", "warehouse")
+MERCHANT_PASSWORD: str = os.getenv("MERCHANT_PASSWORD", "warehouse-demo")
 SHOP_MCP_URL: str = os.getenv("SHOP_MCP_URL", "https://mcp.shop.com/")
 FIREWALL_BACKEND: Literal["decisions", "json_llm"] = (
     "json_llm" if os.getenv("FIREWALL_BACKEND") == "json_llm" else "decisions"

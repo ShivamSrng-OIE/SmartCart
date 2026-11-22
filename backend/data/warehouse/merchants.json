@@ -1,0 +1,101 @@
+[
+  {
+    "id": "northwind-apparel",
+    "name": "Northwind Apparel Co.",
+    "tagline": "Heavyweight streetwear hoodies, built to last.",
+    "location": "Portland, OR",
+    "since": 2019,
+    "domain": "northwind-apparel.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9177158"
+  },
+  {
+    "id": "streetform-supply",
+    "name": "Streetform Supply",
+    "tagline": "Limited-run graphic hoodies and outerwear.",
+    "location": "Brooklyn, NY",
+    "since": 2020,
+    "domain": "streetform-supply.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9157336"
+  },
+  {
+    "id": "threadwork-studio",
+    "name": "Threadwork Studio",
+    "tagline": "Artist-designed graphic tees, printed to order.",
+    "location": "Austin, TX",
+    "since": 2018,
+    "domain": "threadwork-studio.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9302499"
+  },
+  {
+    "id": "loomline",
+    "name": "Loomline Tees",
+    "tagline": "Soft everyday tees with bold prints.",
+    "location": "Los Angeles, CA",
+    "since": 2021,
+    "domain": "loomline.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9163475"
+  },
+  {
+    "id": "casebay-labs",
+    "name": "Casebay Labs",
+    "tagline": "Phone cases and screen protection for every model.",
+    "location": "San Diego, CA",
+    "since": 2019,
+    "domain": "casebay-labs.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9770827"
+  },
+  {
+    "id": "voltcraft",
+    "name": "Voltcraft Electronics",
+    "tagline": "Power banks, braided cables and earbuds.",
+    "location": "Seattle, WA",
+    "since": 2017,
+    "domain": "voltcraft.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9807981"
+  },
+  {
+    "id": "maison-aurelle",
+    "name": "Maison Aurelle Parfums",
+    "tagline": "Small-batch eau de parfum from Paris.",
+    "location": "Paris, FR",
+    "since": 2016,
+    "domain": "maison-aurelle.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9564355"
+  },
+  {
+    "id": "vitality-naturals",
+    "name": "Vitality Naturals",
+    "tagline": "Daily multivitamins and clean supplements.",
+    "location": "Boulder, CO",
+    "since": 2018,
+    "domain": "vitality-naturals.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9385601"
+  },
+  {
+    "id": "botanica-hair-skin",
+    "name": "Botanica Hair & Skin",
+    "tagline": "Plant-based hair care and brightening serums.",
+    "location": "Asheville, NC",
+    "since": 2020,
+    "domain": "botanica-hair-skin.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9706522"
+  },
+  {
+    "id": "homestead-goods",
+    "name": "Homestead Goods",
+    "tagline": "Drinkware, coffee and everyday home goods.",
+    "location": "Minneapolis, MN",
+    "since": 2015,
+    "domain": "homestead-goods.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9000588"
+  },
+  {
+    "id": "warehouse-direct",
+    "name": "Warehouse Direct",
+    "tagline": "Bulk and wholesale lots, shipped from our own warehouse.",
+    "location": "Reno, NV",
+    "since": 2014,
+    "domain": "warehouse-direct.warehouse.local",
+    "shop_id": "gid://shopify/Shop/9314034"
+  }
+]

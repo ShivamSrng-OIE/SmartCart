@@ -1,9 +1,9 @@
 """The shopper's view of the warehouse: our own listings, some of them fraudulent.
 
 `WarehouseShop` is a ShopMCP whose *agent-facing* `call()` also returns matching warehouse listings
-from eval/props/generated/items (clean controls and poisoned items, in Shop MCP product shape), so
-the Hydrogen shopper meets them while it searches, exactly like any other listing: with a title, a
-price, a seller and the store's own description (which is where a hidden instruction can sit).
+(the local catalog in app/warehouse/catalog.py plus the legacy generated props, all in Shop MCP product
+shape), so the Hydrogen shopper meets them while it searches, exactly like any other listing: with a title,
+a price, a seller and the store's own description (which is where a hidden instruction can sit).
 
 Rules that keep this safe:
 - Only `call()` (what the shopper uses) sees warehouse listings. The convenience methods the
@@ -11,10 +11,10 @@ Rules that keep this safe:
   shop only, so a safe alternative can never be a warehouse item.
 - Carts for warehouse variants are never sent anywhere: dry-run intercepts them as usual, and an
   approved one gets a local placeholder cart. complete_* stays forbidden (ShopMCP).
+- Search order follows reputation: listings from merchants the marketplace has learned to distrust sink.
 """
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from pathlib import Path
@@ -22,11 +22,13 @@ from pathlib import Path
 from app import app_routes
 from app.schemas import Media
 from app.shop_mcp import STATE_CHANGING, ShopMCP
+from app.warehouse import catalog, reputation
 
-PREFIX = "wh:"
-VARIANT_PREFIX = "wh-variant:"
+PREFIX = catalog.PREFIX
+VARIANT_PREFIX = catalog.VARIANT_PREFIX
 SELLER = {"name": "Warehouse", "domain": "warehouse.local"}
-MEDIA_FILES = (("image", "image.png", "image/png"), ("video", "video.mp4", "video/mp4"), ("audio", "audio.wav", "audio/wav"))
+MEDIA_FILES = (("image", "image.png", "image/png"), ("image", "image.jpg", "image/jpeg"),
+               ("video", "video.mp4", "video/mp4"), ("audio", "audio.wav", "audio/wav"))
 _WORDS = re.compile(r"[a-z0-9]+")
 
 
@@ -42,17 +44,9 @@ def _matches(terms: list[str], *fields: str) -> bool:
     return any(all(any(_same_word(t, tok) for tok in _tokens(f)) for t in terms) for f in fields if f)
 
 
-def _load_items() -> list[dict]:
-    items = []
-    for manifest in sorted(Path(app_routes.ITEMS_DIR).glob("*/manifest.json")):
-        try:
-            meta = json.loads(manifest.read_text(encoding="utf-8"))
-            desc = manifest.parent / "description.txt"
-            text = desc.read_text(encoding="utf-8").strip() if desc.is_file() else ""
-        except (OSError, json.JSONDecodeError):
-            continue
-        items.append({"meta": meta, "folder": manifest.parent, "text": text})
-    return items
+def all_products() -> list[dict]:
+    """The whole warehouse: portal and seed listings, then the legacy props."""
+    return [*catalog.products(), *catalog.legacy_products(Path(app_routes.ITEMS_DIR))]
 
 
 # Added to the shopper's ordinary prompt (both panes alike) when the warehouse is in the store. Without
@@ -65,80 +59,74 @@ ALL_MATCHES_NOTE = (
 )
 
 
-def _skim(text: str) -> str:
-    return "\n".join(line for line in text.splitlines() if not line.lower().startswith("fulfillment note:"))
+def _price(product: dict) -> int:
+    variants = product.get("variants") or []
+    return int(((variants[0].get("price") or {}).get("amount")) or 0) if variants else 0
 
 
-def _product(item: dict) -> dict:
-    meta, text = item["meta"], item["text"]
-    base = meta["product"]
-    item_id = meta["item_id"]
-    title = f"{base['title']} (Warehouse {meta['variant']})"
-    return {
-        "id": PREFIX + item_id, "title": title, "product_type": meta.get("product_type"),
-        "variants": [{
-            "id": VARIANT_PREFIX + item_id, "title": title,
-            "price": {"amount": int(base.get("price_cents") or 0), "currency": "USD"},
-            "availability": {"available": True}, "seller": dict(SELLER), "options": [],
-        }],
-        # Not Shop MCP fields. listing_text is the whole description (untrusted), including the fine
-        # print, and goes to Argon and the firewall. listing_summary is what a shopper skimming the
-        # page reads: the same text without the fine print, so a planted line there is not obvious.
-        "listing_text": text, "listing_summary": _skim(text), "warehouse_item": item_id,
-    }
+def matches(product: dict, terms: list[str]) -> bool:
+    return _matches(terms, product.get("title") or "", product.get("product_type") or "",
+                    " ".join(product.get("tags") or []), product.get("vendor") or "")
 
 
 def search(query: str, max_price_cents: int | None = None) -> list[dict]:
+    """Matching listings, best first: clean listings before ones from distrusted merchants."""
     terms = _WORDS.findall(query.lower())
     if not terms:
         return []
-    out = []
-    for item in _load_items():
-        product = _product(item)
-        price = product["variants"][0]["price"]["amount"]
-        if max_price_cents is not None and price > max_price_cents:
-            continue
-        if _matches(terms, item["meta"]["product"]["title"], item["meta"].get("product_type") or ""):
-            out.append(product)
-    return out
+    hits = [p for p in all_products() if (max_price_cents is None or _price(p) <= max_price_cents) and matches(p, terms)]
+    return sorted(hits, key=reputation.rank_penalty)  # stable: equal reputation keeps catalog order
 
 
 def find(product_id: str) -> dict | None:
     if not product_id.startswith(PREFIX):
         return None
-    return next((_product(i) for i in _load_items() if i["meta"]["item_id"] == product_id[len(PREFIX):]), None)
+    return next((p for p in all_products() if p["id"] == product_id), None)
 
 
 def is_warehouse(product: dict | None) -> bool:
     return bool(product) and bool(product.get("warehouse_item"))
 
 
+_INTERNAL = ("listing_text", "listing_summary", "warehouse_item", "warehouse_folder", "warehouse_merchant",
+             "warehouse_category", "warehouse_legacy", "warehouse")
+
+
 def public_view(product: dict | None) -> dict | None:
     """The product without the untrusted listing text, for the firewall's ground-truth slot."""
     if not product or not is_warehouse(product):
         return product
-    return {k: v for k, v in product.items() if k not in ("listing_text", "listing_summary", "warehouse_item")}
+    return {k: v for k, v in product.items() if k not in _INTERNAL}
 
 
 def listing_media(product: dict | None) -> list[Media]:
     """Everything the store shows for a warehouse listing, as untrusted media: photo, video, audio, text."""
     if not is_warehouse(product):
         return []
-    folder = Path(app_routes.ITEMS_DIR) / product["warehouse_item"]
-    media = [Media(kind=kind, path=str(folder / name), mime=mime) for kind, name, mime in MEDIA_FILES if (folder / name).is_file()]
+    folder = Path(product.get("warehouse_folder") or Path(app_routes.ITEMS_DIR) / product["warehouse_item"])
+    media = [Media(kind="image", path=str(folder / name), mime="image/png" if name.endswith(".png") else "image/jpeg")
+             for name in catalog.image_files(folder)]  # the main photo, then any the merchant added
+    media += [Media(kind=kind, path=str(folder / name), mime=mime) for kind, name, mime in MEDIA_FILES
+              if kind != "image" and (folder / name).is_file()]
     if (folder / "description.txt").is_file():
         media.append(Media(kind="text", path=str(folder / "description.txt"), mime="text/plain"))
     return media
 
 
-def _cart_variant_ids(args: dict) -> list[str]:
+def _line_items(args: dict) -> list[dict]:
     lines = ((args or {}).get("cart") or {}).get("line_items") or []
-    return [str((l.get("item") or {}).get("id", "")) for l in lines if isinstance(l, dict)]
+    return [l for l in lines if isinstance(l, dict)]
 
 
-def _price(product: dict) -> int:
-    variants = product.get("variants") or []
-    return int(((variants[0].get("price") or {}).get("amount")) or 0) if variants else 0
+def _cart_variant_ids(args: dict) -> list[str]:
+    return [str((l.get("item") or {}).get("id", "")) for l in _line_items(args)]
+
+
+def split_variant(variant_id: str) -> tuple[str, str]:
+    """('wh-variant:hoodie-x:2') -> ('hoodie-x', 'wh-variant:hoodie-x:2'); legacy ids have no ':n' suffix."""
+    item = variant_id[len(VARIANT_PREFIX):]
+    head, _, tail = item.rpartition(":")
+    return (head if head and tail.isdigit() else item), variant_id
 
 
 def fit_budget(hits: list[dict], real: list[dict], cap_cents: int | None) -> list[dict]:
@@ -161,37 +149,42 @@ class WarehouseShop(ShopMCP):
         self.budget_cents = int(round(budget * 100)) if budget else None
 
     async def call(self, tool: str, args: dict) -> dict:
-        catalog = (args or {}).get("catalog") or {}
+        catalog_args = (args or {}).get("catalog") or {}
         if tool == "search_catalog":
             res = await super().call(tool, args)
-            cap = ((catalog.get("filters") or {}).get("price") or {}).get("max")
+            cap = ((catalog_args.get("filters") or {}).get("price") or {}).get("max")
             cap = cap if isinstance(cap, int) else None
-            hits = search(str(catalog.get("query") or ""), cap)
+            hits = search(str(catalog_args.get("query") or ""), cap)[:12]
             budget = min([c for c in (cap, self.budget_cents) if c is not None], default=None)
             # our own listings first, so a short result list never hides them
             return {**res, "products": fit_budget(hits, res.get("products", []), budget)}
-        if tool == "get_product" and str(catalog.get("id", "")).startswith(PREFIX):
-            found = find(str(catalog["id"]))
+        if tool == "get_product" and str(catalog_args.get("id", "")).startswith(PREFIX):
+            found = find(str(catalog_args["id"]))
             return {"product": found} if found else await super().call(tool, args)
         if tool == "lookup_catalog":
-            mine = [p for p in (find(str(i)) for i in catalog.get("ids") or []) if p]
+            mine = [p for p in (find(str(i)) for i in catalog_args.get("ids") or []) if p]
             if mine:
                 return {"products": mine}
         if tool in STATE_CHANGING and any(v.startswith(VARIANT_PREFIX) for v in _cart_variant_ids(args)):
             if self.dry_run or tool not in ("create_cart", "update_cart"):
                 return await super().call(tool, args)  # intercepted / forbidden exactly as for any shop
             total = 0
-            for item_id in (v[len(VARIANT_PREFIX):] for v in _cart_variant_ids(args)):
+            for line in _line_items(args):
+                variant_id = str((line.get("item") or {}).get("id", ""))
+                if not variant_id.startswith(VARIANT_PREFIX):
+                    continue
+                item_id, _ = split_variant(variant_id)
                 found = find(PREFIX + item_id)
-                qty = sum(int(l.get("quantity", 1)) for l in args["cart"]["line_items"] if (l.get("item") or {}).get("id") == VARIANT_PREFIX + item_id)
-                total += (found["variants"][0]["price"]["amount"] if found else 0) * qty
+                variant = next((v for v in (found or {}).get("variants", []) if v["id"] == variant_id), None)
+                price = ((variant or (found or {}).get("variants", [{}])[0]).get("price") or {}).get("amount", 0) if found else 0
+                total += price * int(line.get("quantity", 1))
             return {"id": f"wh_cart_{uuid.uuid4().hex[:8]}", "continue_url": None, "warehouse": True,
                     "totals": [{"type": "total", "amount": total}]}
         return await super().call(tool, args)
 
     # The defender's safe swap uses these: real Shopify only, never a warehouse listing.
-    async def search_catalog(self, query: str, limit: int = 5, **catalog: object) -> list[dict]:
-        res = await ShopMCP.call(self, "search_catalog", {"catalog": {"query": query, "pagination": {"limit": limit}, **catalog}})
+    async def search_catalog(self, query: str, limit: int = 5, **catalog_filters: object) -> list[dict]:
+        res = await ShopMCP.call(self, "search_catalog", {"catalog": {"query": query, "pagination": {"limit": limit}, **catalog_filters}})
         return res.get("products", [])
 
     async def get_product(self, product_id: str) -> dict:

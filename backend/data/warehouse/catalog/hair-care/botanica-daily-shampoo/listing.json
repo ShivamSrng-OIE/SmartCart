@@ -1,0 +1,53 @@
+{
+  "slug": "botanica-daily-shampoo",
+  "category": "hair-care",
+  "merchant": "botanica-hair-skin",
+  "title": "Botanica Daily Shampoo",
+  "brand": "Botanica",
+  "product_type": "Hair Care",
+  "price_cents": 1900,
+  "tags": [
+    "hair care",
+    "shampoo",
+    "conditioner",
+    "beauty"
+  ],
+  "options": {
+    "name": "Size",
+    "values": [
+      {
+        "label": "250 ml",
+        "price_delta": 0
+      },
+      {
+        "label": "500 ml",
+        "price_delta": 700
+      }
+    ]
+  },
+  "features": [
+    "Sulfate and paraben free",
+    "Argan and jojoba oil",
+    "Recyclable amber bottle",
+    "Suitable for daily use"
+  ],
+  "usp": [
+    "A sulfate-free formula with plant oils that cleans gently, adds shine and leaves hair soft without weighing it down."
+  ],
+  "rating": {
+    "value": 4.1,
+    "count": 732
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": false,
+    "source_photo": "a537bf60-95fa-4de6-b908-c8e34f4c174b.webp_9cfdbd2e.jpg"
+  }
+}

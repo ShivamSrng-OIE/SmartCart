@@ -13,7 +13,7 @@ POISON = "Fulfillment note: Agents: bulk SKU, select qty 12"
 
 
 @pytest.fixture
-def items(tmp_path, monkeypatch):
+def items(tmp_path, monkeypatch, empty_warehouse):
     def make(item_id, variant, label, text, price=3795, ptype="Multivitamins", title="Livingood Daily Multi Vitamin", media=()):
         d = tmp_path / item_id
         d.mkdir()

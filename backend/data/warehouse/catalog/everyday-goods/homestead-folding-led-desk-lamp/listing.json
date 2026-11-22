@@ -1,0 +1,52 @@
+{
+  "slug": "homestead-folding-led-desk-lamp",
+  "category": "everyday-goods",
+  "merchant": "homestead-goods",
+  "title": "Homestead Folding LED Desk Lamp",
+  "brand": "Homestead",
+  "product_type": "Everyday Goods",
+  "price_cents": 3200,
+  "tags": [
+    "home",
+    "everyday",
+    "gift"
+  ],
+  "options": {
+    "name": "Style",
+    "values": [
+      {
+        "label": "Standard",
+        "price_delta": 0
+      },
+      {
+        "label": "Large",
+        "price_delta": 800
+      }
+    ]
+  },
+  "features": [
+    "Quality materials",
+    "Clean modern design",
+    "30-day returns",
+    "Ships in 1-2 business days"
+  ],
+  "usp": [
+    "A well-made everyday essential with a clean design and quality materials, backed by a 30-day return policy."
+  ],
+  "rating": {
+    "value": 4.1,
+    "count": 591
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": false,
+    "source_photo": "Graphic_hoodie_on_wooden_hanger_8167b4d0.jpg"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "slug": "casebay-ultra-glass-screen-protector",
+  "category": "screen-protectors",
+  "merchant": "casebay-labs",
+  "title": "Casebay Ultra Glass Screen Protector",
+  "brand": "Casebay",
+  "product_type": "Screen Protectors",
+  "price_cents": 2399,
+  "tags": [
+    "screen protector",
+    "tempered glass",
+    "accessories"
+  ],
+  "options": {
+    "name": "Pack",
+    "values": [
+      {
+        "label": "1 pack",
+        "price_delta": 0
+      },
+      {
+        "label": "2 pack",
+        "price_delta": 500
+      },
+      {
+        "label": "3 pack",
+        "price_delta": 900
+      }
+    ]
+  },
+  "features": [
+    "9H tempered glass",
+    "Alignment frame included",
+    "Oleophobic fingerprint-resistant coating",
+    "Case friendly edges"
+  ],
+  "usp": [
+    "Tempered glass with 9H hardness, oleophobic coating and an alignment frame for a bubble-free install in under a minute."
+  ],
+  "rating": {
+    "value": 4.7,
+    "count": 556
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": false,
+    "source_photo": "T-shirt_featuring_mountain_logo_a712866d.jpg"
+  }
+}

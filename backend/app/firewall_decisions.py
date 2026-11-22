@@ -24,6 +24,7 @@ import time
 from typing import NamedTuple
 
 from app import config, gemini
+from app.llm import settings as llm_settings
 from app.rules import PROBE_ID_RE, RuleSet
 from app.schemas import Claims, Intent, Media, Probe, ProbeResult, ToolCall, Verdict
 
@@ -129,10 +130,26 @@ def active_probes(rules: RuleSet, product_json: dict | None) -> list[Probe]:
     return list(rules.probes)
 
 
+def on_openrouter() -> bool:
+    return llm_settings.provider() == "openrouter"
+
+
+def effective_backend() -> str:
+    """The Decisions API only exists on Gemini, so with OpenRouter selected the firewall asks one JSON
+    question through the chosen model instead (the json_llm backend). Otherwise config.FIREWALL_BACKEND."""
+    return "json_llm" if on_openrouter() else config.FIREWALL_BACKEND
+
+
+def timeout_ms() -> int:
+    return config.OPENROUTER_FIREWALL_TIMEOUT_MS if on_openrouter() else config.THRESHOLDS["firewall_timeout_ms"]
+
+
 def backend_model(backend: str | None = None) -> str:
     """The model ID behind a firewall backend (for Verdict.model and trace events)."""
-    backend = backend or config.FIREWALL_BACKEND
-    return config.FIREWALL_JSON_LLM_MODEL if backend == "json_llm" else config.MODELS["firewall"]
+    backend = backend or effective_backend()
+    if backend != "json_llm":
+        return config.MODELS["firewall"]
+    return llm_settings.model_for("firewall") if on_openrouter() else config.FIREWALL_JSON_LLM_MODEL
 
 
 # --- request building (shared) ----------------------------------------------------------------
@@ -228,9 +245,9 @@ async def warm_up() -> int | None:
     """One tiny Decisions call so the process's shared client opens its connection before the
     first real firewall check (called in the background on FastAPI startup). Returns latency in
     ms, or None if skipped or failed. Never raises: failure is only logged."""
-    if config.FIREWALL_BACKEND != "decisions" or not config.GEMINI_API_KEY:
+    if effective_backend() != "decisions" or not config.GEMINI_API_KEY:
         log.info("decisions warm-up skipped (backend=%s, key set=%s)",
-                 config.FIREWALL_BACKEND, bool(config.GEMINI_API_KEY))
+                 effective_backend(), bool(config.GEMINI_API_KEY))
         return None
     request = {"input": [{"type": "text", "text": "warm-up\n"}],
                "questions": {"warm_up": {"type": "noul", "instructions": "Is this a warm-up request?"}}}
@@ -315,8 +332,17 @@ def _json_llm_thinking() -> str:
 
 
 async def _call_json_llm(request: dict, timeout_s: float) -> dict:
-    """The only place that talks to Gemini for the json_llm backend: one Interactions API call
-    with a JSON response schema and no tools. Uses config.FIREWALL_JSON_LLM_MODEL."""
+    """The only place that talks to a model for the json_llm backend: one call with a JSON response
+    schema and no tools. Gemini: the Interactions API with config.FIREWALL_JSON_LLM_MODEL. OpenRouter: the
+    model chosen for the `firewall` role on the Settings page, with photos/frames/transcripts as content."""
+    if on_openrouter():
+        from app.llm import api, media as llm_media
+
+        parts, _ = await llm_media.build_parts(request["media"])
+        parts.append({"type": "text", "text": request["prompt"]})
+        data, _model = await api.complete_json("firewall", "You are a strict JSON-only API.", parts,
+                                               _json_llm_schema(request["probe_ids"]), timeout=timeout_s)
+        return data
     resp = await gemini.client().aio.interactions.create(
         model=config.FIREWALL_JSON_LLM_MODEL,
         input=[*gemini.firewall_content_blocks(request["media"]), {"type": "text", "text": request["prompt"]}],
@@ -332,6 +358,11 @@ def _parse_json_llm_response(raw, probe_ids: list[str]) -> _Scores:
     if not isinstance(raw, dict) or not isinstance(raw.get("probes"), dict):
         raise ValueError("json_llm response has no probes object")
     missing = [i for i in probe_ids if i not in raw["probes"]]
+    if missing and on_openrouter() and len(missing) <= 0.3 * len(probe_ids):
+        # Free models sometimes drop a few of ~50 keys. Up to 30% missing are scored 0 here; the firewall
+        # action, severity and the rule scan of the listing still apply, and any more missing fails closed.
+        raw = {**raw, "probes": {**{i: 0.0 for i in missing}, **raw["probes"]}}
+        missing = []
     if missing:
         raise ValueError(f"json_llm response missing probes: {missing[:5]}"
                          + (f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""))
@@ -347,9 +378,9 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
     """One backend call for one proposed state-changing tool call. Never raises (except on
     cancellation): every failure becomes a fail-closed hard_block_quarantine Verdict."""
     t0 = time.perf_counter()
-    backend = config.FIREWALL_BACKEND
+    backend = effective_backend()
     model = backend_model(backend)
-    timeout_ms = config.THRESHOLDS["firewall_timeout_ms"]
+    timeout_ms_ = timeout_ms()
 
     def elapsed_ms() -> int:
         return int((time.perf_counter() - t0) * 1000)
@@ -371,13 +402,13 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
         else:
             request = _build_decisions_request(intent, media, product_json, proposed, claims, probes)
             call, parse = _call_decisions, _parse_decisions_response
-        remaining_s = (timeout_ms - elapsed_ms()) / 1000
+        remaining_s = (timeout_ms_ - elapsed_ms()) / 1000
         if remaining_s <= 0:
             raise TimeoutError
         raw = await asyncio.wait_for(call(request, remaining_s), timeout=remaining_s)
         scores = parse(raw, ids)
     except TimeoutError:
-        return fail_closed(f"firewall timeout after {timeout_ms} ms", tier)
+        return fail_closed(f"firewall timeout after {timeout_ms_} ms", tier)
     except Exception as e:  # noqa: BLE001 - fail closed on anything
         return fail_closed(f"{type(e).__name__}: {e}"[:500], tier)
 

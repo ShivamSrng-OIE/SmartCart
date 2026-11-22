@@ -12,6 +12,7 @@ uses ShopMCP(dry_run=True), so it comes back {"intercepted": True, ...}).
 """
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ from google import genai
 from google.genai import types
 
 from app import config
+from app.llm import settings as llm_settings
 from app.money import attempted_spend
 from app.schemas import Intent, Media, ToolCall
 from app.shop_mcp import STATE_CHANGING, ShopMCP, ShopMCPError
@@ -170,7 +172,6 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
                        on_state_change: StateHook = default_state_hook,
                        client: genai.Client | None = None) -> ShopperContext:
     ctx = ShopperContext(intent=intent, media=media, shop=shop, bus=bus, run_id=run_id, pane=pane)
-    client = client or genai.Client(api_key=config.GEMINI_API_KEY)
 
     text = f"User request: {intent.text}"
     if intent.budget is not None:
@@ -188,6 +189,11 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
     if media:
         text += "\nAttached: media from the user's camera/mic showing what they want."
 
+    if client is None and llm_settings.provider() == "openrouter":
+        await _openrouter_steps(ctx, text, system_prompt, on_state_change)
+        return ctx
+    client = client or genai.Client(api_key=config.GEMINI_API_KEY)
+
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=text), *_media_parts(media)])]
     cfg = types.GenerateContentConfig(system_instruction=system_prompt, tools=[MODEL_TOOLS],
                                       automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
@@ -201,29 +207,73 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
         contents.append(resp.candidates[0].content)
         replies = []
         for fc in calls:
-            model_args = dict(fc.args or {})
-            try:
-                call = to_shop_call(fc.name, model_args, ctx)
-            except ValueError as exc:
-                replies.append(types.Part.from_function_response(name=fc.name, response={"error": str(exc)}))
-                continue
-            facts = _state_facts(call, ctx) if call.name in STATE_CHANGING else {}
-            bus.emit(run_id, pane, "tool_call",
-                     {"tool": call.name, "arguments": call.arguments, "model_args": model_args, **facts})
-            try:
-                if call.name in STATE_CHANGING:
-                    ctx.state_calls.append(call)
-                    result = await on_state_change(call, ctx)
-                    kind = "intercepted" if result.get("intercepted") else "tool_result"
-                else:
-                    result = await _execute_read(call, ctx)
-                    kind = "tool_result"
-            except ShopMCPError as exc:
-                result, kind = {"error": str(exc)}, "tool_result"
-            data = {"tool": call.name, "result": result}
-            if kind == "intercepted":
-                data.update(arguments=call.arguments, **facts, hijacked=_hijacked(call, facts, ctx))
-            bus.emit(run_id, pane, kind, data)
-            replies.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
+            reply = await _handle_call(fc.name, dict(fc.args or {}), ctx, on_state_change)
+            replies.append(types.Part.from_function_response(name=fc.name, response=reply))
         contents.append(types.Content(role="user", parts=replies))
     return ctx
+
+
+async def _handle_call(name: str, model_args: dict, ctx: ShopperContext, on_state_change: StateHook) -> dict:
+    """Run one tool call the model made (either provider): translate it to the real Shop call, emit the trace
+    events, execute it (state-changing calls go through `on_state_change`) and return what the model sees."""
+    try:
+        call = to_shop_call(name, model_args, ctx)
+    except (ValueError, KeyError, TypeError) as exc:
+        return {"error": str(exc)}
+    facts = _state_facts(call, ctx) if call.name in STATE_CHANGING else {}
+    ctx.bus.emit(ctx.run_id, ctx.pane, "tool_call",
+                 {"tool": call.name, "arguments": call.arguments, "model_args": model_args, **facts})
+    try:
+        if call.name in STATE_CHANGING:
+            ctx.state_calls.append(call)
+            result = await on_state_change(call, ctx)
+            kind = "intercepted" if result.get("intercepted") else "tool_result"
+        else:
+            result = await _execute_read(call, ctx)
+            kind = "tool_result"
+    except ShopMCPError as exc:
+        result, kind = {"error": str(exc)}, "tool_result"
+    data = {"tool": call.name, "result": result}
+    if kind == "intercepted":
+        data.update(arguments=call.arguments, **facts, hijacked=_hijacked(call, facts, ctx))
+    ctx.bus.emit(ctx.run_id, ctx.pane, kind, data)
+    return {"result": result}
+
+
+def _openai_tools() -> list[dict]:
+    """MODEL_TOOLS in the OpenAI function-calling shape, which OpenRouter models take."""
+    return [{"type": "function", "function": {"name": d.name, "description": d.description,
+                                              "parameters": d.parameters_json_schema}}
+            for d in MODEL_TOOLS.function_declarations]
+
+
+async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, on_state_change: StateHook) -> None:
+    """The same shopping loop on an OpenRouter model: photos and video frames as images, audio as a transcript."""
+    from app.llm import media as llm_media
+    from app.llm import openrouter
+
+    model = llm_settings.model_for("shopper")
+    parts, _ = await llm_media.build_parts(ctx.media)
+    messages: list[dict] = [{"role": "system", "content": system_prompt},
+                            {"role": "user", "content": [{"type": "text", "text": text}, *parts]}]
+    tools = _openai_tools()
+    for _ in range(MAX_STEPS):
+        try:
+            msg = await openrouter.chat(model, messages, tools=tools, timeout=120)
+        except openrouter.OpenRouterError as exc:
+            ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"level": "error", "event": "model",
+                                                       "message": f"The shopping model did not answer: {exc}"})
+            return
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"message": openrouter.message_text(msg).strip()})
+            return
+        messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
+        for tc in calls:
+            fn = tc.get("function") or {}
+            try:
+                args = openrouter.extract_json(fn.get("arguments") or "{}")
+            except ValueError:
+                args = {}
+            reply = await _handle_call(fn.get("name", ""), args if isinstance(args, dict) else {}, ctx, on_state_change)
+            messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": json.dumps(reply, default=str)[:12000]})

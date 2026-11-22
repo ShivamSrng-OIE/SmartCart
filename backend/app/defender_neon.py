@@ -161,6 +161,15 @@ class _NeonText(BaseModel):
 
 async def _neon_reason(prompt: str) -> str:
     """One Neon call, structured output. Raises on any failure; caller falls back."""
+    from app.llm import api
+
+    if api.provider() == "openrouter":
+        data, _model = await api.complete_json("defender", "", prompt, {"type": "object", "properties": {"reason": {"type": "string"}},
+                                                                       "required": ["reason"]}, timeout=NEON_TIMEOUT_S)
+        reason = str(data.get("reason") or "").strip()
+        if not reason:
+            raise ValueError("empty neon reason")
+        return reason
     from google.genai import types
 
     resp = await gemini.client().aio.models.generate_content(

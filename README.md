@@ -11,6 +11,10 @@ The project ships as a working storefront called **Tote**: shoppers browse real 
 ![Gemini](https://img.shields.io/badge/Built_on-Google_Gemini-4285F4?logo=googlegemini&logoColor=white)
 ![OpenRouter](https://img.shields.io/badge/Runs_on-OpenRouter_free_models-6467F2)
 
+**[Watch the 50-second video walkthrough](https://drive.google.com/file/d/1M1uhcndMoO7fPsk2D7aWiRjlTvPunZRO/view?usp=sharing)**: image, video and audio attacks held live, with the evidence for each.
+
+![Safe Checkout holding a manipulated listing and showing where the hidden instruction is](backend/docs/images/walkthrough.gif)
+
 ---
 
 ## Contents

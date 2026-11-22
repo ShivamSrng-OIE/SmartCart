@@ -7,17 +7,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from app import config
+from app import cart_check, config, outcomes
 from app.defender_neon import on_block as defender_on_block
 from app.app_routes import app_router
+from app.merchant_routes import router as merchant_router
+from app.settings_routes import router as settings_router
+from app.shop_proxy import router as shop_proxy_router
+from app.trust_routes import router as trust_router
+from app.warehouse_routes import router as warehouse_router
 from app.evidence_routes import evidence_router
 from app.firewall_decisions import warm_up
 from app.guarded_shopper import GUARDED_PROMPT, run_guarded
@@ -54,8 +61,10 @@ async def guarded_pipeline(intent, media, product_ref, bus, run_id):
     are still always intercepted and complete_* is forbidden inside shop_mcp)."""
     shop = WarehouseShop(budget=intent.budget) if config.WAREHOUSE_IN_AGENT else ShopMCP()
     prompt = GUARDED_PROMPT + (ALL_MATCHES_NOTE if config.WAREHOUSE_IN_AGENT else "")
-    await run_guarded(intent, media, product_ref, bus, run_id, shop=shop, rules=RULES, on_block=defender_on_block,
-                      system_prompt=prompt)
+    result = await run_guarded(intent, media, product_ref, bus, run_id, shop=shop, rules=RULES, on_block=defender_on_block,
+                               system_prompt=prompt)
+    outcomes.record(result, RULES.current(), source=app.state.run_meta.get(run_id, {}).get("source", "agent"),
+                    run_id=run_id, bus=bus)
 
 
 async def victim_pipeline(intent, media, product_ref, bus, run_id):
@@ -76,18 +85,32 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CartTrap", lifespan=lifespan)
+# The web app is deployed on its own origin, so the browser must be allowed to call this API.
+# CORS_ORIGINS is a comma-separated list of origins (default: the local dev servers); "*" allows any.
+_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,"
+                                         "http://localhost:4173,http://127.0.0.1:4173").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"],
+                   allow_credentials=False, max_age=600)
 app.state.bus = TraceBus()
 app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
+app.state.run_meta = {}  # run_id -> {"source": "agent" | "cart"}: where a check came from (reputation uses it)
 app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
 app.include_router(app_router)  # /api/rules and /api/dataset (ADR m4/0021)
 app.include_router(evidence_router)
+app.include_router(warehouse_router)  # storefront: /api/warehouse/*, /media/warehouse/*
+app.include_router(merchant_router)  # merchant sign-in and listing management
+app.include_router(trust_router)  # merchant trust and Carbon's analysis
+app.include_router(settings_router)  # Gemini / OpenRouter and the model per agent
+app.include_router(shop_proxy_router)  # read-only proxy to Shopify's Shop MCP for the storefront
 app.state.pipelines = {"victim": victim_pipeline, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True}
+    from app.llm import api
+
+    return {"ok": True, "provider": api.provider(), "model_key": api.key_missing() is None}
 
 
 async def _save(upload: UploadFile | None, kind: str, run_dir: Path) -> Media | None:
@@ -125,6 +148,7 @@ async def start_run(
     product_id: str | None = Form(None),
     demo_product_id: str | None = Form(None),
     mode: str = Form("both"),
+    source: str = Form("agent"),
     listing_text: str | None = Form(None),
     image: UploadFile | None = None,
     audio: UploadFile | None = None,
@@ -147,8 +171,38 @@ async def start_run(
     intent = parse_intent(request, budget)  # budget field wins; else budget/qty parsed from the request text
     bus: TraceBus = app.state.bus
     bus.start(run_id)
+    app.state.run_meta[run_id] = {"source": "cart" if source == "cart" else "agent"}
     task = asyncio.create_task(_run_all(bus, run_id, panes, intent, media,
                                         product_id or demo_product_id or product_url))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return {"run_id": run_id}
+
+
+@app.post("/api/check-cart")
+async def check_cart(product_id: str = Form(...), variant_id: str | None = Form(None), quantity: int = Form(1),
+                     budget: float | None = Form(None), request: str | None = Form(None)) -> dict:
+    """The user adds a listing to their cart: check it now (no shopping model involved). Same event stream."""
+    if not product_id.strip() or len(product_id) > 300:
+        raise HTTPException(422, "product_id is required")
+    run_id = f"c_{uuid.uuid4().hex[:8]}"
+    bus: TraceBus = app.state.bus
+    bus.start(run_id)
+    app.state.run_meta[run_id] = {"source": "cart"}
+
+    async def go():
+        try:
+            shop = WarehouseShop(budget=budget) if config.WAREHOUSE_IN_AGENT else ShopMCP()
+            await cart_check.run_cart_check(product_id=product_id.strip(), variant_id=variant_id, quantity=quantity, budget=budget,
+                                            request_text=(request or "").strip()[:1000] or None, bus=bus, run_id=run_id,
+                                            rules=RULES, shop=shop)
+        except Exception as exc:  # a crashed check must not hang the stream
+            log.exception("cart check failed")
+            bus.emit(run_id, "guarded", "log", {"level": "error", "message": f"{type(exc).__name__}: {exc}"})
+        finally:
+            bus.emit(run_id, "system", "done", {})
+
+    task = asyncio.create_task(go())
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return {"run_id": run_id}

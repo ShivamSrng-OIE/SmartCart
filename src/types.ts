@@ -152,6 +152,12 @@ export interface EvalResults {
     label?: string;
     n_fail_closed?: number;
     sample?: boolean;
+    /** cases per system, and how many of them could be scored (a timed-out case is not scored) */
+    n_cases?: Record<string, number>;
+    n_scored?: Record<string, number>;
+    /** the summary in the file disagreed with its own cases, so the API recomputed it */
+    recomputed?: boolean;
   };
+  by_tier?: Record<string, Record<string, Metrics>>;
   failures?: EvalFailure[];
 }

@@ -19,6 +19,9 @@ const Arena = lazy(() => import("./components/Arena").then((m) => ({ default: m.
 const RedTeam = lazy(() => import("./components/RedTeam").then((m) => ({ default: m.RedTeam })));
 const Dataset = lazy(() => import("./components/Dataset").then((m) => ({ default: m.Dataset })));
 const Scoreboard = lazy(() => import("./components/Scoreboard").then((m) => ({ default: m.Scoreboard })));
+const Sell = lazy(() => import("./components/Sell").then((m) => ({ default: m.Sell })));
+const Trust = lazy(() => import("./components/Trust").then((m) => ({ default: m.Trust })));
+const Settings = lazy(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
 
 const AGENT_VIEWS: View[] = ["unprotected", "protected", "compare"];
 
@@ -99,6 +102,9 @@ export default function App() {
       redteam: "Safety updates · Tote",
       results: "Performance · Tote",
       dataset: "Dataset · Tote",
+      merchant: "Sell · Tote",
+      trust: "Marketplace trust · Tote",
+      settings: "Models · Tote",
     };
     document.title = titles[view];
   }, [view, productSeed?.title]);
@@ -207,6 +213,9 @@ export default function App() {
           {view === "redteam" && <RedTeam mode={backend.mode} rulesVersion={backend.rules.version} onPatched={backend.bumpRules} />}
           {view === "dataset" && <Dataset onRun={() => go("compare")} />}
           {view === "results" && <Scoreboard results={backend.evalResults} />}
+          {view === "merchant" && <Sell />}
+          {view === "trust" && <Trust />}
+          {view === "settings" && <Settings />}
           </Suspense>
         </div>
       </main>

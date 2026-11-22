@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bot, Loader2, Search, ShieldCheck, Star } from "lucide-react";
+import { ArrowRight, Bot, Loader2, Search, ShieldCheck, ShoppingBag, Star, Store } from "lucide-react";
 import { routeLocally, routeQuery, type Route, type RouteDecision } from "../lib/router";
 import { MODES, MORE, type View } from "./Header";
 import { BROWSE } from "../config";
@@ -8,6 +8,7 @@ import { money } from "../lib/format";
 import { gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { AutoRail } from "./AutoRail";
+import { TrustChip } from "./TrustBadge";
 
 const WAYS: Record<string, string> = {
   shop: "Search products from independent Shopify stores and check out on each store’s site.",
@@ -36,6 +37,7 @@ function ProductTile({ p, onOpen }: { p: CatalogProduct; onOpen: () => void }) {
       <div className="flex flex-1 flex-col gap-0.5 p-3">
         <p className="line-clamp-2 text-[13px] leading-snug font-medium">{p.title}</p>
         <p className="truncate text-xs text-ink-3">{p.shopName ?? p.vendor}</p>
+        <TrustChip p={p} className="mt-1 self-start" />
         <div className="mt-auto flex items-center justify-between pt-1.5">
           <span className="tnum text-[14px] font-semibold">{money(p.price, false, p.currency)}</span>
           {p.rating && (
@@ -186,6 +188,28 @@ export function HomePage({
             ),
           )}
         </div>
+      </section>
+
+      {/* who is using Tote: shoppers never sign in, sellers do */}
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4" aria-label="Choose how you are using Tote">
+        <button data-way onClick={() => onView("shop")} className="group card flex items-start gap-3 border border-brand/40 p-4 text-left transition-shadow hover:shadow-[0_0_0_1px_var(--brand),0_16px_32px_-20px_rgb(0_0_0/0.35)] sm:gap-4 sm:p-5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-ink"><ShoppingBag className="size-5" /></span>
+          <span className="min-w-0">
+            <span className="text-[16px] font-semibold tracking-tight">I’m shopping</span>
+            <span className="ml-2 rounded-full bg-safe-soft px-2 py-0.5 text-[11px] font-semibold text-safe">No sign-in needed</span>
+            <span className="mt-1 block text-[14px] leading-relaxed text-ink-2">Browse, add to your cart, or let the assistant shop for you. No account, ever.</span>
+            <span className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-semibold">Start shopping <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+          </span>
+        </button>
+        <button data-way onClick={() => onView("merchant")} className="group card flex items-start gap-3 p-4 text-left transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_32px_-20px_rgb(0_0_0/0.35)] sm:gap-4 sm:p-5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 shadow-[inset_0_0_0_1px_var(--line)]"><Store className="size-5 text-ink-2" /></span>
+          <span className="min-w-0">
+            <span className="text-[16px] font-semibold tracking-tight">I’m a merchant</span>
+            <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-2">Sign-in required</span>
+            <span className="mt-1 block text-[14px] leading-relaxed text-ink-2">Sign in to manage your store, add products and photos, and see your trust score.</span>
+            <span className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-semibold">Merchant sign-in <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+          </span>
+        </button>
       </section>
 
       {/* ways to shop */}

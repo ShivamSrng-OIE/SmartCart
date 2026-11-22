@@ -300,10 +300,13 @@ async def safe_swap(
     qty = intent.quantity
     budget = None if intent.budget is None else Decimal(str(intent.budget))
     query = original.get("title") or intent.text
+    if str(original.get("id") or "").startswith(LOCAL_PREFIX):
+        # a local listing's own title finds mostly itself: look for the same kind of product on Shopify instead
+        query = original.get("product_type") or (original.get("title") or intent.text)
 
     # Restrict candidates to the original product and results relevant to this search.
     products = {}
-    for offer in [original, *(await shop.search_catalog(query))[:12]]:
+    for offer in [original, *(await shop.search_catalog(query, limit=12))[:12]]:
         product_id = offer.get("id") or offer.get("product_id")
         if not product_id or str(product_id).startswith(LOCAL_PREFIX) or (products.get(product_id) or {}).get("variants"):
             continue

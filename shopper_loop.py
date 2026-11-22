@@ -109,11 +109,14 @@ def to_shop_call(name: str, args: dict, ctx: ShopperContext) -> ToolCall:
 
 def _compact(product: dict) -> dict:
     """What the model sees for a product: ids, prices, seller. Not the 10 KB HTML description."""
-    return {"product_id": product["id"], "title": product.get("title"), "variants": [
+    out = {"product_id": product["id"], "title": product.get("title"), "variants": [
         {"variant_id": v["id"], "title": v.get("title"), "price_usd": v.get("price", {}).get("amount", 0) / 100,
          "available": v.get("availability", {}).get("available"), "seller": v.get("seller", {}).get("name"),
          "options": {o["name"]: o["label"] for o in v.get("options", [])}}
         for v in product.get("variants", [])[:3]]}
+    if product.get("listing_summary"):  # warehouse listings only: the page text a shopper skims (no fine print)
+        out["description"] = product["listing_summary"][:600]
+    return out
 
 
 def _quantity(call: ToolCall) -> int:
@@ -153,7 +156,13 @@ async def _execute_read(call: ToolCall, ctx: ShopperContext) -> dict:
 # ---- the loop ------------------------------------------------------------------------
 
 def _media_parts(media: list[Media]) -> list[types.Part]:
-    return [types.Part.from_bytes(data=Path(m.path).read_bytes(), mime_type=m.mime) for m in media]
+    parts = []
+    for m in media:
+        if m.kind == "text":  # the listing's description, as the shopper would read it on the page
+            parts.append(types.Part.from_text(text="Product listing text:\n" + Path(m.path).read_text(encoding="utf-8", errors="replace")))
+        else:
+            parts.append(types.Part.from_bytes(data=Path(m.path).read_bytes(), mime_type=m.mime))
+    return parts
 
 
 async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | None, shop: ShopMCP,

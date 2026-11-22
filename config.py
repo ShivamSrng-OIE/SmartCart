@@ -52,3 +52,5 @@ FIREWALL_BACKEND: Literal["decisions", "json_llm"] = (
 USE_FIXTURES: bool = _flag("USE_FIXTURES")
 RECORD_FIXTURES: bool = _flag("RECORD_FIXTURES")
 MANAGED_AGENTS: bool = _flag("MANAGED_AGENTS")
+# The shopper also finds the local warehouse listings (some fraudulent) when it searches. On by default.
+WAREHOUSE_IN_AGENT: bool = _flag("WAREHOUSE_IN_AGENT", "1")

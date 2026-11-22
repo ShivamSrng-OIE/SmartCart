@@ -15,11 +15,12 @@ from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend import config
 from backend.defender_neon import on_block as defender_on_block
 from backend.app_routes import app_router
 from backend.evidence_routes import evidence_router
 from backend.firewall_decisions import warm_up
-from backend.guarded_shopper import run_guarded
+from backend.guarded_shopper import GUARDED_PROMPT, run_guarded
 from backend.intent import parse_intent
 from backend.m4_routes import m4_router
 from backend.media_prep import to_wav
@@ -27,9 +28,11 @@ from backend.rules import RuleStore
 from backend.schemas import Intent, Media
 from backend.shop_mcp import ShopMCP
 from backend.trace import TraceBus
-from backend.victim_hydrogen import run_victim
+from backend.victim_hydrogen import VICTIM_PROMPT, run_victim
+from backend.warehouse_shop import ALL_MATCHES_NOTE, WarehouseShop
 
 RUNS_DIR = Path("runs")
+LISTING_TEXT_MAX = 8000
 log = logging.getLogger(__name__)
 
 Pipeline = Callable[[Intent, list[Media], str | None, TraceBus, str], Awaitable[None]]
@@ -49,7 +52,17 @@ RULES = RuleStore(str(Path(__file__).resolve().parent / "rules.json"))  # shared
 async def guarded_pipeline(intent, media, product_ref, bus, run_id):
     """Task 9: protected pane. Live ShopMCP (approved carts are really created; spend requests
     are still always intercepted and complete_* is forbidden inside shop_mcp)."""
-    await run_guarded(intent, media, product_ref, bus, run_id, shop=ShopMCP(), rules=RULES, on_block=defender_on_block)
+    shop = WarehouseShop(budget=intent.budget) if config.WAREHOUSE_IN_AGENT else ShopMCP()
+    prompt = GUARDED_PROMPT + (ALL_MATCHES_NOTE if config.WAREHOUSE_IN_AGENT else "")
+    await run_guarded(intent, media, product_ref, bus, run_id, shop=shop, rules=RULES, on_block=defender_on_block,
+                      system_prompt=prompt)
+
+
+async def victim_pipeline(intent, media, product_ref, bus, run_id):
+    """Unprotected pane. Same extra listings as the guarded one, so both shoppers see the same store."""
+    shop = WarehouseShop(dry_run=True, budget=intent.budget) if config.WAREHOUSE_IN_AGENT else ShopMCP(dry_run=True)
+    prompt = VICTIM_PROMPT + (ALL_MATCHES_NOTE if config.WAREHOUSE_IN_AGENT else "")
+    await run_victim(intent, media, product_ref, bus, run_id, shop=shop, system_prompt=prompt)
 
 
 @asynccontextmanager
@@ -68,7 +81,7 @@ app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
 app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
 app.include_router(app_router)  # /api/rules and /api/dataset (ADR m4/0021)
 app.include_router(evidence_router)
-app.state.pipelines = {"victim": run_victim, "guarded": guarded_pipeline}
+app.state.pipelines = {"victim": victim_pipeline, "guarded": guarded_pipeline}
 _tasks: set[asyncio.Task] = set()
 
 
@@ -112,6 +125,7 @@ async def start_run(
     product_id: str | None = Form(None),
     demo_product_id: str | None = Form(None),
     mode: str = Form("both"),
+    listing_text: str | None = Form(None),
     image: UploadFile | None = None,
     audio: UploadFile | None = None,
     video: UploadFile | None = None,
@@ -124,6 +138,12 @@ async def start_run(
     run_dir = RUNS_DIR / run_id
     media = [m for m in [await _save(image, "image", run_dir), await _save(audio, "audio", run_dir),
                          await _save(video, "video", run_dir), await _save(pdf, "pdf", run_dir)] if m]
+    if listing_text and listing_text.strip():
+        # The store's own description for the product being bought: untrusted, checked like any media.
+        run_dir.mkdir(parents=True, exist_ok=True)
+        path = run_dir / "listing.txt"
+        path.write_text(listing_text.strip()[:LISTING_TEXT_MAX], encoding="utf-8")
+        media.append(Media(kind="text", path=str(path), mime="text/plain"))
     intent = parse_intent(request, budget)  # budget field wins; else budget/qty parsed from the request text
     bus: TraceBus = app.state.bus
     bus.start(run_id)

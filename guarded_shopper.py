@@ -41,6 +41,7 @@ from backend.shop_mcp import ShopMCP
 from backend.shopper_loop import ShopperContext, shopper_loop
 from backend.trace import TraceBus
 from backend.victim_hydrogen import VICTIM_PROMPT
+from backend import warehouse_shop
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ AGENT_INSTRUCTION_REASON = "listing contains instructions aimed at AI agents"
 
 
 ARGON_GRACE_S = 12.0  # max wait for perception before approving a cart (ADR 0026)
+LISTING_PERCEPTION_S = 60.0  # reading a warehouse listing's photo, video, audio and text before judging the cart
 
 
 def hold_if_agent_instructions(verdict: Verdict, claims: Claims | None) -> Verdict:
@@ -130,7 +132,7 @@ def _bought_product(call: ToolCall, ctx: ShopperContext) -> dict | None:
 
 async def run_guarded(intent: Intent, media: list[Media], product_ref: str | None, bus: TraceBus, run_id: str,
                       shop: ShopMCP, rules: RuleStore, *, client=None,
-                      on_block: AfterBlock | None = None) -> GuardedResult:
+                      on_block: AfterBlock | None = None, system_prompt: str = GUARDED_PROMPT) -> GuardedResult:
     async def _perceive_and_show() -> Claims:
         """Argon, then its reading on the right pane the moment it returns, not at the first cart
         (the pane would otherwise say nothing about the photo for the whole search phase)."""
@@ -155,7 +157,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
     verdicts: list[Verdict] = []
     approved: list[ToolCall] = []
     state: dict = {"claims": None, "match": None, "match_logged": False,
-                   "product_json": None, "last_cart_total": 0.0, "ctx": None}
+                   "product_json": None, "last_cart_total": 0.0, "ctx": None, "extra_media": []}
 
     def claims_if_ready() -> Claims | None:
         """Argon's Claims only if perception already finished. The firewall NEVER waits for Argon:
@@ -221,10 +223,26 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         state["ctx"] = ctx
         c = claims_if_ready()
         product_json = await product_for(call, ctx)
+        state["extra_media"] = []
+        if warehouse_shop.is_warehouse(product_json):
+            # A warehouse listing: its photo, video, audio and description are untrusted input, read
+            # (Argon) and judged (firewall) with the order, and kept for the evidence step.
+            state["extra_media"] = warehouse_shop.listing_media(product_json)
+            product_json = warehouse_shop.public_view(product_json)
+            try:
+                c = await asyncio.wait_for(perceive([*media, *state["extra_media"]]), timeout=LISTING_PERCEPTION_S)
+                bus.emit(run_id, PANE, "log", {
+                    "event": "perception", "model": config.MODELS["perception"],
+                    "message": f"Argon read the listing: instructions_detected={c.instructions_detected}",
+                    "instructions_detected": c.instructions_detected, "visible_text": c.visible_text[:5],
+                    "pack_count_claim": c.pack_count_claim, "notes": c.notes})
+            except Exception:  # noqa: BLE001 - keep whatever perception we already had
+                log.warning("listing perception failed", exc_info=True)
+        all_media = [*media, *state["extra_media"]]
         cart_total = attempted_spend(call, ctx.variants) or (
             state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
-        verdict = await decide(ctx.intent, ctx.media, product_json, call, c, rules.current(), cart_total)
-        if verdict.action == "approve_checkout" and c is None and media:
+        verdict = await decide(ctx.intent, all_media, product_json, call, c, rules.current(), cart_total)
+        if verdict.action == "approve_checkout" and c is None and all_media:
             # ADR 0026: before money moves, give Argon a short grace period so a listing with
             # hidden agent instructions can't slip through just because perception was slower.
             try:
@@ -247,7 +265,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
     blocked: CallBlocked | None = None
     try:
         await shopper_loop(intent, media, product_ref, shop, bus, run_id, pane=PANE,
-                           system_prompt=GUARDED_PROMPT, on_state_change=guard, client=client)
+                           system_prompt=system_prompt, on_state_change=guard, client=client)
     except CallBlocked as b:
         blocked = b
         bus.emit(run_id, PANE, "log", {
@@ -259,7 +277,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
                           if any(p.id == AGENT_INSTRUCTION_PROBE for p in b.verdict.probes) else "")})
         hook = on_block or after_block
         try:
-            await hook(BlockContext(intent=intent, media=media, call=b.call, verdict=b.verdict,
+            await hook(BlockContext(intent=intent, media=[*media, *state["extra_media"]], call=b.call, verdict=b.verdict,
                                     claims=claims_if_ready(), product_json=state["product_json"],
                                     cart_total=attempted_spend(b.call, state["ctx"].variants),
                                     ctx=state["ctx"], bus=bus, run_id=run_id))

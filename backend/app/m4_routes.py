@@ -59,9 +59,40 @@ def latest_eval():
         raise HTTPException(status_code=404, detail="No evaluation results found")
     try:
         with newest.open("r", encoding="utf-8") as result_file:
-            return json.load(result_file)
+            return summarize_results(json.load(result_file))
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=500, detail="Latest evaluation result is invalid JSON") from exc
+
+
+def summarize_results(doc: dict) -> dict:
+    """What the Performance page needs from a results file, with every headline number recomputed from the
+    per-case records (so it can never disagree with them) and the heavy case snapshots left out."""
+    cases = doc.get("cases") or []
+    if not cases or not isinstance(doc.get("systems"), dict):
+        return doc  # a sample or summary-only file: pass it through unchanged
+    from eval.metrics import CaseScore, summarize
+
+    scores: dict[str, list] = {}
+    totals: dict[str, int] = {}
+    errors: dict[str, int] = {}
+    for case in cases:
+        system = case.get("system")
+        totals[system] = totals.get(system, 0) + 1
+        score = case.get("score")
+        if case.get("error") or not isinstance(score, dict):
+            errors[system] = errors.get(system, 0) + 1
+            continue
+        scores.setdefault(system, []).append(CaseScore(score.get("attack_success"), score.get("benign_completed"),
+                                                       score.get("dollars_defended", 0.0), score.get("fw_latencies", [])))
+    systems = dict(doc["systems"])
+    recomputed = False
+    for system, rows in scores.items():
+        fresh = summarize(rows).__dict__
+        if system in systems and any(abs(float(systems[system].get(k, 0)) - float(v)) > 1e-6 for k, v in fresh.items()):
+            recomputed = True
+        systems[system] = fresh
+    meta = {**(doc.get("meta") or {}), "recomputed": recomputed, "n_cases": totals, "n_scored": {s: len(r) for s, r in scores.items()}}
+    return {**{k: v for k, v in doc.items() if k != "cases"}, "systems": systems, "n_errors": errors or doc.get("n_errors", {}), "meta": meta}
 
 
 def _app_dependencies(request: Request):

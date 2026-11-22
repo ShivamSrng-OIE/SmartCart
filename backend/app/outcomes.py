@@ -30,6 +30,15 @@ def last_search(bus: TraceBus, run_id: str) -> str | None:
     return query
 
 
+def attempted_amount(bus: TraceBus, run_id: str) -> float:
+    """The dollars of the cart the firewall stopped (from its last verdict event)."""
+    amount = 0.0
+    for e in bus.events(run_id):
+        if e.pane == "guarded" and e.kind == "verdict":
+            amount = float(e.data.get("cart_total") or 0)
+    return amount
+
+
 def reasons_for(result: GuardedResult, rules: RuleSet) -> list[str]:
     verdict = result.verdicts[-1] if result.verdicts else None
     categories = {p.id: p.category for p in rules.probes}
@@ -65,6 +74,6 @@ def record(result: GuardedResult, rules: RuleSet, *, source: str, run_id: str, b
             product_id=pid, merchant=merchant, title=product.get("title") or pid, source=source,
             severity="block" if verdict.action == "hard_block_quarantine" else "escalate",
             reasons=reasons, quotes=quotes, run_id=run_id, query=last_search(bus, run_id),
-            category=carbon.product_category(pid))
+            category=carbon.product_category(pid), amount=attempted_amount(bus, run_id))
     except Exception:  # noqa: BLE001
         log.exception("could not record the outcome of %s", run_id)

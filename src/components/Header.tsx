@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BadgeCheck, Bot, ChevronDown, Columns2, Home, Database, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, SlidersHorizontal, Store, Sun, Swords, Trophy, X } from "lucide-react";
+import { BadgeCheck, Bot, ChevronDown, Columns2, Database, Home, KeyRound, LayoutGrid, Moon, Search, ShieldCheck, ShoppingBag, SlidersHorizontal, Store, Sun, Swords, Trophy, X } from "lucide-react";
 import { COUNTRIES, setCountry, useCountry } from "../locale";
 import type { Theme } from "../hooks/useTheme";
 import { gsap, d } from "../lib/motion";
@@ -28,9 +28,9 @@ export const MORE: NavItem[] = [
   { id: "trust", label: "Marketplace trust", short: "Trust", hint: "Which sellers shoppers can trust", icon: BadgeCheck },
   { id: "compare", label: "Compare", short: "Compare", hint: "Assistant and Safe Checkout side by side", icon: Columns2 },
   { id: "redteam", label: "Safety updates", short: "Updates", hint: "How Safe Checkout learns new checks", icon: Swords },
-  { id: "results", label: "Performance", short: "Performance", hint: "How often orders come out right", icon: Trophy },
+  { id: "results", label: "Results", short: "Results", hint: "How Safe Checkout performs, in numbers", icon: Trophy },
   { id: "dataset", label: "Dataset", short: "Dataset", hint: "The poisoned orders we test against", icon: Database },
-  { id: "settings", label: "Models", short: "Models", hint: "Gemini or OpenRouter for each agent", icon: SlidersHorizontal },
+  { id: "settings", label: "AI models & your key", short: "AI & key", hint: "Which AI runs the checks, and using your own key", icon: SlidersHorizontal },
 ];
 
 export const ALL_VIEWS: View[] = ["home", "product", ...MODES.map((m) => m.id), ...MORE.map((m) => m.id)];
@@ -189,9 +189,14 @@ export function Header({
   onTheme,
   cartCount,
   onCart,
+  onKey,
+  hasOwnKey = false,
 }: {
   cartCount: number;
   onCart: () => void;
+  /** open "use your own AI key" */
+  onKey?: () => void;
+  hasOwnKey?: boolean;
   view: View;
   onView: (v: View) => void;
   theme: Theme;
@@ -246,6 +251,17 @@ export function Header({
               <CountryPicker />
             </span>
             <MoreMenu view={view} onView={onView} />
+            {onKey && (
+              <button
+                onClick={onKey}
+                aria-label={hasOwnKey ? "Your AI key is in use. Change or remove it" : "Use your own AI key"}
+                title={hasOwnKey ? "Your AI key is in use" : "Use your own AI key"}
+                className={cx("relative inline-flex size-9 items-center justify-center rounded-lg transition-colors hover:bg-surface-2 hover:text-ink", hasOwnKey ? "text-safe" : "text-ink-2")}
+              >
+                <KeyRound className="size-[18px]" />
+                {hasOwnKey && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-safe ring-2 ring-bg" aria-hidden />}
+              </button>
+            )}
             <ThemeToggle theme={theme} onToggle={onTheme} />
             <button
               data-cart-target

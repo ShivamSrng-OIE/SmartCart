@@ -75,7 +75,7 @@ export function Scoreboard({ results }: { results: EvalResults | null }) {
     return (
       <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
         <div>
-          <p className="label mb-1">Performance</p>
+          <p className="label mb-1">Results</p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">How Safe Checkout performs</h1>
         </div>
         <div className="card flex flex-col items-center gap-2 px-6 py-16 text-center">
@@ -122,7 +122,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
       {/* heading */}
       <div data-reveal className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="label mb-1">Performance</p>
+          <p className="label mb-1">Results</p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             How Safe Checkout performs across {nScored} orders
           </h1>

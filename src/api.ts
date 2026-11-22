@@ -11,19 +11,36 @@ import { looksLikeGemini, toEvents } from "./lib/gemini";
 // ---------------------------------------------------------------- live API
 // Routes from docs/architecture.md §5 (owned by Member 1). Send changes to M1.
 
-export async function health(timeoutMs = 1200): Promise<boolean> {
-  if (!ENDPOINTS.health) return true;
+/** How the shared model keys are doing: "busy" = the free models are rate limited and a backup fills in;
+ *  "limited" = the shared quota is used up, so checks are slow or held for safety. */
+export interface ServiceLimits {
+  state: "ok" | "busy" | "limited";
+  openrouter: "ok" | "busy";
+  gemini: "ok" | "limited";
+}
+
+export interface HealthInfo {
+  ok: boolean;
+  limits: ServiceLimits | null;
+}
+
+export async function healthInfo(timeoutMs = 1200): Promise<HealthInfo> {
+  if (!ENDPOINTS.health) return { ok: true, limits: null };
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const r = await fetch(ENDPOINTS.health, { signal: ctrl.signal });
     clearTimeout(t);
-    if (!r.ok) return false;
-    const j = await r.json().catch(() => null);
-    return !!j?.ok;
+    if (!r.ok) return { ok: false, limits: null };
+    const j = (await r.json().catch(() => null)) as { ok?: boolean; limits?: ServiceLimits } | null;
+    return { ok: !!j?.ok, limits: j?.limits ?? null };
   } catch {
-    return false;
+    return { ok: false, limits: null };
   }
+}
+
+export async function health(timeoutMs = 1200): Promise<boolean> {
+  return (await healthInfo(timeoutMs)).ok;
 }
 
 /** POST /api/run (multipart) → run id. Kept for the side-by-side compare view. */

@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { LimitsBanner, OwnKeyDialog, useOwnKey } from "./components/OwnKey";
 import { WifiOff } from "lucide-react";
 import { ALL_VIEWS, Header, MODES, type View } from "./components/Header";
 import { HomePage } from "./components/Home";
@@ -29,13 +30,45 @@ function PageLoading() {
   return <div className="card h-64 animate-pulse" aria-label="Loading" />;
 }
 
-function parseHash(): { view: View; productId: string | null } {
-  const h = window.location.hash.replace(/^#\/?/, "");
-  if (h.startsWith("product/")) {
-    const id = decodeURIComponent(h.slice("product/".length));
+/** Every page has its own address (/results, /trust, …), so it can be bookmarked and shared. */
+export const PATHS: Record<Exclude<View, "product">, string> = {
+  home: "/",
+  shop: "/shop",
+  unprotected: "/assistant",
+  protected: "/safe-checkout",
+  compare: "/compare",
+  redteam: "/safety-updates",
+  results: "/results",
+  dataset: "/dataset",
+  merchant: "/sell",
+  trust: "/trust",
+  settings: "/settings",
+};
+const BY_PATH = new Map(Object.entries(PATHS).map(([v, path]) => [path, v as View]));
+
+export function pathFor(view: View, productId?: string | null): string {
+  return view === "product" ? (productId ? `/product/${encodeURIComponent(productId)}` : "/shop") : PATHS[view];
+}
+
+export function parseRoute(pathname: string, hash = ""): { view: View; productId: string | null } {
+  // old links (#/results, #/product/…) still work
+  const old = hash.startsWith("#/") ? hash.slice(2) : ""; // not "#main" (the skip link)
+  const path = old ? `/${old}` : pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/product/")) {
+    const id = decodeURIComponent(path.slice("/product/".length));
     return id ? { view: "product", productId: id } : { view: "shop", productId: null };
   }
-  return { view: ALL_VIEWS.includes(h as View) && h !== "product" ? (h as View) : "home", productId: null };
+  const named = BY_PATH.get(path);
+  if (named) return { view: named, productId: null };
+  const legacy = path.slice(1); // "/results" as a view id, "/merchant", "/unprotected", …
+  return { view: ALL_VIEWS.includes(legacy as View) && legacy !== "product" ? (legacy as View) : "home", productId: null };
+}
+
+function parseHash(): { view: View; productId: string | null } {
+  const r = parseRoute(window.location.pathname, window.location.hash);
+  const clean = pathFor(r.view, r.productId);
+  if (window.location.hash.startsWith("#/") || window.location.pathname !== clean) window.history.replaceState(null, "", clean + window.location.search);
+  return r;
 }
 
 export default function App() {
@@ -49,10 +82,13 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const [shopQuery, setShopQuery] = useState("");
   const [cartTick, setCartTick] = useState(0);
+  const [keyOpen, setKeyOpen] = useState(false);
+  const closeKey = useCallback(() => setKeyOpen(false), []);
+  const ownKey = useOwnKey();
 
   const go = useCallback((v: View) => {
     setView(v);
-    if (window.location.hash !== `#/${v}`) window.history.pushState(null, "", `#/${v}`);
+    if (window.location.pathname !== pathFor(v)) window.history.pushState(null, "", pathFor(v));
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -60,7 +96,7 @@ export default function App() {
     setProductSeed(p);
     setProductId(p.id);
     setView("product");
-    window.history.pushState(null, "", `#/product/${encodeURIComponent(p.id)}`);
+    window.history.pushState(null, "", pathFor("product", p.id));
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -72,11 +108,7 @@ export default function App() {
       setProductId(r.productId);
     };
     window.addEventListener("popstate", onPop);
-    window.addEventListener("hashchange", onPop);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener("hashchange", onPop);
-    };
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   // 1 / 2 / 3 jump between the three modes when you're not typing.
@@ -100,11 +132,11 @@ export default function App() {
       protected: "Safe Checkout · Tote",
       compare: "Compare · Tote",
       redteam: "Safety updates · Tote",
-      results: "Performance · Tote",
+      results: "Results · Tote",
       dataset: "Dataset · Tote",
       merchant: "Sell · Tote",
       trust: "Marketplace trust · Tote",
-      settings: "Models · Tote",
+      settings: "AI models & your key · Tote",
     };
     document.title = titles[view];
   }, [view, productSeed?.title]);
@@ -135,7 +167,11 @@ export default function App() {
           go("shop");
           setCartTick((t) => t + 1);
         }}
+        onKey={() => setKeyOpen(true)}
+        hasOwnKey={!!ownKey}
       />
+      <LimitsBanner limits={backend.limits} onAddKey={() => setKeyOpen(true)} />
+      <OwnKeyDialog open={keyOpen} onClose={closeKey} />
       {showOffline && (
         <div className="border-b border-warn-line bg-warn-soft">
           <div className="mx-auto flex max-w-[2400px] flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-5 xl:px-8">

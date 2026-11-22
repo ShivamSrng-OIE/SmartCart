@@ -57,6 +57,11 @@ function linesText(args: Record<string, unknown>, products: ProductLedger): stri
     .join(", ");
 }
 
+/** Model replies can carry markdown (**bold**, list dashes); the trace shows plain sentences. */
+export function plainText(text: string | undefined | null): string {
+  return (text ?? "").replace(/\*\*|__/g, "").replace(/(^|\s)[-*] (?=\S)/g, "$1").replace(/\s+/g, " ").trim();
+}
+
 /** One human sentence per step; JSON stays one tap away. */
 function summarize(step: Step, products: ProductLedger): ReactNode {
   const a = step.args ?? {};
@@ -199,7 +204,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
                 {SOURCE_LABEL[source] ?? source}:{" "}
               </span>
             )}
-            {step.message}
+            {plainText(step.message)}
           </p>
         </div>
       </li>

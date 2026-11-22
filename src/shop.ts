@@ -10,9 +10,10 @@
  *  - `rate_limited` errors carry retry_after seconds
  */
 
+import { apiUrl } from "./config";
 import { getCountry } from "./locale";
 
-export const SHOP_MCP_PATH = "/shop-mcp";
+export const SHOP_MCP_PATH = apiUrl("/shop-mcp");
 const PROTOCOL = "2026-07-28";
 const CLIENT = { name: "carttrap-arena", version: "0.1.0" };
 

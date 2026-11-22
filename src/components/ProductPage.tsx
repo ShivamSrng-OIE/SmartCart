@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowLeft, ArrowUpRight, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Loader2, Minus, Play, Plus, ShieldCheck, Star, Store, TrendingDown, TrendingUp, X } from "lucide-react";
-import { getProduct, mediaSummary, modelSources, parseWarehouseId, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
-import { warehouseRunForm } from "../api";
+import { getProduct, isFlagged, mediaSummary, modelSources, refFromProduct, similarProducts, videoSources, type CatalogProduct, type MediaItem, type Offer, type ProductRef } from "../catalog";
 import { ModelViewerModal } from "./ModelViewerModal";
 import { AutoRail } from "./AutoRail";
 import { FraudCard } from "./FraudCard";
-import { useAgentRun } from "../hooks/useAgentRun";
+import { useCartChecker } from "../hooks/useCartChecker";
+import { TrustNotice } from "./TrustBadge";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
-import { parseIntent } from "../lib/intent";
 import { flyToCart, gsap, reducedMotion, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { Button, Chip, cx } from "./ui";
@@ -683,60 +682,27 @@ function SimilarTile({ s, onOpen }: { s: CatalogProduct; onOpen: () => void }) {
 
 /* ----------------------------------------------------------------- page */
 
-export function completeWarehouseAdd({ phase, state }: Pick<ReturnType<typeof useAgentRun>, "phase" | "state">, add: () => void): "approved" | "held" {
-  if (phase !== "done" || !state.guarded.finished || state.guarded.status !== "approved" || state.fraudCard ||
-      state.verdicts.some((v) => v.action !== "approve_checkout" || v.error)) return "held";
-  add();
-  return "approved";
+/** The seller's description, with any "Fulfillment note:" fine print folded into a disclosure like a real store's shipping details. */
+function splitDescription(text: string | null): { body: string; fine: string[] } {
+  const lines = (text ?? "").split("\n");
+  const fine = lines.filter((l) => /^fulfillment note:/i.test(l.trim())).map((l) => l.trim().replace(/^fulfillment note:\s*/i, ""));
+  return { body: lines.filter((l) => !/^fulfillment note:/i.test(l.trim())).join("\n").trim(), fine };
 }
 
-function WarehouseProductPage({ product, add, onBack }: { product: CatalogProduct; add: Cart["add"]; onBack: () => void }) {
-  const { state, phase, error, run, reset } = useAgentRun("protected", "live");
-  const [preparing, setPreparing] = useState(false);
-  const [outcome, setOutcome] = useState<"approved" | "held" | null>(null);
-  const [preparationError, setPreparationError] = useState<string | null>(null);
-  const preparation = useRef<AbortController | null>(null);
-  const awaitingRun = useRef(false);
+function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { product: CatalogProduct; cart: Cart; onBack: () => void; onAskAssistant: (ref: ProductRef) => void }) {
   const galleryRef = useRef<HTMLDivElement>(null);
-  const busy = preparing || phase === "starting" || phase === "streaming";
+  const checker = useCartChecker(cart, () => flyToCart(galleryRef.current));
+  const [variantId, setVariantId] = useState(product.offers[0]?.variantId ?? product.variantId);
+  const offer = product.offers.find((o) => o.variantId === variantId) ?? product.offers[0];
+  const optionName = product.options[0]?.name;
+  const price = offer?.price ?? product.price;
+  const result = checker.results[product.id];
+  const checking = result?.phase === "checking";
+  const held = result?.phase === "held" || result?.phase === "error";
+  const { body, fine } = splitDescription(product.description);
+  const flagged = isFlagged(product);
 
-  useEffect(() => () => preparation.current?.abort(), []);
-
-  useEffect(() => {
-    if (!awaitingRun.current || (phase !== "done" && phase !== "error")) return;
-    awaitingRun.current = false;
-    setOutcome(completeWarehouseAdd({ phase, state }, () => {
-      add(product);
-      flyToCart(galleryRef.current);
-    }));
-  }, [phase, state, add, product]);
-
-  const addToCart = async () => {
-    const itemId = parseWarehouseId(product.id);
-    if (!itemId || !product.warehouse || preparation.current || awaitingRun.current) return;
-
-    const controller = new AbortController();
-    preparation.current = controller;
-    reset();
-    setOutcome(null);
-    setPreparationError(null);
-    setPreparing(true);
-    try {
-      const form = await warehouseRunForm(itemId, product.warehouse, controller.signal);
-      if (controller.signal.aborted) return;
-      const intent = parseIntent(String(form.get("request")), String(form.get("budget")));
-      awaitingRun.current = true;
-      run(form, intent, "benign");
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      awaitingRun.current = false;
-      setPreparationError(err instanceof Error ? err.message : "Safe Checkout couldn’t start.");
-      setOutcome("held");
-    } finally {
-      preparation.current = null;
-      if (!controller.signal.aborted) setPreparing(false);
-    }
-  };
+  const addToCart = () => checker.check({ ...product, variantId, price });
 
   return (
     <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 sm:gap-8">
@@ -755,34 +721,81 @@ function WarehouseProductPage({ product, add, onBack }: { product: CatalogProduc
           ))}
         </div>
         <div className="flex min-w-0 flex-col items-start gap-4">
-          <Chip>Warehouse</Chip>
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[32px]">{product.title}</h1>
-          <p className="tnum text-[28px] font-semibold tracking-tight">{money(product.price, false, product.currency)}</p>
-          <Button variant="primary" size="lg" disabled={busy} onClick={addToCart} icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}>
-            {busy ? "Checking with Safe Checkout…" : "Add to cart"}
-          </Button>
-          <div role="status" className="flex flex-col gap-1">
-            {outcome === "approved" && <p className="text-sm font-medium text-safe">Approved · Added to cart</p>}
-            {outcome === "held" && <p className="text-sm font-medium text-danger">Held by Safe Checkout</p>}
-            {(preparationError || error) && <p className="text-sm text-ink-2">{preparationError ?? error}</p>}
+          <TrustNotice p={product} />
+          <div className="flex flex-wrap items-center gap-2">
+            {product.type && <Chip mono={false}>{product.type}</Chip>}
+            {product.rating && <Stars value={product.rating.value} count={product.rating.count} size="md" />}
           </div>
-          {(state.fraudCard || (state.verdict && state.guarded.status !== "approved")) && (
-            <FraudCard
-              className="w-full"
-              card={state.fraudCard}
-              verdict={state.verdict}
-              status={state.guarded.status}
-              attempted={state.guarded.attempted}
-              evidence={state.guarded.evidence}
-              finished={state.guarded.finished}
-            />
-          )}
-          {product.description && (
-            <div className="card w-full p-5 sm:p-6">
-              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
-              <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{product.description}</p>
+          <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[32px]">{product.title}</h1>
+          <p className="tnum text-[28px] font-semibold tracking-tight">{money(price, false, product.currency)}</p>
+
+          {product.offers.length > 1 && (
+            <div className="w-full">
+              <p className="label mb-1.5">{optionName ?? "Option"}</p>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={optionName ?? "Option"}>
+                {product.offers.map((o) => {
+                  const on = o.variantId === variantId;
+                  const delta = (o.price ?? 0) - (product.offers[0]?.price ?? 0);
+                  return (
+                    <button
+                      key={o.variantId}
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => setVariantId(o.variantId)}
+                      className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors", on ? "border-ink bg-ink text-ink-inverse" : "border-line-strong text-ink hover:border-ink-3")}
+                    >
+                      {o.title}
+                      {delta > 0 && <span className={cx("tnum text-xs", on ? "opacity-80" : "text-ink-3")}>+{money(delta, false, product.currency)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
+
+          <div className="flex w-full flex-wrap items-center gap-2">
+            {held ? (
+              <Button variant="secondary" size="lg" onClick={addToCart} icon={<Plus className="size-4" />}>
+                Check again
+              </Button>
+            ) : (
+              <Button variant="primary" size="lg" disabled={checking} onClick={addToCart} icon={checking ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}>
+                {checking ? "Checking with Safe Checkout…" : cart.qtyOf(product.id) ? "Add another" : "Add to cart"}
+              </Button>
+            )}
+            <Button variant="ghost" size="lg" onClick={() => onAskAssistant(refFromProduct({ ...product, variantId, price }))} icon={<Bot className="size-4" />}>
+              Ask the assistant to buy it
+            </Button>
+          </div>
+          <div role="status" aria-live="polite" className="flex min-h-5 flex-col gap-1">
+            {checking && <p className="text-sm text-ink-2">Reading the photos and description, then checking the order…</p>}
+            {result?.phase === "approved" && <p className="text-sm font-medium text-safe">Approved · added to your cart</p>}
+            {held && <p className="text-sm font-medium text-danger">Held by Safe Checkout · nothing was added</p>}
+            {result?.phase === "error" && result.message && <p className="text-sm text-ink-2">{result.message}</p>}
+          </div>
+          {result && held && (
+            <FraudCard className="w-full" card={result.state.fraudCard} verdict={result.state.verdict} status={result.state.guarded.status} attempted={result.state.guarded.attempted} evidence={result.state.guarded.evidence} finished={result.state.guarded.finished} />
+          )}
+
+          {(body || product.features.length > 0) && (
+            <div className="card w-full p-5 sm:p-6">
+              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
+              {body && <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{body}</p>}
+              {fine.length > 0 && (
+                <details className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
+                  <summary className="cursor-pointer font-medium text-ink">Fulfillment details</summary>
+                  <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+                    {fine.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-ink-3">
+            Sold by {product.shopName ?? "a local store"}. This is a demo marketplace{flagged ? ", and this listing has been flagged by Safe Checkout." : "."}
+          </p>
         </div>
       </section>
     </div>
@@ -863,7 +876,7 @@ export function ProductPage({
     );
   }
 
-  if (product.source === "warehouse") return <WarehouseProductPage key={product.id} product={product} add={cart.add} onBack={onBack} />;
+  if (product.source === "warehouse") return <WarehouseProductPage key={product.id} product={product} cart={cart} onBack={onBack} onAskAssistant={onAskAssistant} />;
 
   const p = product;
   const offers = [...p.offers].sort((a, b) => (a.available === false ? 1 : 0) - (b.available === false ? 1 : 0) || (a.price ?? Infinity) - (b.price ?? Infinity));

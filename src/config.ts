@@ -83,26 +83,44 @@ export const REPLAY_SPEED = 1;
 // Each run endpoint takes the multipart form described in README and returns { run_id }.
 // The stream endpoint is Server-Sent Events, one TraceEvent per `data:` line.
 
+/** "cart" (RunKind) is the check that runs when a shopper adds a warehouse listing to their cart: no shopping model. */
 export type AgentKind = "unprotected" | "protected";
+/** AgentKind plus the cart check */
+export type RunKind = AgentKind | "cart";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
+/**
+ * Where the backend API lives. Empty (the default) means "same origin": in development Vite proxies
+ * /api, /media, /health and /shop-mcp to localhost:8000. When the web app and the API are deployed on
+ * different hosts, set VITE_API_URL at build time, e.g. https://api.example.com (no trailing slash).
+ */
+export const API_BASE = (env.VITE_API_URL ?? "").replace(/\/+$/, "");
+
+/** A backend path ("/api/...", "/media/...") as a full URL. Absolute URLs pass through untouched. */
+export const apiUrl = (path: string): string => (/^https?:\/\//i.test(path) ? path : `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`);
+
+/** A URL the backend handed us (a photo, a clip, an evidence crop) that may be relative to the API. */
+export const assetUrl = (url: string | null | undefined): string | null => (url ? (url.startsWith("/") ? apiUrl(url) : url) : null);
+
 export const ENDPOINTS = {
   unprotected: {
-    run: env.VITE_UNPROTECTED_RUN_URL ?? "/api/run",
+    run: env.VITE_UNPROTECTED_RUN_URL ?? apiUrl("/api/run"),
     /** sent as the `mode` form field; the shared /api/run route uses it to pick the pipeline */
     mode: env.VITE_UNPROTECTED_RUN_MODE ?? "victim",
   },
   protected: {
-    run: env.VITE_PROTECTED_RUN_URL ?? "/api/run",
+    run: env.VITE_PROTECTED_RUN_URL ?? apiUrl("/api/run"),
     mode: env.VITE_PROTECTED_RUN_MODE ?? "guarded",
   },
-  both: { run: "/api/run", mode: "both" },
-  stream: env.VITE_STREAM_URL ?? "/api/runs/{id}/stream",
+  /** the cart check: one listing, checked the moment it is added */
+  cart: { run: apiUrl("/api/check-cart"), mode: "guarded" },
+  both: { run: apiUrl("/api/run"), mode: "both" },
+  stream: env.VITE_STREAM_URL ?? apiUrl("/api/runs/{id}/stream"),
   /** landing-search router (Gemini Decisions API on the backend); empty string disables it */
-  router: env.VITE_ROUTER_URL ?? "/api/route",
+  router: env.VITE_ROUTER_URL ?? apiUrl("/api/route"),
   /** service health check; empty string turns the "temporarily unavailable" banner off */
-  health: env.VITE_HEALTH_URL ?? "/health",
+  health: env.VITE_HEALTH_URL ?? apiUrl("/health"),
 };
 
 /**

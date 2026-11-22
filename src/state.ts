@@ -1,3 +1,4 @@
+import { assetUrl } from "./config";
 import type { EvidenceItem, FraudCard, Intent, Pane, TraceEvent, Verdict } from "./types";
 import { STATE_CHANGING, summarizeCall, violatesIntent, type ProductLedger } from "./lib/spend";
 
@@ -235,7 +236,7 @@ export function applyEvent(s: ArenaState, e: TraceEvent): ArenaState {
     }
 
     case "evidence": {
-      const items = Array.isArray(data.items) ? (data.items as EvidenceItem[]) : [];
+      const items = Array.isArray(data.items) ? (data.items as EvidenceItem[]).map(resolveEvidenceUrls) : [];
       return patchPane(s, paneKey, { ...base, evidence: items });
     }
 
@@ -273,4 +274,13 @@ export function parseJsonl(text: string): TraceEvent[] {
 
 export function replayAll(events: TraceEvent[], intent: Intent | null = null): ArenaState {
   return events.reduce(applyEvent, initialState(intent));
+}
+
+/** Evidence pictures and clips are served by the API, so with a separately hosted API their paths need its origin. */
+function resolveEvidenceUrls(item: EvidenceItem): EvidenceItem {
+  const out: Record<string, unknown> = { ...item };
+  for (const key of ["crop_url", "frame_url", "clip_url", "source_url"]) {
+    if (typeof out[key] === "string") out[key] = assetUrl(out[key] as string);
+  }
+  return out as unknown as EvidenceItem;
 }

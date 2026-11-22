@@ -7,11 +7,9 @@
  *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
-import productTypes from "../../backend/eval/genprops/product_types.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 import { getCountry } from "./locale";
-import { DEMO_MODE } from "./config";
-import { fetchDataset, fileUrl, imageUrl, mediaToFetch, type DatasetItem, type WarehousePurchase } from "./lib/dataset";
+import { DEMO_MODE, apiUrl, assetUrl } from "./config";
 
 export interface MediaSource {
   url: string;
@@ -73,10 +71,23 @@ export interface Offer {
   options: { name: string; label: string }[];
 }
 
+/** What the marketplace has learned about a warehouse listing and its merchant (from real checks). */
+export interface Trust {
+  merchantId: string | null;
+  merchantTrust: number;
+  merchantStatus: "trusted" | "watch" | "flagged";
+  productStatus: "clear" | "watch" | "flagged";
+  incidents: number;
+  reasons: string[];
+  /** how far down the results the listing sinks (0 = not at all) */
+  penalty: number;
+}
+
 export interface CatalogProduct {
   id: string;
   source: "shopify" | "warehouse";
-  warehouse?: WarehousePurchase;
+  /** warehouse listings only */
+  trust?: Trust | null;
   /** featured variant: what cart/checkout line items reference */
   variantId: string | null;
   title: string;
@@ -124,7 +135,7 @@ export interface SearchOptions {
   signal?: AbortSignal;
   /** false skips network sources (offline rehearsal) */
   network?: boolean;
-  /** Storefront listings can route warehouse adds through the guarded product page. */
+  /** Mix in the local warehouse storefronts (default true). */
   includeWarehouse?: boolean;
 }
 
@@ -186,9 +197,24 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
   const desc = obj(p.description);
   const rating = obj(p.rating);
 
+  const wh = obj(p.warehouse);
+  const isWarehouse = id.startsWith("wh:");
+  const trust: Trust | null = isWarehouse
+    ? {
+        merchantId: str(wh.merchant),
+        merchantTrust: num(wh.merchant_trust) ?? 100,
+        merchantStatus: (str(wh.merchant_status) as Trust["merchantStatus"]) ?? "trusted",
+        productStatus: (str(wh.product_status) as Trust["productStatus"]) ?? "clear",
+        incidents: num(wh.incidents) ?? 0,
+        reasons: strList(wh.reasons),
+        penalty: num(wh.penalty) ?? 0,
+      }
+    : null;
+
   return {
     id,
-    source: "shopify",
+    source: isWarehouse ? "warehouse" : "shopify",
+    trust,
     variantId: str(v.id),
     title,
     price,
@@ -198,7 +224,7 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
     shop: str(seller.domain) ?? str(p.shop) ?? str(p.domain),
     shopName: str(seller.name) ?? str(p.shop_name),
     url: str(v.url) ?? str(p.url) ?? str(p.product_url),
-    image: str(firstImage?.url) ?? str(obj(firstImage?.preview).url) ?? str(p.image_url) ?? str(obj(p.image).url) ?? str(p.image),
+    image: assetUrl(str(firstImage?.url) ?? str(obj(firstImage?.preview).url) ?? str(p.image_url) ?? str(obj(p.image).url) ?? str(p.image)),
     description: plainText(str(desc.plain) ?? str(desc.html) ?? str(p.description) ?? str(p.body)),
     type: str(p.product_type) ?? str(p.category),
     available: typeof obj(v.availability).available === "boolean" ? (obj(v.availability).available as boolean) : null,
@@ -221,7 +247,7 @@ function strList(v: unknown): string[] {
 }
 
 function toMedia(m: Obj): MediaItem | null {
-  const url = str(m.url) ?? str(obj(m.preview).url);
+  const url = assetUrl(str(m.url) ?? str(obj(m.preview).url));
   if (!url) return null;
   const t = String(m.type ?? "image").toLowerCase();
   const type: MediaItem["type"] = t === "audio" ? "audio" : t.includes("external") ? "external_video" : t.includes("model") || t.includes("3d") ? "model_3d" : t.includes("video") ? "video" : "image";
@@ -236,7 +262,7 @@ function toMedia(m: Obj): MediaItem | null {
     alt: str(m.alt_text) ?? str(m.alt),
     width: num(m.width),
     height: num(m.height),
-    poster: type === "image" ? null : str(obj(m.preview).url),
+    poster: type === "image" ? null : assetUrl(str(obj(m.preview).url)),
     sources,
     duration: num(m.duration),
   };
@@ -260,7 +286,7 @@ function toOffer(v: Obj, fallbackCurrency: string): Offer | null {
     checkoutUrl: str(v.checkout_url),
     condition: strList(v.condition),
     rating: num(rating.value) != null ? { value: num(rating.value)!, count: num(rating.count) ?? 0 } : null,
-    image: str(media[0]?.url) ?? str(obj(media[0]?.preview).url),
+    image: assetUrl(str(media[0]?.url) ?? str(obj(media[0]?.preview).url)),
     seller: {
       id: str(seller.id),
       name: str(seller.name),
@@ -276,68 +302,55 @@ const DEMO: CatalogProduct[] = (sample.products as unknown[]).map(normalizeProdu
 export const demoCatalog = () => DEMO;
 export const findDemo = (id: string) => DEMO.find((p) => p.id === id) ?? null;
 
-const WAREHOUSE_ID = /^wh:(type-(\d+)-(v\d+))$/;
+const WAREHOUSE_ID = /^wh:([a-z0-9][a-z0-9-]*)$/;
 
+/** "wh:hoodie-x" -> "hoodie-x" (the slug the warehouse API uses), or null for any other id. */
 export function parseWarehouseId(id: string): string | null {
   return WAREHOUSE_ID.exec(id)?.[1] ?? null;
 }
 
-const warehouseTypes = new Map(productTypes.map(({ n, type }) => [n, type]));
+export const isWarehouseId = (id: string) => id.startsWith("wh:");
 
-function warehouseProduct(item: DatasetItem): CatalogProduct | null {
-  const id = `wh:${item.item_id}`;
-  const [, , typeNumber, variant] = WAREHOUSE_ID.exec(id) ?? [];
-  const productId = str(item.product?.product_id);
-  const title = str(item.product?.title);
-  if (!variant || !productId || !title) return null;
-
-  const image = item.files?.includes("image.png") ? imageUrl(item.item_id) : undefined;
-  const product = normalizeProduct({
-    id,
-    title,
-    price: minorToMajor(item.product?.price_cents, "USD"),
-    shop_name: "Warehouse",
-    image,
-    product_type: item.product_type ?? item.product?.product_type ?? warehouseTypes.get(Number(typeNumber)),
-    media: mediaToFetch(item).map(({ kind, name }) => ({
-      type: kind, url: fileUrl(item.item_id, name), preview: kind === "video" ? { url: image } : undefined,
-    })),
-  });
-  return product && {
-    ...product,
-    source: "warehouse",
-    title: `${title} (Warehouse ${variant})`,
-    warehouse: { productId, files: item.files, request: item.request, budget: item.budget },
-  };
+interface WarehouseResponse {
+  products?: unknown[];
+  total?: number;
 }
 
-const words = (value: string) => value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-
-function matchesWarehouseQuery(product: CatalogProduct, terms: string[]): boolean {
-  const matches = (value: string) => {
-    const tokens = words(value);
-    return terms.every((term) => tokens.some((token) =>
-      token === term || token === `${term}s` || term === `${token}s`,
-    ));
-  };
-  return matches(str(product.raw.title) ?? "") || matches(product.type ?? "");
+/** Our own storefronts, from the backend. Never throws: a store that is down simply has no results. */
+async function searchWarehouse(query: string, maxPrice: number | null, limit: number, signal?: AbortSignal): Promise<{ items: CatalogProduct[]; total: number }> {
+  if (!query.trim()) return { items: [], total: 0 };
+  try {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    if (maxPrice != null) params.set("max_price", String(maxPrice));
+    const r = await fetch(apiUrl(`/api/warehouse/products?${params}`), { signal });
+    if (!r.ok) return { items: [], total: 0 };
+    const j = (await r.json()) as WarehouseResponse;
+    const items = (j.products ?? []).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
+    return { items, total: j.total ?? items.length };
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+    return { items: [], total: 0 };
+  }
 }
 
-let datasetRequest: Promise<DatasetItem[]> | undefined;
-
-function warehouseDataset(): Promise<DatasetItem[]> {
-  datasetRequest ??= fetchDataset().catch(() => []).finally(() => { datasetRequest = undefined; });
-  return datasetRequest;
+/**
+ * Warehouse listings and Shopify results in one list, so shoppers (and the assistant) meet them together.
+ * Position decides the order: the i-th Shopify result sits at i, the j-th warehouse result at 1.6 j plus
+ * the penalty the marketplace gives its merchant. A trusted merchant's listings mix in near the top; a
+ * flagged merchant's sink below everything.
+ */
+export function mixResults(real: CatalogProduct[], warehouse: CatalogProduct[]): CatalogProduct[] {
+  if (!warehouse.length) return real;
+  const scored = [
+    ...real.map((p, i) => ({ p, score: i })),
+    ...warehouse.map((p, j) => ({ p, score: j * 1.6 + (p.trust?.penalty ?? 0) + 0.5 })),
+  ];
+  return scored.sort((a, b) => a.score - b.score).map((x) => x.p);
 }
 
-async function searchWarehouse(query: string, maxPrice: number | null): Promise<CatalogProduct[]> {
-  const terms = words(query);
-  if (!terms.length) return [];
-  const items = await warehouseDataset();
-  return items.map(warehouseProduct).filter((p): p is CatalogProduct =>
-    p != null && matchesWarehouseQuery(p, terms) && (maxPrice == null || (p.price ?? Infinity) <= maxPrice),
-  );
-}
+/** Listings sold by a merchant the marketplace has learned to distrust, or flagged themselves. */
+export const isFlagged = (p: Pick<CatalogProduct, "trust">) => p.trust?.productStatus === "flagged" || p.trust?.merchantStatus === "flagged";
+export const isWatched = (p: Pick<CatalogProduct, "trust">) => !isFlagged(p) && (p.trust?.productStatus === "watch" || p.trust?.merchantStatus === "watch");
 
 export function isUrl(q: string): boolean {
   return /^https?:\/\/\S+$/i.test(q.trim()) || /^[\w-]+(\.[\w-]+)+\/\S*$/.test(q.trim());
@@ -374,25 +387,37 @@ let shopifyUnavailable = false;
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const cache = new Map<string, { at: number; value: Promise<SearchResult> }>();
 
-export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
-  const { maxPrice = null, limit = 12, cursor, network = true, includeWarehouse = false } = opts;
-  const key = JSON.stringify([q.trim().toLowerCase(), maxPrice, limit, cursor ?? null, network, includeWarehouse, getCountry().code]);
+// Only the Shopify half is cached: warehouse trust changes whenever a check blocks something, so its
+// results are always fetched fresh and merged in.
+function cachedShopify(q: string, opts: SearchOptions): Promise<SearchResult> {
+  const { maxPrice = null, limit = 12, cursor, network = true } = opts;
+  const key = JSON.stringify([q.trim().toLowerCase(), maxPrice, limit, cursor ?? null, network, getCountry().code]);
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return withAbort(hit.value, opts.signal);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
   // The shared request is never tied to one caller's AbortSignal.
-  const shopify = searchUncached(q, { ...opts, signal: undefined });
-  const value = includeWarehouse && network && !cursor
-    ? Promise.all([shopify, searchWarehouse(q, maxPrice)]).then(([result, warehouse]) => warehouse.length ? {
-        ...result,
-        items: [...warehouse, ...result.items], // our own listings first, so they are not buried under hundreds of Shopify hits
-        error: undefined,
-        total: result.total == null ? undefined : result.total + warehouse.length,
-      } : result)
-    : shopify;
+  const value = searchUncached(q, { ...opts, signal: undefined });
   cache.set(key, { at: Date.now(), value });
   value.then((r) => (r.source === "demo" || r.error) && cache.delete(key)).catch(() => cache.delete(key));
   if (cache.size > 60) cache.delete(cache.keys().next().value!);
-  return withAbort(value, opts.signal);
+  return value;
+}
+
+/** Shopify results with our warehouse listings mixed in (see mixResults). Warehouse listings are on by default. */
+export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<SearchResult> {
+  const { maxPrice = null, limit = 12, cursor, network = true, includeWarehouse = true } = opts;
+  const shopify = cachedShopify(q, opts);
+  if (!includeWarehouse || !network || cursor) return withAbort(shopify, opts.signal);
+  const merged = Promise.all([shopify, searchWarehouse(q, maxPrice, limit, opts.signal)]).then(([result, warehouse]): SearchResult =>
+    warehouse.items.length
+      ? {
+          ...result,
+          items: mixResults(result.items, warehouse.items),
+          error: undefined, // our own storefronts answered, so this is not a failed search
+          total: result.total == null ? undefined : result.total + warehouse.total,
+        }
+      : result,
+  );
+  return withAbort(merged, opts.signal);
 }
 
 function withAbort<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -487,18 +512,15 @@ async function searchUncached(q: string, opts: SearchOptions = {}): Promise<Sear
 const productCache = new Map<string, { product: CatalogProduct | null; source: CatalogSource }>();
 
 export async function getProduct(id: string, network = true): Promise<{ product: CatalogProduct | null; source: CatalogSource | "warehouse" }> {
-  if (id.startsWith("wh:")) {
-    const itemId = parseWarehouseId(id);
-    if (!itemId || !network) return { product: null, source: "warehouse" };
-    const item = (await warehouseDataset()).find((row) => row.item_id === itemId);
-    const product = item ? warehouseProduct(item) : null;
-    if (product && item?.files?.includes("description.txt")) {
-      const description = await fetch(fileUrl(itemId, "description.txt"))
-        .then((r) => r.ok ? r.text() : null)
-        .catch(() => null);
-      return { product: { ...product, description }, source: "warehouse" };
+  if (isWarehouseId(id)) {
+    if (!network) return { product: null, source: "warehouse" };
+    try {
+      const r = await fetch(apiUrl(`/api/warehouse/products/${encodeURIComponent(id)}`));
+      if (!r.ok) return { product: null, source: "warehouse" };
+      return { product: normalizeProduct(((await r.json()) as { product?: unknown }).product), source: "warehouse" }; // never cached: trust changes
+    } catch {
+      return { product: null, source: "warehouse" };
     }
-    return { product, source: "warehouse" };
   }
   const demo = DEMO_MODE ? findDemo(id) : null;
   if (demo || !network) return { product: demo, source: "demo" };

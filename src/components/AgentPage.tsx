@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Bot, Loader2, ShieldAlert, ShieldCheck, ShieldX, ShoppingCart, TriangleAlert } from "lucide-react";
 import { RequestPanel } from "./RequestPanel";
-import { TracePane } from "./TracePane";
+import { plainText, TracePane } from "./TracePane";
 import { Seismograph } from "./Seismograph";
 import { VerdictBanner } from "./VerdictBanner";
 import { FraudCard } from "./FraudCard";
@@ -289,7 +289,17 @@ export function AgentPage({
   } else {
     const saved = state.fraudCard?.dollars_defended;
     if (phase === "idle") result = { tone: "neutral", icon: <ShieldCheck className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "What can I find for you?", body: "Describe what you need on the left. Safe Checkout verifies the order before it’s placed." };
-    else if (!verdict) result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: p.status === "idle" ? "Starting…" : "Working on it…", body: "The assistant is shopping. The order will be verified before it’s placed." };
+    else if (!verdict && p.finished) {
+      // the run ended without trying to buy anything: say so, with the assistant's own last words
+      const said = [...p.steps].reverse().find((s) => s.kind === "log" && s.message)?.message;
+      result = {
+        tone: "neutral",
+        icon: <ShoppingCart className="size-6 shrink-0" />,
+        eyebrow: "Result",
+        headline: "No order placed",
+        body: said ? `The assistant stopped without building a cart: “${plainText(said).slice(0, 220)}”` : "The assistant finished without building a cart. Try naming the product, size and budget.",
+      };
+    } else if (!verdict) result = { tone: "neutral", icon: null, pending: true, eyebrow: "Result", headline: p.status === "idle" ? "Starting…" : "Working on it…", body: "The assistant is shopping. The order will be verified before it’s placed." };
     else if (verdict.error) result = { tone: "warn", icon: <ShieldAlert className="size-6 shrink-0" />, eyebrow: "Result", headline: "Order on hold", body: `Verification couldn’t finish (${verdict.error}), so the order was held. Nothing was charged.` };
     else if (verdict.action === "approve_checkout")
       result = { tone: "safe", icon: <ShieldCheck className="size-6 shrink-0" />, eyebrow: "Result", headline: "Order verified", body: `Checked in ${Math.round(verdict.latency_ms)} ms. It matches what you asked for (${asked}).`, action: otherBtn };

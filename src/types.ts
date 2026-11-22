@@ -85,6 +85,24 @@ export interface SafeCart {
   line_items?: { product_id: string; variant_id?: string; quantity: number; title?: string; price?: number }[];
   total: number;
   intercepted?: boolean;
+  /** the prepared offer's photo */
+  image?: string | null;
+  /** more safe choices, cheapest first, each with its own store's checkout link */
+  alternatives?: SafeOffer[];
+}
+
+export interface SafeOffer {
+  product_id: string;
+  variant_id: string;
+  title: string | null;
+  variant_title?: string | null;
+  shop: string;
+  shop_name?: string | null;
+  price: number;
+  total: number;
+  image: string | null;
+  checkout_url: string | null;
+  rating?: { value: number; count?: number | null } | null;
 }
 
 export interface FraudCard {

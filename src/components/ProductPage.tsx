@@ -55,7 +55,7 @@ function offerAsProduct(p: CatalogProduct, o: Offer): CatalogProduct {
 
 const AUTOPLAY_MS = 4500;
 
-function Slide({ m, title, first, onPlay, onOpen3D }: { m: MediaItem; title: string; first: boolean; onPlay: (playing: boolean) => void; onOpen3D: () => void }) {
+function Slide({ m, title, first, onPlay, onOpen3D, cover = false }: { m: MediaItem; title: string; first: boolean; onPlay: (playing: boolean) => void; onOpen3D: () => void; cover?: boolean }) {
   const [embed, setEmbed] = useState(false);
   if (m.type === "video") {
     return (
@@ -122,7 +122,7 @@ function Slide({ m, title, first, onPlay, onOpen3D }: { m: MediaItem; title: str
       decoding="async"
       referrerPolicy="no-referrer"
       draggable={false}
-      className="size-full object-contain p-[4%]"
+      className={cover ? "size-full object-cover" : "size-full object-contain p-[4%]"}
     />
   );
 }
@@ -264,6 +264,10 @@ function Gallery({ media, title, fallback, wide = false }: { media: MediaItem[];
   const n = items.length;
   const images = items.filter((m) => m.type === "image");
   const summary = mediaSummary(items);
+  // A marketplace listing's photos are full-bleed shots: the frame takes the first photo's own proportions and the
+  // photos fill it, instead of floating in white bands. Shopify's cut-outs keep the padded square.
+  const first = images[0];
+  const ratio = wide ? (first?.width && first?.height ? Math.min(1.9, Math.max(0.8, first.width / first.height)) : 4 / 3) : null;
 
   const go = (next: number, user = true) => {
     if (!n) return;
@@ -316,7 +320,8 @@ function Gallery({ media, title, fallback, wide = false }: { media: MediaItem[];
     <div className="flex flex-col gap-2.5">
       <div
         ref={frame}
-        className={cx("group/gal card relative touch-pan-y overflow-hidden bg-white select-none", shape, "short:aspect-auto short:h-[72svh]")}
+        className={cx("group/gal card relative touch-pan-y overflow-hidden select-none", ratio ? "bg-black" : cx("bg-white", shape), "short:aspect-auto short:h-[72svh]")}
+        style={ratio ? { aspectRatio: String(ratio) } : undefined}
         tabIndex={0}
         role="region"
         aria-roledescription="carousel"
@@ -366,7 +371,7 @@ function Gallery({ media, title, fallback, wide = false }: { media: MediaItem[];
           {items.map((m, k) => (
             <div key={m.url + k} className="relative size-full shrink-0" aria-hidden={k !== i}>
               {Math.abs(k - i) <= 1 || k === 0 || (i === 0 && k === n - 1) ? (
-                <Slide m={m} title={title} first={k === 0} onPlay={setPlaying} onOpen3D={() => setModel(m)} />
+                <Slide m={m} title={title} first={k === 0} onPlay={setPlaying} onOpen3D={() => setModel(m)} cover={!!ratio && m.type === "image"} />
               ) : null}
             </div>
           ))}
@@ -693,7 +698,9 @@ function splitDescription(text: string | null, title: string): { body: string; b
   return { body: rest.filter((l) => !l.startsWith("- ")).join("\n"), bullets: rest.filter((l) => l.startsWith("- ")).map((l) => l.slice(2)), fine };
 }
 
-function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { product: CatalogProduct; cart: Cart; onBack: () => void; onAskAssistant: (ref: ProductRef) => void }) {
+function WarehouseProductPage({ product: initial, cart, onBack, onAskAssistant }: { product: CatalogProduct; cart: Cart; onBack: () => void; onAskAssistant: (ref: ProductRef) => void }) {
+  // the listing as shoppers see it now: its stars and seller trust change when a check catches something
+  const [product, setProduct] = useState(initial);
   const galleryRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<HTMLElement>(null);
   const checker = useCartChecker(cart, () => flyToCart(galleryRef.current));
@@ -705,6 +712,19 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
   const checking = result?.phase === "checking";
   const held = result?.phase === "held" || result?.phase === "error";
   const elapsed = useElapsed(checking);
+  const settled = !!result && !checking && (result.phase === "approved" || result.state.guarded.finished);
+  useEffect(() => {
+    if (!settled) return;
+    let live = true;
+    // the incident is written as the run closes; read the listing back a moment later
+    const t = window.setTimeout(() => {
+      getProduct(initial.id).then((r) => live && r.product && setProduct({ ...r.product, source: initial.source })).catch(() => undefined);
+    }, 800);
+    return () => {
+      live = false;
+      window.clearTimeout(t);
+    };
+  }, [settled, initial.id, initial.source]);
   const { body, bullets, fine } = splitDescription(product.description, product.title);
   const flagged = isFlagged(product);
   const t = product.trust;
@@ -717,7 +737,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
   const addToCart = () => checker.check({ ...product, variantId, price });
 
   return (
-    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 sm:gap-8">
+    <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 sm:gap-8">
       <nav className="flex items-center gap-2 text-sm text-ink-3" aria-label="Breadcrumb">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink">
           <ArrowLeft className="size-4" /> Back

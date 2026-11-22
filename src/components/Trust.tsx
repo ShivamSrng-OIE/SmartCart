@@ -119,7 +119,7 @@ export function Trust() {
 
   if (!data) {
     return (
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
         <div className="h-16 w-1/2 animate-pulse rounded-lg bg-surface-2" />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="card h-24 animate-pulse" />)}</div>
         {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
@@ -132,7 +132,7 @@ export function Trust() {
   const { analysis } = data;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 sm:gap-5">
+    <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4 sm:gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="label mb-1">Marketplace trust</p>

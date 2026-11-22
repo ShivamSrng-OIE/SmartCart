@@ -118,7 +118,7 @@ export function Settings() {
 
   if (!server) {
     return (
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         <div className="h-14 w-1/2 animate-pulse rounded-lg bg-surface-2" />
         <div className="card h-72 animate-pulse" />
         {message && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{message.text}</p>}
@@ -129,7 +129,7 @@ export function Settings() {
   const keySet = server.keys[provider];
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 sm:gap-5">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
       <div>
         <p className="label mb-1">Settings</p>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Models</h1>

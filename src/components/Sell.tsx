@@ -40,7 +40,7 @@ function LoginCard({ onSignedIn }: { onSignedIn: () => void }) {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:items-center md:py-6 xl:max-w-6xl">
       <div className="flex flex-col justify-center gap-3 py-2 md:py-8">
         <span className="flex size-11 items-center justify-center rounded-xl bg-brand text-brand-ink">
           <Store className="size-6" />
@@ -503,7 +503,7 @@ function Portal({ session, onSignOut }: { session: Session; onSignOut: () => voi
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-4">
       <header className="card flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-ink"><Store className="size-6" /></span>
@@ -625,6 +625,6 @@ export function Sell() {
     setSession(null);
   }, []);
 
-  if (loading) return <div className="card mx-auto h-64 w-full max-w-4xl animate-pulse" aria-label="Loading" />;
+  if (loading) return <div className="card mx-auto h-64 w-full max-w-5xl animate-pulse" aria-label="Loading" />;
   return session ? <Portal session={session} onSignOut={signOut} /> : <LoginCard onSignedIn={refresh} />;
 }

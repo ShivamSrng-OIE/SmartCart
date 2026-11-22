@@ -230,6 +230,7 @@ async def chat_chain(models: tuple[str, ...] | list[str], messages: list[dict], 
     ordered = ([prefer] if prefer in models else []) + [m for m in models if m != prefer]
     deadline = time.monotonic() + timeout
     last: OpenRouterError | None = None
+    all_busy = True  # every model so far answered 429: then a retry of the last one rarely helps
     for n, model in enumerate(ordered):
         remaining = deadline - time.monotonic()
         if remaining <= 3:
@@ -242,11 +243,13 @@ async def chat_chain(models: tuple[str, ...] | list[str], messages: list[dict], 
         try:
             last_model = n == len(ordered) - 1
             msg = await chat(model, messages, tools=tools, json_schema=schema, json_mode=bool(json_mode and caps.get("json")),
-                             temperature=temperature, max_tokens=max_tokens, timeout=cap, attempts=2 if last_model else 1,
+                             temperature=temperature, max_tokens=max_tokens, timeout=cap,
+                             attempts=2 if last_model and not (all_busy and n > 0) else 1,
                              allow_fallback=False)  # a busy model is skipped at once; only the last gets a retry
             return msg, model
         except OpenRouterError as exc:
             last = exc
+            all_busy = all_busy and exc.status == 429
             log.warning("openrouter %s failed (%s), trying the next model", model, str(exc)[:80])
             if exc.status == 401:
                 break

@@ -20,7 +20,9 @@ the Models page can set one for the running process and, if asked, write it to b
 from __future__ import annotations
 
 import json
+import logging
 import threading
+import time
 from dataclasses import dataclass
 
 from app import config, paths
@@ -78,6 +80,7 @@ GEMINI_MODELS: dict[str, str] = {
     "carbon": config.MODELS["redteam"],
 }
 
+log = logging.getLogger(__name__)
 _SETTINGS_FILE = paths.STATE / "llm_settings.json"
 _lock = threading.Lock()
 _state: dict | None = None
@@ -105,8 +108,37 @@ def _save(state: dict) -> None:
     tmp.replace(_SETTINGS_FILE)
 
 
-def provider() -> str:
+REST_S = 180.0  # how long OpenRouter rests after every free model failed (rate limits reset within minutes)
+_rest_until = 0.0
+
+
+def chosen() -> str:
+    """The provider picked on the Models page."""
     return _load()["provider"]
+
+
+def provider() -> str:
+    """The provider the agents use right now: the chosen one, except that while every free OpenRouter model is
+    rate limited (or down) the jobs run on Gemini, if a Gemini key is set, until OpenRouter has rested. Paid
+    OpenRouter models are never used."""
+    picked = chosen()
+    if picked == "openrouter" and resting() and _keys.get("gemini"):
+        return "gemini"
+    return picked
+
+
+def resting() -> bool:
+    return time.monotonic() < _rest_until
+
+
+def rest_openrouter(seconds: float = REST_S) -> bool:
+    """Every free OpenRouter model failed: run on Gemini for a while. Returns whether there is a Gemini to use."""
+    global _rest_until
+    if not _keys.get("gemini"):
+        return False
+    _rest_until = time.monotonic() + seconds
+    log.warning("every free OpenRouter model failed; using Gemini for the next %d s", int(seconds))
+    return True
 
 
 def models_for(role: str, provider_name: str | None = None) -> tuple[str, ...]:
@@ -130,7 +162,8 @@ def api_key(provider_name: str | None = None) -> str | None:
 def snapshot() -> dict:
     """What the Models page shows (read-only). Keys are reported as set/unset only, never echoed."""
     return {
-        "provider": provider(),
+        "provider": chosen(),
+        "active": provider(),
         "providers": list(PROVIDERS),
         "roles": [{"id": r.id, "name": r.name, "label": r.label, "needs": list(r.needs),
                    "models": {p: list(models_for(r.id, p)) for p in PROVIDERS}} for r in ROLES],
@@ -177,5 +210,6 @@ def _write_env(name: str, value: str) -> None:
 
 
 def _reset_for_tests(state: dict | None = None) -> None:
-    global _state
+    global _state, _rest_until
     _state = state
+    _rest_until = 0.0

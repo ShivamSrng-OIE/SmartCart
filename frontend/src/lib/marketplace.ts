@@ -238,6 +238,8 @@ export interface LlmRole {
 
 export interface LlmSettings {
   provider: "gemini" | "openrouter";
+  /** the provider running the jobs right now: Gemini while every free OpenRouter model is rate limited */
+  active?: "gemini" | "openrouter";
   providers: string[];
   roles: LlmRole[];
   keys: Record<string, boolean>;

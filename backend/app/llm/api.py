@@ -69,9 +69,13 @@ async def _gemini_generate(model: str, system: str, parts, *, json_out: bool, ti
 
     cfg = types.GenerateContentConfig(system_instruction=system or None,
                                       response_mime_type="application/json" if json_out else None)
-    resp = await asyncio.wait_for(
-        gemini.client().aio.models.generate_content(model=model, contents=_gemini_parts(parts), config=cfg),
-        timeout=timeout)
+    try:
+        resp = await asyncio.wait_for(
+            gemini.client().aio.models.generate_content(model=model, contents=_gemini_parts(parts), config=cfg),
+            timeout=timeout)
+    except Exception as exc:
+        settings.note_failure("gemini", exc)
+        raise
     return resp.text or ""
 
 

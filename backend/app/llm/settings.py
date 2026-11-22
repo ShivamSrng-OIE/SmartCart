@@ -23,6 +23,7 @@ import json
 import logging
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from app import config, paths
@@ -109,7 +110,29 @@ def _save(state: dict) -> None:
 
 
 REST_S = 180.0  # how long OpenRouter rests after every free model failed (rate limits reset within minutes)
+LIMIT_S = 300.0  # how long the server's Gemini key counts as out of quota after a quota error
 _rest_until = 0.0
+_gemini_limited_until = 0.0
+
+# A visitor's own keys, for their requests only (the X-LLM-* headers; see main.RequestScope). Never stored,
+# logged or echoed; never used for anyone else.
+USER_KEYS: ContextVar[dict | None] = ContextVar("user_llm_keys", default=None)
+
+
+def user_keys() -> dict:
+    return USER_KEYS.get() or {}
+
+
+def own_key() -> str | None:
+    """The provider this request runs on with the visitor's own key, if any."""
+    keys = user_keys()
+    prefer = keys.get("prefer")
+    if prefer in PROVIDERS and keys.get(prefer):
+        return prefer
+    for p in ("gemini", "openrouter"):
+        if keys.get(p):
+            return p
+    return None
 
 
 def chosen() -> str:
@@ -121,6 +144,9 @@ def provider() -> str:
     """The provider the agents use right now: the chosen one, except that while every free OpenRouter model is
     rate limited (or down) the jobs run on Gemini, if a Gemini key is set, until OpenRouter has rested. Paid
     OpenRouter models are never used."""
+    mine = own_key()
+    if mine:
+        return mine
     picked = chosen()
     if picked == "openrouter" and resting() and _keys.get("gemini"):
         return "gemini"
@@ -132,13 +158,41 @@ def resting() -> bool:
 
 
 def rest_openrouter(seconds: float = REST_S) -> bool:
-    """Every free OpenRouter model failed: run on Gemini for a while. Returns whether there is a Gemini to use."""
+    """Every free OpenRouter model failed: run on Gemini for a while. Returns whether there is a Gemini to use.
+    A visitor's own key is their own business: its failures never rest the shared one."""
     global _rest_until
-    if not _keys.get("gemini"):
+    if own_key() or not _keys.get("gemini"):
         return False
     _rest_until = time.monotonic() + seconds
     log.warning("every free OpenRouter model failed; using Gemini for the next %d s", int(seconds))
     return True
+
+
+QUOTA_HINTS = ("429", "resource_exhausted", "resource exhausted", "quota", "rate limit", "rate-limit", "too many requests")
+
+
+def note_failure(provider_name: str, exc: BaseException) -> None:
+    """A model call failed. If it was the shared Gemini key running out of quota, remember it for a while, so
+    the app can tell visitors that it works better with their own key."""
+    global _gemini_limited_until
+    if own_key() or provider_name != "gemini":
+        return
+    text = f"{type(exc).__name__} {exc}".lower()
+    if any(h in text for h in QUOTA_HINTS):
+        _gemini_limited_until = time.monotonic() + LIMIT_S
+        log.warning("the shared Gemini key is out of quota; suggesting visitors add their own key")
+
+
+def limits() -> dict:
+    """How the shared keys are doing: what the app tells visitors (never anything about the keys themselves)."""
+    now = time.monotonic()
+    openrouter_busy = now < _rest_until or (chosen() == "openrouter" and not _keys.get("openrouter"))
+    gemini_out = now < _gemini_limited_until or not _keys.get("gemini")
+    if chosen() == "gemini":
+        state = "limited" if gemini_out else "ok"
+    else:
+        state = "ok" if not openrouter_busy else ("busy" if not gemini_out else "limited")
+    return {"state": state, "openrouter": "busy" if openrouter_busy else "ok", "gemini": "limited" if gemini_out else "ok"}
 
 
 def models_for(role: str, provider_name: str | None = None) -> tuple[str, ...]:
@@ -156,7 +210,9 @@ def model_for(role: str, provider_name: str | None = None) -> str:
 
 
 def api_key(provider_name: str | None = None) -> str | None:
-    return _keys.get(provider_name or provider()) or None
+    """The visitor's own key for this request if they gave one, else the shared key."""
+    name = provider_name or provider()
+    return user_keys().get(name) or _keys.get(name) or None
 
 
 def snapshot() -> dict:
@@ -210,6 +266,7 @@ def _write_env(name: str, value: str) -> None:
 
 
 def _reset_for_tests(state: dict | None = None) -> None:
-    global _state, _rest_until
+    global _state, _rest_until, _gemini_limited_until
     _state = state
     _rest_until = 0.0
+    _gemini_limited_until = 0.0

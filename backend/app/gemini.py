@@ -31,6 +31,25 @@ def listing_text(m: Media) -> str:
     return Path(m.path).read_text(encoding="utf-8", errors="replace")
 
 
+_by_key: dict[tuple[str, bool], object] = {}  # visitors' own keys: a small cache of clients
+
+
+def _own(beta: bool):
+    from google import genai
+
+    from app.llm import settings
+
+    key = settings.user_keys().get("gemini")
+    if not key:
+        return None
+    hit = _by_key.get((key, beta))
+    if hit is None:
+        if len(_by_key) > 32:
+            _by_key.clear()
+        hit = _by_key[(key, beta)] = genai.Client(api_key=key, **({"http_options": {"api_version": "v1beta"}} if beta else {}))
+    return hit
+
+
 def _new_client(**kw):
     from google import genai
 
@@ -44,6 +63,8 @@ def _new_client(**kw):
 
 def client():
     global _client
+    if (own := _own(False)) is not None:
+        return own
     if _client is None:
         _client = _new_client()
     return _client
@@ -51,6 +72,8 @@ def client():
 
 def beta_client():
     global _beta_client
+    if (own := _own(True)) is not None:
+        return own
     if _beta_client is None:
         _beta_client = _new_client(http_options={"api_version": "v1beta"})
     return _beta_client

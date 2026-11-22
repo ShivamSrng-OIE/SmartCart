@@ -413,6 +413,7 @@ export function ShopYourself({
   return (
     <div ref={root} className="grid grid-cols-1 w-full gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px] 2xl:gap-6">
       <div className="flex min-w-0 flex-col gap-4">
+        <h1 className="sr-only">Shop</h1>
         {/* search */}
         <section className="card p-4 sm:p-5">
           <div className="relative">

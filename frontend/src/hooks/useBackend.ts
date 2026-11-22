@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { defaultRules, getEvalLatest, getRules, health, rehearsalEval } from "../api";
+import { defaultRules, getEvalLatest, getRules, healthInfo, rehearsalEval, type ServiceLimits } from "../api";
 import { DEMO_MODE } from "../config";
 import type { EvalResults, RuleSet } from "../types";
 
@@ -8,6 +8,8 @@ export type Mode = "live" | "replay";
 export interface Backend {
   mode: Mode;
   online: boolean | null;
+  /** the shared model keys' state (rate limited, quota used up): the app then suggests adding your own key */
+  limits: ServiceLimits | null;
   rules: RuleSet;
   evalResults: EvalResults | null;
   refresh: () => void;
@@ -20,12 +22,15 @@ export interface Backend {
  */
 export function useBackend(): Backend {
   const [online, setOnline] = useState<boolean | null>(null);
+  const [limits, setLimits] = useState<ServiceLimits | null>(null);
   const [rules, setRules] = useState<RuleSet>(defaultRules);
   const [evalResults, setEval] = useState<EvalResults | null>(() => (DEMO_MODE ? rehearsalEval() : null));
 
   const load = useCallback(async () => {
-    const ok = await health();
+    const h = await healthInfo();
+    const ok = h.ok;
     setOnline(ok);
+    setLimits(h.limits);
     if (!ok) return;
     getRules()
       .then((r) => r.probes.length && setRules(r))
@@ -37,11 +42,18 @@ export function useBackend(): Backend {
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void health().then(setOnline), 15000);
+    const id = window.setInterval(
+      () =>
+        void healthInfo().then((h) => {
+          setOnline(h.ok);
+          setLimits(h.limits);
+        }),
+      15000,
+    );
     return () => window.clearInterval(id);
   }, [load]);
 
   const bumpRules = useCallback((version: number) => setRules((r) => ({ ...r, version: Math.max(r.version, version) })), []);
 
-  return { mode: DEMO_MODE ? "replay" : "live", online, rules, evalResults, refresh: () => void load(), bumpRules };
+  return { mode: DEMO_MODE ? "replay" : "live", online, limits, rules, evalResults, refresh: () => void load(), bumpRules };
 }

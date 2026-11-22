@@ -196,7 +196,9 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
         if await _openrouter_steps(ctx, text, system_prompt, on_state_change):
             return ctx
         # every free OpenRouter model was busy before the first step: continue on Gemini (settings.rest_openrouter)
-    client = client or genai.Client(api_key=config.GEMINI_API_KEY)
+    if client is None:
+        own = llm_settings.user_keys().get("gemini")  # the visitor's own Gemini key, for their run only
+        client = genai.Client(api_key=own or config.GEMINI_API_KEY)
 
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=text), *_media_parts(media)])]
     cfg = types.GenerateContentConfig(system_instruction=system_prompt, tools=[MODEL_TOOLS],

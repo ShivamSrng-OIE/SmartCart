@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { OwnKeyForm } from "./OwnKey";
 import { Check, Eye, EyeOff, KeyRound, Loader2, Play, Save, X } from "lucide-react";
 import { ApiError, getLlmSettings, putLlmKey, putLlmSettings, testRole, type LlmRole, type LlmSettings } from "../lib/marketplace";
 import { shortModel } from "../hooks/useModelLabels";
@@ -132,11 +133,19 @@ export function Settings() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5">
       <div>
         <p className="label mb-1">Settings</p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Models</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">AI models &amp; your key</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
           Pick where the agents get their intelligence. The model for each job is chosen automatically: on OpenRouter only free models are used, the best one for each job first, with the next ones as backup if it is busy.
         </p>
       </div>
+
+      <section className="card flex flex-col gap-3 p-4 sm:p-5" aria-labelledby="own-key-title">
+        <div>
+          <h2 id="own-key-title" className="text-[17px] font-semibold tracking-tight">Use your own key</h2>
+          <p className="text-xs text-ink-3">Anyone can add their own free OpenRouter or Gemini key. Your requests then run on your quota, so they stay fast even when the shared one is used up.</p>
+        </div>
+        <OwnKeyForm />
+      </section>
 
       <section className="card flex flex-col gap-4 p-4 sm:p-5" aria-label="Provider">
         <div className="flex flex-wrap items-center justify-between gap-3">

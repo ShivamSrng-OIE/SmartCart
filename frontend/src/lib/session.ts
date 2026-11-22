@@ -1,4 +1,5 @@
 import { API_BASE } from "../config";
+import { ownKeyHeaders } from "./ownKey";
 
 /**
  * One id per browser session (per tab, until it is closed). The backend keeps marketplace reputation per session,
@@ -43,6 +44,7 @@ export function installSessionHeader(): void {
     if (!isApiRequest(url)) return original(input, init);
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     headers.set(SESSION_HEADER, sessionId());
+    for (const [k, v] of Object.entries(ownKeyHeaders())) if (!headers.has(k)) headers.set(k, v); // the visitor's own key, if they added one
     return original(input, { ...init, headers });
   };
 }

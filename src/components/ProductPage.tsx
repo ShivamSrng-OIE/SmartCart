@@ -5,8 +5,10 @@ import { getProduct, isFlagged, mediaSummary, modelSources, refFromProduct, simi
 import { ModelViewerModal } from "./ModelViewerModal";
 import { AutoRail } from "./AutoRail";
 import { FraudCard } from "./FraudCard";
+import { CheckProgress, listingFacts, useElapsed } from "./CheckProgress";
+import { currentActivity } from "../lib/progress";
 import { useCartChecker } from "../hooks/useCartChecker";
-import { TrustNotice } from "./TrustBadge";
+import { TrustMeter, TrustNotice } from "./TrustBadge";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
@@ -245,7 +247,8 @@ function Lightbox({ images, start, title, onClose }: { images: MediaItem[]; star
  * - advances on its own every few seconds (dot fills as a timer); waits 8 s after you touch it,
  *   and pauses on hover, while a video plays or while the 3D viewer is open
  */
-function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string; fallback: CatalogProduct }) {
+function Gallery({ media, title, fallback, wide = false }: { media: MediaItem[]; title: string; fallback: CatalogProduct; wide?: boolean }) {
+  const shape = wide ? "aspect-[4/3] lg:aspect-[16/10]" : "aspect-[4/3] sm:aspect-[16/11] lg:aspect-square";
   const [i, setI] = useState(0);
   const [hover, setHover] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -300,7 +303,7 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
 
   if (!n) {
     return (
-      <div className="card aspect-[4/3] sm:aspect-[16/11] lg:aspect-square short:aspect-auto short:h-[72svh]">
+      <div className={cx("card", shape, "short:aspect-auto short:h-[72svh]")}>
         <ProductThumb product={fallback} size="lg" priority />
       </div>
     );
@@ -313,7 +316,7 @@ function Gallery({ media, title, fallback }: { media: MediaItem[]; title: string
     <div className="flex flex-col gap-2.5">
       <div
         ref={frame}
-        className="group/gal card relative aspect-[4/3] touch-pan-y overflow-hidden bg-white select-none sm:aspect-[16/11] lg:aspect-square short:aspect-auto short:h-[72svh]"
+        className={cx("group/gal card relative touch-pan-y overflow-hidden bg-white select-none", shape, "short:aspect-auto short:h-[72svh]")}
         tabIndex={0}
         role="region"
         aria-roledescription="carousel"
@@ -682,15 +685,17 @@ function SimilarTile({ s, onOpen }: { s: CatalogProduct; onOpen: () => void }) {
 
 /* ----------------------------------------------------------------- page */
 
-/** The seller's description, with any "Fulfillment note:" fine print folded into a disclosure like a real store's shipping details. */
-function splitDescription(text: string | null): { body: string; fine: string[] } {
-  const lines = (text ?? "").split("\n");
-  const fine = lines.filter((l) => /^fulfillment note:/i.test(l.trim())).map((l) => l.trim().replace(/^fulfillment note:\s*/i, ""));
-  return { body: lines.filter((l) => !/^fulfillment note:/i.test(l.trim())).join("\n").trim(), fine };
+/** The seller's description, split into a paragraph, a bullet list, and any "Fulfillment note:" fine print (folded away like a real store's shipping details). */
+function splitDescription(text: string | null, title: string): { body: string; bullets: string[]; fine: string[] } {
+  const lines = (text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const fine = lines.filter((l) => /^fulfillment note:/i.test(l)).map((l) => l.replace(/^fulfillment note:\s*/i, ""));
+  const rest = lines.filter((l) => !/^fulfillment note:/i.test(l) && l.toLowerCase() !== title.toLowerCase());
+  return { body: rest.filter((l) => !l.startsWith("- ")).join("\n"), bullets: rest.filter((l) => l.startsWith("- ")).map((l) => l.slice(2)), fine };
 }
 
 function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { product: CatalogProduct; cart: Cart; onBack: () => void; onAskAssistant: (ref: ProductRef) => void }) {
   const galleryRef = useRef<HTMLDivElement>(null);
+  const reviewRef = useRef<HTMLElement>(null);
   const checker = useCartChecker(cart, () => flyToCart(galleryRef.current));
   const [variantId, setVariantId] = useState(product.offers[0]?.variantId ?? product.variantId);
   const offer = product.offers.find((o) => o.variantId === variantId) ?? product.offers[0];
@@ -699,13 +704,20 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
   const result = checker.results[product.id];
   const checking = result?.phase === "checking";
   const held = result?.phase === "held" || result?.phase === "error";
-  const { body, fine } = splitDescription(product.description);
+  const elapsed = useElapsed(checking);
+  const { body, bullets, fine } = splitDescription(product.description, product.title);
   const flagged = isFlagged(product);
+  const t = product.trust;
+
+  // Show the review as soon as there is something to read: the live check, then the verdict.
+  useEffect(() => {
+    if (result) reviewRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [result?.phase === "held" || result?.phase === "error" ? "held" : result?.phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addToCart = () => checker.check({ ...product, variantId, price });
 
   return (
-    <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 sm:gap-8">
+    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 sm:gap-8">
       <nav className="flex items-center gap-2 text-sm text-ink-3" aria-label="Breadcrumb">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink">
           <ArrowLeft className="size-4" /> Back
@@ -713,24 +725,27 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
         <span>/</span>
         <span className="truncate">{product.title}</span>
       </nav>
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
-        <div ref={galleryRef}>
-          <Gallery media={product.media.filter((m) => m.type !== "audio")} title={product.title} fallback={product} />
+
+      {/* gallery stays in view on the left while the right scrolls */}
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start lg:gap-10 xl:gap-14">
+        <div ref={galleryRef} className="lg:sticky lg:top-[72px]">
+          <Gallery wide media={product.media.filter((m) => m.type !== "audio")} title={product.title} fallback={product} />
           {product.media.filter((m) => m.type === "audio").map((m) => (
             <audio key={m.url} src={m.url} controls preload="metadata" aria-label="Product audio" className="mt-3 w-full" />
           ))}
         </div>
-        <div className="flex min-w-0 flex-col items-start gap-4">
+
+        <div className="flex min-w-0 flex-col gap-4">
           <TrustNotice p={product} />
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             {product.type && <Chip mono={false}>{product.type}</Chip>}
             {product.rating && <Stars value={product.rating.value} count={product.rating.count} size="md" />}
           </div>
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[32px]">{product.title}</h1>
+          <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[32px] xl:text-[36px]">{product.title}</h1>
           <p className="tnum text-[28px] font-semibold tracking-tight">{money(price, false, product.currency)}</p>
 
           {product.offers.length > 1 && (
-            <div className="w-full">
+            <div>
               <p className="label mb-1.5">{optionName ?? "Option"}</p>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={optionName ?? "Option"}>
                 {product.offers.map((o) => {
@@ -742,7 +757,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
                       role="radio"
                       aria-checked={on}
                       onClick={() => setVariantId(o.variantId)}
-                      className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors", on ? "border-ink bg-ink text-ink-inverse" : "border-line-strong text-ink hover:border-ink-3")}
+                      className={cx("inline-flex h-10 min-w-12 items-center justify-center gap-1.5 rounded-lg border px-3.5 text-[14px] font-medium transition-colors", on ? "border-ink bg-ink text-ink-inverse" : "border-line-strong bg-surface text-ink hover:border-ink-3")}
                     >
                       {o.title}
                       {delta > 0 && <span className={cx("tnum text-xs", on ? "opacity-80" : "text-ink-3")}>+{money(delta, false, product.currency)}</span>}
@@ -753,50 +768,104 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
             </div>
           )}
 
-          <div className="flex w-full flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             {held ? (
-              <Button variant="secondary" size="lg" onClick={addToCart} icon={<Plus className="size-4" />}>
+              <Button variant="secondary" size="lg" onClick={addToCart} icon={<Plus className="size-4" />} className="w-full sm:w-auto">
                 Check again
               </Button>
             ) : (
-              <Button variant="primary" size="lg" disabled={checking} onClick={addToCart} icon={checking ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}>
-                {checking ? "Checking with Safe Checkout…" : cart.qtyOf(product.id) ? "Add another" : "Add to cart"}
+              <Button variant="primary" size="lg" disabled={checking} onClick={addToCart} icon={checking ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} className="w-full sm:w-auto sm:min-w-44">
+                {checking ? "Checking…" : cart.qtyOf(product.id) ? "Add another" : "Add to cart"}
               </Button>
             )}
-            <Button variant="ghost" size="lg" onClick={() => onAskAssistant(refFromProduct({ ...product, variantId, price }))} icon={<Bot className="size-4" />}>
+            <Button variant="secondary" size="lg" onClick={() => onAskAssistant(refFromProduct({ ...product, variantId, price }))} icon={<Bot className="size-4" />} className="w-full sm:w-auto">
               Ask the assistant to buy it
             </Button>
           </div>
-          <div role="status" aria-live="polite" className="flex min-h-5 flex-col gap-1">
-            {checking && <p className="text-sm text-ink-2">Reading the photos and description, then checking the order…</p>}
-            {result?.phase === "approved" && <p className="text-sm font-medium text-safe">Approved · added to your cart</p>}
-            {held && <p className="text-sm font-medium text-danger">Held by Safe Checkout · nothing was added</p>}
+
+          <div role="status" aria-live="polite" className="min-h-6">
+            {checking && <p className="flex items-center gap-2 text-sm text-ink-2"><Loader2 className="size-4 animate-spin" /> {currentActivity(result.state, listingFacts(product))}… {elapsed}s</p>}
+            {result?.phase === "approved" && <p className="flex items-center gap-2 text-sm font-medium text-safe"><Check className="size-4" /> Approved · added to your cart</p>}
+            {held && <p className="text-sm font-medium text-danger">Held by Safe Checkout · nothing was added. The review is just below.</p>}
             {result?.phase === "error" && result.message && <p className="text-sm text-ink-2">{result.message}</p>}
           </div>
-          {result && held && (
-            <FraudCard className="w-full" card={result.state.fraudCard} verdict={result.state.verdict} status={result.state.guarded.status} attempted={result.state.guarded.attempted} evidence={result.state.guarded.evidence} finished={result.state.guarded.finished} />
-          )}
 
-          {(body || product.features.length > 0) && (
-            <div className="card w-full p-5 sm:p-6">
-              <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
-              {body && <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{body}</p>}
-              {fine.length > 0 && (
-                <details className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
-                  <summary className="cursor-pointer font-medium text-ink">Fulfillment details</summary>
-                  <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
-                    {fine.map((f, i) => (
-                      <li key={i}>{f}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+          <dl className="grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4 text-[13px]">
+            <div>
+              <dt className="label">Sold by</dt>
+              <dd className="mt-1 flex items-center gap-1.5 font-medium"><Store className="size-4 text-ink-3" />{product.shopName ?? "Local store"}</dd>
             </div>
-          )}
-          <p className="text-xs text-ink-3">
-            Sold by {product.shopName ?? "a local store"}. This is a demo marketplace{flagged ? ", and this listing has been flagged by Safe Checkout." : "."}
-          </p>
+            <div>
+              <dt className="label">Seller trust</dt>
+              <dd className="mt-1">{t ? <TrustMeter value={t.merchantTrust} status={t.merchantStatus} /> : "—"}</dd>
+            </div>
+            <div>
+              <dt className="label">Shipping</dt>
+              <dd className="mt-1 text-ink-2">Demo store, no real orders</dd>
+            </div>
+            <div>
+              <dt className="label">Checked by</dt>
+              <dd className="mt-1 flex items-center gap-1.5 text-ink-2"><ShieldCheck className="size-4 text-safe" /> Safe Checkout</dd>
+            </div>
+          </dl>
         </div>
+      </section>
+
+      {/* the check and its result, full width so nothing is squeezed into a column */}
+      {result && (
+        <section ref={reviewRef} aria-label="Safe Checkout review" className="flex scroll-mt-20 flex-col gap-3">
+          <h2 className="text-[17px] font-semibold tracking-tight">Safe Checkout review</h2>
+          {checking && !held ? (
+            <CheckProgress state={result.state} product={product} running className="w-full max-w-2xl" />
+          ) : result.phase === "approved" ? (
+            <div className="card flex items-center gap-3 p-5">
+              <ShieldCheck className="size-6 shrink-0 text-safe" />
+              <div>
+                <p className="text-[15px] font-medium">Nothing suspicious found</p>
+                <p className="text-sm text-ink-3">The photos, description and order all matched, so it went into your cart.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!result.state.guarded.finished && result.phase === "held" && <CheckProgress state={result.state} product={product} running={false} compact className="w-full max-w-2xl" />}
+              <FraudCard className="w-full" card={result.state.fraudCard} verdict={result.state.verdict} status={result.state.guarded.status} attempted={result.state.guarded.attempted} evidence={result.state.guarded.evidence} finished={result.state.guarded.finished} />
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="card p-5 sm:p-6">
+          <h2 className="text-[17px] font-semibold tracking-tight">About this item</h2>
+          {body && <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{body}</p>}
+          {bullets.length > 0 && (
+            <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 text-[14px] text-ink-2 sm:grid-cols-2">
+              {bullets.map((b, i) => (
+                <li key={i} className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-safe" />{b}</li>
+              ))}
+            </ul>
+          )}
+          {fine.length > 0 && (
+            <details className="mt-4 rounded-lg border border-line bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
+              <summary className="cursor-pointer font-medium text-ink">Fulfillment details</summary>
+              <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+                {fine.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+        <aside className="card flex flex-col gap-3 p-5 sm:p-6" aria-label="About the seller">
+          <h2 className="text-[17px] font-semibold tracking-tight">About the seller</h2>
+          <p className="flex items-center gap-2 text-[15px] font-medium"><Store className="size-4 text-ink-3" />{product.shopName ?? "Local store"}</p>
+          {t && <TrustMeter value={t.merchantTrust} status={t.merchantStatus} />}
+          <p className="text-[13px] leading-relaxed text-ink-3">
+            {flagged
+              ? "Safe Checkout has stopped listings from this seller. Take extra care, or choose another store."
+              : "Every item from this store is checked by Safe Checkout when it is added to your cart. This is a demo marketplace."}
+          </p>
+        </aside>
       </section>
     </div>
   );
@@ -923,7 +992,7 @@ export function ProductPage({
 
       {/* hero */}
       <section data-sec className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-10 2xl:gap-14 short:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] short:gap-5">
-        <div ref={galleryRef}>
+        <div ref={galleryRef} className="lg:sticky lg:top-[72px] lg:self-start">
           <Gallery media={p.media} title={p.title} fallback={p} />
         </div>
 

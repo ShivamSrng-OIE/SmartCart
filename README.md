@@ -11,6 +11,8 @@ The project ships as a working storefront called **Tote**: shoppers browse real 
 ![Gemini](https://img.shields.io/badge/Built_on-Google_Gemini-4285F4?logo=googlegemini&logoColor=white)
 ![OpenRouter](https://img.shields.io/badge/Runs_on-OpenRouter_free_models-6467F2)
 
+**Live app:** [tote-shop.pages.dev](https://tote-shop.pages.dev) (API: [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health))
+
 **[Watch the 50-second video walkthrough](https://drive.google.com/file/d/1M1uhcndMoO7fPsk2D7aWiRjlTvPunZRO/view?usp=sharing)**: image, video and audio attacks held live, with the evidence for each.
 
 ![Safe Checkout holding a manipulated listing and showing where the hidden instruction is](backend/docs/images/walkthrough.gif)
@@ -173,6 +175,8 @@ The two halves deploy to free hosting independently:
 | Frontend | [Cloudflare Pages](https://pages.cloudflare.com) | Root directory `frontend`, build command `npm run build`, output `dist`, variable `VITE_API_URL` set to the backend's address |
 
 Pages use clean addresses (`/shop`, `/results`, `/trust`, ...); `frontend/public/_redirects` lets Cloudflare Pages serve them directly. The backend guide lists every environment variable.
+
+The live deployment runs at [tote-shop.pages.dev](https://tote-shop.pages.dev) (Cloudflare Pages, uploaded build of `frontend/`) with the API at [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health) (Render, built from `main`). To publish a new frontend build there, run `VITE_API_URL=https://tote-api-wbpx.onrender.com npm run build` in `frontend/` and upload `dist/` as a new deployment of the `tote-shop` project.
 
 Notes on the free tiers: a free Render service sleeps after 15 minutes without traffic (the next request wakes it in up to a minute), and its disk is reset on restart, so listings added through the seller portal do not persist there.
 

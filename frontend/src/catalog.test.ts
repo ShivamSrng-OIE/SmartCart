@@ -126,7 +126,7 @@ describe("warehouse catalog", () => {
     const flagged = listing("b-flagged", "Flagged Hoodie", 3000, { merchant_trust: 28, merchant_status: "flagged", product_status: "flagged", incidents: 3, penalty: 26.4 });
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.startsWith("/api/warehouse/products?")) return Response.json({ products: [trusted, flagged], total: 2 });
-      if (url.startsWith("/api/catalog/search?")) return Response.json({ products: real });
+      if (url === "/shop-mcp") return Response.json({ jsonrpc: "2.0", id: 1, result: { structuredContent: { products: real } } });
       throw new Error(`Unexpected request ${url}`);
     }));
 
@@ -145,7 +145,7 @@ describe("warehouse catalog", () => {
         warehouseCalls++;
         throw new Error("down");
       }
-      if (url.startsWith("/api/catalog/search?")) return Response.json({ products: [shopifyItem] });
+      if (url === "/shop-mcp") return Response.json({ jsonrpc: "2.0", id: 1, result: { structuredContent: { products: [shopifyItem] } } });
       throw new Error(`Unexpected request ${url}`);
     }));
     expect((await searchCatalog("cold brew")).items.map((p) => p.source)).toEqual(["shopify"]);

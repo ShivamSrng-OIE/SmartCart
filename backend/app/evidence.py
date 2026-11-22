@@ -329,13 +329,17 @@ async def locate(media: list[Media], claims: Claims | None, run_id: str) -> list
             async def one(i: int, m: Media):
                 # One bad attachment (unreadable audio, a model error) must not discard the
                 # evidence found in the others.
+                unreachable = False
                 for attempt in (1, 2):  # one retry: a transient Gemini error shouldn't lose the evidence
                     try:
                         return await _localize(i, m, hints, run_id)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("evidence for %s #%d attempt %d failed: %s", m.kind, i, attempt, type(exc).__name__)
+                        unreachable = not isinstance(exc, ValueError)  # a bad answer (ValueError) is not "could not ask"
                         if attempt == 1:
                             await asyncio.sleep(0.5)
+                if m.kind == "text" and unreachable:  # the model could not be asked at all: the rule scan still quotes the sentence exactly
+                    return await _materialize(i, m, _scanner_text_location(m), run_id)
                 return None
 
             results = await asyncio.gather(*(one(i, m) for i, m in enumerate(media) if m.kind in FORMATS))

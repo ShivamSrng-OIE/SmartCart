@@ -7,7 +7,7 @@
  *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
-import productTypes from "../eval/genprops/product_types.json";
+import productTypes from "../../backend/eval/genprops/product_types.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 import { getCountry } from "./locale";
 import { DEMO_MODE } from "./config";

@@ -10,6 +10,7 @@ import { flyToCart, gsap, useGSAP, d } from "../lib/motion";
 import { ProductThumb } from "./ProductThumb";
 import { AutoRail } from "./AutoRail";
 import { Button, Kbd, Segmented, cx } from "./ui";
+import { CheckActivityLine } from "./CheckProgress";
 import { HeldDialog, TrustChip } from "./TrustBadge";
 import { useCartChecker, type CheckResult } from "../hooks/useCartChecker";
 
@@ -78,6 +79,7 @@ function ProductCard({ p, inCart, check, onOpen, onAdd, onHeld }: { p: CatalogPr
           )}
         </div>
       </button>
+      {checking && check && <CheckActivityLine state={check.state} product={p} />}
       <div className="flex items-center justify-between gap-2 px-3 pb-3 sm:px-3.5 sm:pb-3.5">
         <span className="flex items-baseline gap-1.5">
           <span className="tnum text-[15px] font-semibold">{money(p.price, false, p.currency)}</span>

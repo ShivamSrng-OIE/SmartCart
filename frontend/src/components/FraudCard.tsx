@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Quote, ShieldCheck } from "lucide-react";
 import type { EvidenceItem, FraudCard as FraudCardT, Verdict } from "../types";
 import type { PaneStatus } from "../state";
@@ -64,10 +64,20 @@ export function FraudCard({
 }) {
   const root = useRef<HTMLElement>(null);
   const dollarsRef = useRef<HTMLSpanElement>(null);
+  // The backend refines the card in steps (a quick version, then the safe alternative, then the written
+  // explanation) and the evidence arrives separately. The entrance animation must play ONCE, when the review
+  // first appears; later updates change the content in place instead of hiding everything and replaying it.
+  const played = useRef(false);
+  const [showAllText, setShowAllText] = useState(false);
+  const hasCard = !!card;
+  useEffect(() => {
+    if (!hasCard) played.current = false;
+  }, [hasCard]);
 
   useGSAP(
     () => {
-      if (!card) return;
+      if (!card || played.current) return;
+      played.current = true;
       const tl = gsap.timeline({ defaults: { ease: "power3.out", duration: d(0.5) } });
       tl.from("[data-fc]", { y: 14, opacity: 0, stagger: 0.08 })
         .from("[data-claim]", { x: -10, opacity: 0, stagger: 0.06, duration: d(0.35) }, "-=0.35")
@@ -75,7 +85,7 @@ export function FraudCard({
         .from("[data-bar]", { scaleX: 0, transformOrigin: "left center", stagger: 0.06, duration: d(0.6) }, "-=0.2");
       countTo(dollarsRef.current, card.dollars_defended, (n) => money(n), { duration: 1.4, delay: 0.15 });
     },
-    { scope: root, dependencies: [card] },
+    { scope: root, dependencies: [hasCard] },
   );
 
   // ---- empty states
@@ -173,7 +183,8 @@ export function FraudCard({
             <p className="label mb-2 text-danger!">Text found in your files</p>
             {claims.length ? (
               <ul className="flex flex-col gap-1.5">
-                {claims.map(({ text: c, hidden }, i) => (
+                {/* hidden instructions first and always; ordinary lines (the rest of the description) fold away */}
+                {(showAllText ? claims : [...claims.filter((x) => x.hidden), ...claims.filter((x) => !x.hidden).slice(0, 2)]).map(({ text: c, hidden }, i) => (
                   <li key={i} data-claim className={cx("flex gap-2 text-[14px]", hidden ? "font-bold text-danger" : "text-ink")}>
                     <Quote className="mt-1 size-3 shrink-0 text-danger" />
                     <span className="font-mono text-[13px] leading-snug">
@@ -182,6 +193,13 @@ export function FraudCard({
                     </span>
                   </li>
                 ))}
+                {claims.filter((x) => !x.hidden).length > 2 && (
+                  <li>
+                    <button type="button" onClick={() => setShowAllText((v) => !v)} className="text-[13px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+                      {showAllText ? "Show less" : `Show ${claims.filter((x) => !x.hidden).length - 2} more lines`}
+                    </button>
+                  </li>
+                )}
               </ul>
             ) : (
               <p className="text-sm text-ink-3">No readable text or speech.</p>

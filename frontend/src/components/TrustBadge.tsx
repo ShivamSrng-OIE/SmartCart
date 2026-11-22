@@ -4,6 +4,7 @@ import type { CatalogProduct } from "../catalog";
 import { money } from "../lib/format";
 import { reasonLabel, statusTone, trustHeadline, trustLevel } from "../lib/trust";
 import type { CheckResult } from "../hooks/useCartChecker";
+import { CheckProgress } from "./CheckProgress";
 import { FraudCard } from "./FraudCard";
 import { Chip, cx } from "./ui";
 
@@ -96,6 +97,7 @@ export function HeldDialog({ product, result, onClose }: { product: CatalogProdu
         </header>
         <div className="thin-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {result.message && <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{result.message}</p>}
+          {!s.guarded.finished && <CheckProgress state={s} product={product} running={result.phase === "checking"} compact className="mb-3" />}
           <FraudCard card={s.fraudCard} verdict={s.verdict} status={s.guarded.status} attempted={s.guarded.attempted} evidence={s.guarded.evidence} finished={s.guarded.finished} />
         </div>
       </div>

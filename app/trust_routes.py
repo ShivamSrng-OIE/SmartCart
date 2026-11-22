@@ -2,7 +2,8 @@
 
     GET  /api/trust            merchants (trust, status), recent incidents, Carbon's insights and actions
     POST /api/trust/briefing   a written briefing from the `carbon` model (falls back to a rules-based one)
-    POST /api/trust/reset      forget all incidents (merchant sign-in required; used to re-run the demo)
+    POST /api/trust/reset      start over: a visitor's session clears its own incidents; the shared ledger
+                               (no session) needs the warehouse operator's sign-in
 """
 from __future__ import annotations
 
@@ -27,8 +28,9 @@ async def briefing():
 
 @router.post("/api/trust/reset")
 def reset(authorization: str | None = Header(None)):
-    claims = current(authorization)
-    if claims["role"] != "admin":
-        raise HTTPException(403, "only the warehouse operator can reset reputation")
+    if not reputation.SESSION.get():
+        claims = current(authorization)
+        if claims["role"] != "admin":
+            raise HTTPException(403, "only the warehouse operator can reset reputation")
     reputation.reset()
     return {"reset": True}

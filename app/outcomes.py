@@ -39,6 +39,18 @@ def attempted_amount(bus: TraceBus, run_id: str) -> float:
     return amount
 
 
+def evidence_for(bus: TraceBus, run_id: str) -> list[dict]:
+    """Where the hidden text was found in this run (the boxed photo crop, the video frame, the sentence)."""
+    out: list[dict] = []
+    for e in bus.events(run_id):
+        if e.pane == "guarded" and e.kind == "evidence":
+            for item in e.data.get("items") or []:
+                image = item.get("crop_url") or item.get("frame_url")
+                text = item.get("text") or item.get("transcript") or ""
+                out.append({"modality": item.get("modality"), "text": text[:200], "image": image})
+    return out[:3]
+
+
 def reasons_for(result: GuardedResult, rules: RuleSet) -> list[str]:
     verdict = result.verdicts[-1] if result.verdicts else None
     categories = {p.id: p.category for p in rules.probes}
@@ -70,10 +82,12 @@ def record(result: GuardedResult, rules: RuleSet, *, source: str, run_id: str, b
         if result.claims is not None:
             quotes += [t for t in result.claims.visible_text if scanner.scan(t)][:2]
         reasons = reasons_for(result, rules) or ["agent_instruction"]
+        if quotes:  # the listing really did carry instructions: that is the reason, even if the firewall model timed out
+            reasons = sorted((set(reasons) - {"firewall_error"}) | {"agent_instruction"})
         reputation.record_incident(
             product_id=pid, merchant=merchant, title=product.get("title") or pid, source=source,
             severity="block" if verdict.action == "hard_block_quarantine" else "escalate",
             reasons=reasons, quotes=quotes, run_id=run_id, query=last_search(bus, run_id),
-            category=carbon.product_category(pid), amount=attempted_amount(bus, run_id))
+            category=carbon.product_category(pid), amount=attempted_amount(bus, run_id), evidence=evidence_for(bus, run_id))
     except Exception:  # noqa: BLE001
         log.exception("could not record the outcome of %s", run_id)

@@ -17,9 +17,11 @@ def isolated_state(tmp_path, monkeypatch):
     from app.warehouse import reputation
 
     reputation._cache = None
+    reputation._sessions.clear()
     catalog.invalidate()
     yield
     reputation._cache = None
+    reputation._sessions.clear()
     settings._reset_for_tests(None)
     catalog.invalidate()
 

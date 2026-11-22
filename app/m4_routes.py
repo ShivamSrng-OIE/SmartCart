@@ -137,7 +137,7 @@ async def redteam_launch(request: Request, body: dict | None = None):
 
     if launch_redteam is None or (not managed_agents and not use_recorded_golden):
         if not DEMO_TRACE.is_file():
-            raise HTTPException(status_code=404, detail="Red-team launcher and demo trace are unavailable")
+            raise HTTPException(status_code=404, detail="Red-team launcher and its recorded trace are unavailable")
         task = asyncio.create_task(replay_trace(DEMO_TRACE, bus, run_id, REPLAY_SPEED))
     else:
         task = asyncio.create_task(_run_redteam(bus, store, run_id, product_id, rounds))

@@ -248,6 +248,49 @@ def _best_variant(
     return best
 
 
+ALTERNATIVES = 6
+LOCAL_PREFIX = "wh:"  # the local marketplace's listings are never offered as the safe alternative
+
+
+def _image(product: dict, variant: dict) -> str | None:
+    """The first photo of an offer, wherever the Shop MCP result keeps it."""
+    for src in (variant.get("media"), variant.get("image"), product.get("media"), product.get("images"),
+                product.get("image"), product.get("image_url"), product.get("featured_image")):
+        if isinstance(src, str) and src.startswith("http"):
+            return src
+        if isinstance(src, dict):
+            src = [src]
+        if isinstance(src, list):
+            for m in src:
+                url = m.get("url") or m.get("src") if isinstance(m, dict) else m if isinstance(m, str) else None
+                if isinstance(url, str) and url.startswith("http") and (not isinstance(m, dict) or m.get("type", "image") == "image"):
+                    return url
+    return None
+
+
+def _offers(products: dict[str, dict], qty: int, budget: Decimal | None) -> list[dict]:
+    """Every other product's cheapest offer that can be bought within the budget, cheapest first: the choices
+    shown beside the safe cart. Each links to its own store's checkout (the shopper pays there, on their own)."""
+    out = []
+    for product_id, product in products.items():
+        if str(product_id).startswith(LOCAL_PREFIX):
+            continue
+        best = _best_variant({product_id: product}, qty, budget)
+        if best is None:
+            continue
+        unit, _pid, _product, variant = best
+        rating = product.get("rating") if isinstance(product.get("rating"), dict) else None
+        out.append({
+            "product_id": product_id, "variant_id": variant["id"], "title": product.get("title") or variant.get("title"),
+            "variant_title": variant.get("title"), "shop": variant["seller"]["domain"],
+            "shop_name": (variant.get("seller") or {}).get("name"), "price": float(unit), "total": float(unit * qty),
+            "image": _image(product, variant), "checkout_url": variant.get("checkout_url") or variant.get("url") or product.get("url"),
+            "rating": {"value": rating.get("value"), "count": rating.get("count")} if rating and rating.get("value") else None,
+        })
+    out.sort(key=lambda o: o["total"])
+    return out
+
+
 async def safe_swap(
     intent: Intent, original: dict | None, shop: ShopLike, *, known: dict[str, dict] | None = None,
 ) -> dict | None:
@@ -260,9 +303,9 @@ async def safe_swap(
 
     # Restrict candidates to the original product and results relevant to this search.
     products = {}
-    for offer in [original, *(await shop.search_catalog(query))[:8]]:
+    for offer in [original, *(await shop.search_catalog(query))[:12]]:
         product_id = offer.get("id") or offer.get("product_id")
-        if not product_id or (products.get(product_id) or {}).get("variants"):
+        if not product_id or str(product_id).startswith(LOCAL_PREFIX) or (products.get(product_id) or {}).get("variants"):
             continue
         cached = known.get(product_id)
         products[product_id] = cached if cached and cached.get("variants") else offer
@@ -290,6 +333,7 @@ async def safe_swap(
         return None
 
     title = product.get("title") or variant.get("title")
+    others = [o for o in _offers(products, qty, budget) if o["product_id"] != product_id][:ALTERNATIVES - 1]
     out = {
         "checkout_id": res.get("id") or res.get("checkout_id"),
         "continue_url": res.get("continue_url"),
@@ -304,6 +348,9 @@ async def safe_swap(
             "quantity": qty,
         }],
         "total": float(total),
+        "image": _image(product, variant),
+        # more safe choices, each with its own store's checkout link
+        "alternatives": others,
     }
     if res.get("intercepted"):
         out["intercepted"] = True

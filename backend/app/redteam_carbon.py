@@ -200,7 +200,7 @@ async def launch_redteam(product_id: str | None, rounds: int, bus: EventBus, run
                 latency = verdict.get("latency_ms")
                 top = _top_probe(verdict)
                 bus.emit(event("log", "blocked", "blocked",
-                               "CartTrap blocked it" + (f" in {int(latency)} ms." if latency is not None else "."),
+                               "Safe Checkout held it" + (f" in {int(latency)} ms." if latency is not None else "."),
                                blocked_call=fixture["proposed"], action=verdict["action"],
                                severity=verdict["severity"], probes=verdict["probes"],
                                **({"latency_ms": int(latency)} if latency is not None else {}),

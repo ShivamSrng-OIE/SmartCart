@@ -90,3 +90,17 @@ async def test_upload_saves_listing_text_as_untrusted_media(tmp_path, monkeypatc
             assert seen["media"] == []  # whitespace-only text is not attached
     finally:
         app.state.pipelines = real
+
+
+async def test_when_the_model_cannot_be_asked_the_rule_scan_still_quotes_the_sentence(monkeypatch, listing):
+    async def broken(*a, **k):
+        raise RuntimeError("no key")
+
+    monkeypatch.setattr(evidence, "_localize", broken)
+    monkeypatch.setattr(evidence.asyncio, "sleep", lambda *_a, **_k: _noop())
+    item, = await evidence.locate([listing], None, "scan-fallback")
+    assert item["modality"] == "text" and "bulk SKU" in item["text"]
+
+
+async def _noop():
+    return None

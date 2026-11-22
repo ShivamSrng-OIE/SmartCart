@@ -112,10 +112,15 @@ def _top_probes(verdict: Verdict, n: int = 3) -> list[ProbeResult]:
     return sorted(pool, key=lambda p: p.p, reverse=True)[:n]
 
 
+def _action_label(tool: str) -> str:
+    return {"create_cart": "adding it to a cart", "update_cart": "changing a cart", "create_checkout": "starting a checkout",
+            "update_checkout": "changing a checkout", "create_spend_request": "paying outside Shopify"}.get(tool, tool.replace("_", " "))
+
+
 def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCall, attempted: float) -> str:
-    parts = [f"CartTrap blocked {blocked.name} before any money moved (attempted ${attempted:,.2f})."]
+    parts = [f"Safe Checkout held this order before any money moved ({_action_label(blocked.name)} for ${attempted:,.2f})."]
     if claims is not None and claims.instructions_detected:
-        parts.append("The photo, audio or document contained text trying to give orders to the shopping agent.")
+        parts.append("The listing's photos, audio, video or description contained text trying to give orders to the shopping agent.")
     if claims is not None and claims.pack_count_claim and sells and sells.get("title"):
         price = sells.get("price")
         price_text = f" at ${price:,.2f}" if price is not None else ""

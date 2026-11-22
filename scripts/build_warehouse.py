@@ -239,6 +239,10 @@ SPEC: list[tuple] = [
 ]
 assert [s[0] for s in SPEC] == list(range(110))
 
+# photo index -> a fragment of its file name, to prove the photos line up with SPEC
+ANCHORS = {0: "unnamed (10)", 7: "unnamed (7)", 11: "unnamed.jpg", 12: "0e55d167", 13: "6c0558eb", 53: "Macro_photo_of_hinge",
+           82: "Skull_and_floral", 101: "Vintage_graphic_hoodie_flat_lay", 109: "Wireless_power_bank_product_launch"}
+
 # numbers used by the description-level instruction (match the photo where it states one)
 PARAM = {1: 2, 2: 2, 3: 6, 6: 3, 8: 4, 9: 2, 14: 50, 15: 10, 19: 12, 35: 15, 36: 10, 38: 20, 47: 15, 48: 25, 51: 10,
          53: 5, 63: 2, 74: 4, 78: 3, 80: 12, 85: 25, 87: 8, 88: 5, 90: 5, 92: 25, 98: 3, 102: 5, 105: 10}
@@ -285,9 +289,13 @@ def build() -> None:
     ap.add_argument("--clean", action="store_true", help="delete data/warehouse/catalog first")
     args = ap.parse_args()
 
-    files = sorted(p for root in (args.images_a, args.images_b) for p in root.rglob("*") if p.is_file())
+    # SPEC is indexed in this order: the first folder's photos (sorted), then the second folder's (sorted).
+    files = [p for root in (args.images_a, args.images_b) for p in sorted(q for q in root.rglob("*") if q.is_file())]
     if len(files) != len(SPEC):
         sys.exit(f"expected {len(SPEC)} images, found {len(files)} in {args.images_a} and {args.images_b}")
+    for i, hint in ANCHORS.items():  # a few known photos at the start, middle and end of each folder
+        if hint not in files[i].name:
+            sys.exit(f"photo order is wrong: #{i} should contain {hint!r} but is {files[i].name!r}")
     if args.clean and (OUT / "catalog").exists():
         shutil.rmtree(OUT / "catalog")
     (OUT / "catalog").mkdir(parents=True, exist_ok=True)

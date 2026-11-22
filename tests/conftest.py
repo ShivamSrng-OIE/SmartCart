@@ -14,6 +14,9 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "LLM_PROVIDER", "gemini")
     monkeypatch.setattr(settings, "_SETTINGS_FILE", tmp_path / "llm_settings.json")
     settings._reset_for_tests(None)
+    # never a real key in a test (they live in backend/.env): a test that needs one sets a fake
+    monkeypatch.setitem(settings._keys, "gemini", None)
+    monkeypatch.setitem(settings._keys, "openrouter", None)
     from app.warehouse import reputation
 
     reputation._cache = None

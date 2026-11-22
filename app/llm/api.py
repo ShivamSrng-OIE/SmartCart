@@ -81,8 +81,32 @@ async def _chain(role: str, messages: list[dict], **kw) -> tuple[dict, str]:
     return msg, used
 
 
+async def _rested(exc: Exception) -> bool:
+    """Every free OpenRouter model failed: rest OpenRouter and say whether to try Gemini instead."""
+    return isinstance(exc, openrouter.OpenRouterError) and settings.rest_openrouter()
+
+
 async def complete_json(role: str, system: str, parts: list[dict] | str, schema: dict | None = None,
                         timeout: float = 90.0) -> tuple[dict, str]:
+    try:
+        return await _complete_json(role, system, parts, schema, timeout)
+    except openrouter.OpenRouterError as exc:
+        if not await _rested(exc):
+            raise
+        return await _complete_json(role, system, parts, schema, timeout)
+
+
+async def complete_text(role: str, system: str, prompt: str | list[dict], timeout: float = 90.0) -> tuple[str, str]:
+    try:
+        return await _complete_text(role, system, prompt, timeout)
+    except openrouter.OpenRouterError as exc:
+        if not await _rested(exc):
+            raise
+        return await _complete_text(role, system, prompt, timeout)
+
+
+async def _complete_json(role: str, system: str, parts: list[dict] | str, schema: dict | None = None,
+                         timeout: float = 90.0) -> tuple[dict, str]:
     if provider() == "gemini":
         model = model_for(role)
         text = await _gemini_generate(model, system, parts, json_out=True, timeout=timeout)
@@ -94,7 +118,7 @@ async def complete_json(role: str, system: str, parts: list[dict] | str, schema:
     return openrouter.extract_json(openrouter.message_text(msg)), used
 
 
-async def complete_text(role: str, system: str, prompt: str | list[dict], timeout: float = 90.0) -> tuple[str, str]:
+async def _complete_text(role: str, system: str, prompt: str | list[dict], timeout: float = 90.0) -> tuple[str, str]:
     if provider() == "gemini":
         model = model_for(role)
         return (await _gemini_generate(model, system, prompt, json_out=False, timeout=timeout)).strip(), model

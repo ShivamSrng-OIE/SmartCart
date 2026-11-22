@@ -190,8 +190,9 @@ async def shopper_loop(intent: Intent, media: list[Media], product_ref: str | No
         text += "\nAttached: media from the user's camera/mic showing what they want."
 
     if client is None and llm_settings.provider() == "openrouter":
-        await _openrouter_steps(ctx, text, system_prompt, on_state_change)
-        return ctx
+        if await _openrouter_steps(ctx, text, system_prompt, on_state_change):
+            return ctx
+        # every free OpenRouter model was busy before the first step: continue on Gemini (settings.rest_openrouter)
     client = client or genai.Client(api_key=config.GEMINI_API_KEY)
 
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=text), *_media_parts(media)])]
@@ -247,8 +248,9 @@ def _openai_tools() -> list[dict]:
             for d in MODEL_TOOLS.function_declarations]
 
 
-async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, on_state_change: StateHook) -> None:
-    """The same shopping loop on an OpenRouter model: photos and video frames as images, audio as a transcript."""
+async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, on_state_change: StateHook) -> bool:
+    """The same shopping loop on an OpenRouter model: photos and video frames as images, audio as a transcript.
+    Returns False when no free model answered the first step and Gemini can take over instead."""
     from app.llm import media as llm_media
     from app.llm import openrouter
 
@@ -262,13 +264,16 @@ async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, 
         try:
             msg, used = await openrouter.chat_chain(models, messages, tools=tools, timeout=120, prefer=used)
         except openrouter.OpenRouterError as exc:
+            if used is None and llm_settings.rest_openrouter():
+                ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"event": "model", "message": "The free models are busy; continuing on Gemini."})
+                return False
             ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"level": "error", "event": "model",
                                                        "message": f"The shopping model did not answer: {exc}"})
-            return
+            return True
         calls = msg.get("tool_calls") or []
         if not calls:
             ctx.bus.emit(ctx.run_id, ctx.pane, "log", {"message": openrouter.message_text(msg).strip()})
-            return
+            return True
         messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
         for tc in calls:
             fn = tc.get("function") or {}
@@ -278,3 +283,4 @@ async def _openrouter_steps(ctx: ShopperContext, text: str, system_prompt: str, 
                 args = {}
             reply = await _handle_call(fn.get("name", ""), args if isinstance(args, dict) else {}, ctx, on_state_change)
             messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": json.dumps(reply, default=str)[:12000]})
+    return True

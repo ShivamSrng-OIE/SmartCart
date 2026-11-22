@@ -22,8 +22,8 @@ export function useModelLabels(): ModelLabels | null {
     let live = true;
     getLlmSettings()
       .then((s) => {
-        const m = s.models[s.provider];
-        const value: ModelLabels = { provider: s.provider, shopper: shortModel(m.shopper), perception: shortModel(m.perception), firewall: shortModel(m.firewall), defender: shortModel(m.defender) };
+        const first = (role: string) => shortModel(s.roles.find((r) => r.id === role)?.models[s.provider]?.[0] ?? "");
+        const value: ModelLabels = { provider: s.provider, shopper: first("shopper"), perception: first("perception"), firewall: first("firewall"), defender: first("defender") };
         cached = { at: Date.now(), value };
         if (live) setLabels(value);
       })

@@ -33,6 +33,7 @@ export function useCartChecker(cart: Cart, onApproved?: (p: CatalogProduct) => v
       if (stops.current.has(p.id)) return; // already being checked
       const set = (r: CheckResult) => setResults((all) => ({ ...all, [p.id]: r }));
       let state = initialState(null);
+      let heldAlready = false; // a non-approve verdict is final: show it at once while the explanation is still being written
       set({ phase: "checking", state });
 
       const form = new FormData();
@@ -57,8 +58,9 @@ export function useCartChecker(cart: Cart, onApproved?: (p: CatalogProduct) => v
         },
         onEvent: (e) => {
           state = applyEvent(state, e);
+          if (e.kind === "verdict" && e.pane === "guarded" && e.data.action !== "approve_checkout") heldAlready = true;
           if (e.kind === "done" && (e.pane === "system" || e.pane === "guarded")) finish();
-          else set({ phase: "checking", state });
+          else set({ phase: heldAlready ? "held" : "checking", state });
         },
         onError: (message) => finish(message),
       });

@@ -224,13 +224,21 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         c = claims_if_ready()
         product_json = await product_for(call, ctx)
         state["extra_media"] = []
+        listing_read: asyncio.Task | None = None
         if warehouse_shop.is_warehouse(product_json):
             # A warehouse listing: its photo, video, audio and description are untrusted input, read
-            # (Argon) and judged (firewall) with the order, and kept for the evidence step.
+            # (Argon) and judged (firewall) with the order, and kept for the evidence step. Argon reads it
+            # while the firewall judges the same media, so the two waits overlap; the read is applied below.
             state["extra_media"] = warehouse_shop.listing_media(product_json)
             product_json = warehouse_shop.public_view(product_json)
+            listing_read = asyncio.create_task(asyncio.wait_for(perceive([*media, *state["extra_media"]]), timeout=LISTING_PERCEPTION_S))
+        all_media = [*media, *state["extra_media"]]
+        cart_total = attempted_spend(call, ctx.variants) or (
+            state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
+        verdict = await decide(ctx.intent, all_media, product_json, call, c, rules.current(), cart_total)
+        if listing_read is not None:
             try:
-                c = await asyncio.wait_for(perceive([*media, *state["extra_media"]]), timeout=LISTING_PERCEPTION_S)
+                c = await listing_read
                 bus.emit(run_id, PANE, "log", {
                     "event": "perception", "model": config.MODELS["perception"],
                     "message": f"Argon read the listing: instructions_detected={c.instructions_detected}",
@@ -238,10 +246,6 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
                     "pack_count_claim": c.pack_count_claim, "notes": c.notes})
             except Exception:  # noqa: BLE001 - keep whatever perception we already had
                 log.warning("listing perception failed", exc_info=True)
-        all_media = [*media, *state["extra_media"]]
-        cart_total = attempted_spend(call, ctx.variants) or (
-            state["last_cart_total"] if call.name.endswith("checkout") else 0.0)
-        verdict = await decide(ctx.intent, all_media, product_json, call, c, rules.current(), cart_total)
         if verdict.action == "approve_checkout" and c is None and all_media:
             # ADR 0026: before money moves, give Argon a short grace period so a listing with
             # hidden agent instructions can't slip through just because perception was slower.

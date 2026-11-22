@@ -49,9 +49,9 @@ FIREWALL_IMAGE_MAX_PX: int = int(os.getenv("FIREWALL_IMAGE_MAX_PX", "1024"))
 
 GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
-# Which model provider runs the agents: "gemini" or "openrouter". The Settings page can switch it
-# at runtime (app/llm/settings.py); this is only the starting value.
-LLM_PROVIDER: str = (os.getenv("LLM_PROVIDER") or ("openrouter" if OPENROUTER_API_KEY and not GEMINI_API_KEY else "gemini")).lower()
+# Which model provider runs the agents: "gemini" or "openrouter" (free models only). The Models page can switch
+# it at runtime (app/llm/settings.py); this is only the starting value: OpenRouter whenever its key is set.
+LLM_PROVIDER: str = (os.getenv("LLM_PROVIDER") or ("openrouter" if OPENROUTER_API_KEY else "gemini")).lower()
 # Free OpenRouter models are much slower than the hackathon Gemini endpoints, so the firewall gets
 # a longer deadline there. It still fails closed when the deadline passes.
 OPENROUTER_FIREWALL_TIMEOUT_MS: int = int(os.getenv("OPENROUTER_FIREWALL_TIMEOUT_MS", "45000"))

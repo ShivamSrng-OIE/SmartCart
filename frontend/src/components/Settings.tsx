@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Eye, EyeOff, KeyRound, Loader2, Play, RotateCcw, Save, X } from "lucide-react";
-import { ApiError, getLlmSettings, getModelList, putLlmKey, putLlmSettings, testRole, type LlmRole, type LlmSettings, type ModelInfo } from "../lib/marketplace";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Eye, EyeOff, KeyRound, Loader2, Play, Save, X } from "lucide-react";
+import { ApiError, getLlmSettings, putLlmKey, putLlmSettings, testRole, type LlmRole, type LlmSettings } from "../lib/marketplace";
+import { shortModel } from "../hooks/useModelLabels";
 import { Button, Chip, Segmented, cx } from "./ui";
 
 type Provider = "gemini" | "openrouter";
 const PROVIDER_LABEL: Record<Provider, string> = { gemini: "Google Gemini", openrouter: "OpenRouter (free models)" };
-const CUSTOM = "__custom__";
 const CAPABILITY_LABEL: Record<string, string> = { tools: "tool calling", image: "reads photos", audio: "hears audio", json: "structured output" };
 
 interface TestState {
@@ -14,71 +14,34 @@ interface TestState {
   text?: string;
 }
 
-function suits(role: LlmRole, m: ModelInfo): boolean {
-  return role.needs.every((n) => (n === "tools" ? m.tools : n === "json" ? m.json : m.input.includes(n)));
-}
-
-function RoleRow({ role, provider, value, models, dirty, test, onChange, onTest }: {
-  role: LlmRole; provider: Provider; value: string; models: ModelInfo[]; dirty: boolean; test?: TestState; onChange: (v: string) => void; onTest: () => void;
-}) {
-  const known = models.some((m) => m.id === value);
-  // "custom" only when the person picks "Enter a model id…"; a current value the list doesn't know is just shown as an option
-  const [custom, setCustom] = useState(false);
-  const recommended = models.filter((m) => suits(role, m));
-  const others = models.filter((m) => !suits(role, m));
-  const current = models.find((m) => m.id === value);
-  const optionLabel = (m: ModelInfo) => m.name || m.id;
-
+function RoleRow({ role, provider, test, onTest }: { role: LlmRole; provider: Provider; test?: TestState; onTest: () => void }) {
+  const models = role.models[provider] ?? [];
+  const [first, ...rest] = models;
   return (
-    <li className="flex flex-col gap-2 py-4 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] sm:items-center sm:gap-4">
+    <li className="flex flex-col gap-2 py-4 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center sm:gap-4">
       <div className="min-w-0">
-        <p className="flex items-center gap-2 text-[14px] font-semibold">
+        <p className="flex flex-wrap items-center gap-2 text-[14px] font-semibold">
           {role.name}
           {role.needs.map((n) => <Chip key={n} mono={false} className="h-5 text-[10px]">{CAPABILITY_LABEL[n] ?? n}</Chip>)}
         </p>
         <p className="text-[13px] leading-snug text-ink-3">{role.label}</p>
       </div>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <select
-          aria-label={`Model for ${role.name}`}
-          value={custom ? CUSTOM : value}
-          onChange={(e) => {
-            if (e.target.value === CUSTOM) return setCustom(true);
-            setCustom(false);
-            onChange(e.target.value);
-          }}
-          className="field h-10 py-0 text-[14px]"
-        >
-          {recommended.length > 0 && (
-            <optgroup label="Recommended for this job">
-              {recommended.map((m) => <option key={m.id} value={m.id}>{optionLabel(m)}</option>)}
-            </optgroup>
-          )}
-          {others.length > 0 && (
-            <optgroup label="Other models">
-              {others.map((m) => <option key={m.id} value={m.id}>{optionLabel(m)}</option>)}
-            </optgroup>
-          )}
-          {!known && !custom && value && <option value={value}>{value} (current)</option>}
-          <option value={CUSTOM}>Enter a model id…</option>
-        </select>
-        {custom && (
-          <input value={value} onChange={(e) => onChange(e.target.value.trim())} placeholder={provider === "openrouter" ? "vendor/model-name:free" : "gemini-2.5-flash"} aria-label={`Custom model id for ${role.name}`} className="field h-10 font-mono text-[13px]" />
-        )}
-        {current && !custom && (
-          <p className="truncate text-xs text-ink-3">
-            {current.input.join(", ")} in{current.tools ? " · tools" : ""}{current.json ? " · JSON" : ""}{current.context ? ` · ${Math.round(current.context / 1000)}k context` : ""}
+      <div className="min-w-0">
+        <p className="truncate font-mono text-[13px] text-ink" title={first}>{first ? shortModel(first) : "—"}</p>
+        {rest.length > 0 && provider === "openrouter" && (
+          <p className="truncate text-xs text-ink-3" title={rest.join(", ")}>
+            if busy: {rest.slice(0, 2).map(shortModel).join(" → ")}{rest.length > 2 ? " → …" : ""}
           </p>
         )}
       </div>
       <div className="flex items-center gap-2 sm:justify-end">
-        <Button size="sm" disabled={dirty || test?.busy} onClick={onTest} icon={test?.busy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} title={dirty ? "Save first, then test" : "Send one tiny request to this model"}>
+        <Button size="sm" disabled={test?.busy} onClick={onTest} icon={test?.busy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} title="Send one tiny request for this job">
           Test
         </Button>
         {test?.text && (
-          <span className={cx("flex max-w-56 items-center gap-1 text-xs", test.ok ? "text-safe" : "text-danger")} role="status">
+          <span className={cx("flex max-w-64 items-center gap-1 text-xs", test.ok ? "text-safe" : "text-danger")} role="status">
             {test.ok ? <Check className="size-3.5 shrink-0" /> : <X className="size-3.5 shrink-0" />}
-            <span className="truncate" title={test.text}>{test.text}</span>
+            <span className="line-clamp-2" title={test.text}>{test.text}</span>
           </span>
         )}
       </div>
@@ -89,8 +52,6 @@ function RoleRow({ role, provider, value, models, dirty, test, onChange, onTest 
 export function Settings() {
   const [server, setServer] = useState<LlmSettings | null>(null);
   const [provider, setProvider] = useState<Provider>("openrouter");
-  const [draft, setDraft] = useState<Record<string, Record<string, string>>>({});
-  const [models, setModels] = useState<Record<string, ModelInfo[]>>({});
   const [key, setKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [persist, setPersist] = useState(true);
@@ -101,28 +62,27 @@ export function Settings() {
   const apply = useCallback((s: LlmSettings) => {
     setServer(s);
     setProvider(s.provider);
-    setDraft(JSON.parse(JSON.stringify(s.models)));
   }, []);
 
   useEffect(() => {
     getLlmSettings().then(apply).catch((err) => setMessage({ ok: false, text: err instanceof Error ? err.message : "Couldn’t load settings." }));
   }, [apply]);
 
-  useEffect(() => {
-    if (models[provider]) return;
-    getModelList(provider).then((list) => setModels((m) => ({ ...m, [provider]: list }))).catch(() => setModels((m) => ({ ...m, [provider]: [] })));
-  }, [provider, models]);
+  const dirty = !!server && provider !== server.provider;
 
-  const dirty = useMemo(() => !!server && (provider !== server.provider || JSON.stringify(draft) !== JSON.stringify(server.models)), [server, provider, draft]);
-  const list = models[provider] ?? [];
-
-  const fail = (err: unknown) => setMessage({ ok: false, text: err instanceof ApiError && err.status === 403 ? "Changes are only allowed from the machine running the server, or after signing in as the operator (Sell → sign in as “warehouse”)." : err instanceof Error ? err.message : "That didn’t work." });
+  const fail = (err: unknown) =>
+    setMessage({
+      ok: false,
+      text: err instanceof ApiError && err.status === 403
+        ? "Changes are only allowed from the machine running the server, or after signing in as the operator (Sell → sign in as “warehouse”)."
+        : err instanceof Error ? err.message : "That didn’t work.",
+    });
 
   const save = async () => {
     setBusy("save");
     setMessage(null);
     try {
-      apply(await putLlmSettings({ provider, models: draft }));
+      apply(await putLlmSettings(provider));
       setTests({});
       setMessage({ ok: true, text: `Saved. The agents now run on ${PROVIDER_LABEL[provider]}.` });
     } catch (err) {
@@ -150,13 +110,11 @@ export function Settings() {
     setTests((t) => ({ ...t, [role]: { busy: true } }));
     try {
       const r = await testRole(role);
-      setTests((t) => ({ ...t, [role]: { ok: r.ok, text: r.ok ? `${r.ms} ms · replied “${r.reply ?? ""}”` : (r.error ?? "failed") } }));
+      setTests((t) => ({ ...t, [role]: { ok: r.ok, text: r.ok ? `${shortModel(r.model)} answered in ${(r.ms / 1000).toFixed(1)} s` : (r.error ?? "failed") } }));
     } catch (err) {
       setTests((t) => ({ ...t, [role]: { ok: false, text: err instanceof Error ? err.message : "failed" } }));
     }
   };
-
-  const reset = () => server && setDraft((d) => ({ ...d, [provider]: { ...server.defaults[provider] } }));
 
   if (!server) {
     return (
@@ -176,7 +134,7 @@ export function Settings() {
         <p className="label mb-1">Settings</p>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Models</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
-          Choose where the agents get their intelligence. Pick a provider, then a model for each job. Every agent uses the equivalent model on whichever provider you choose.
+          Pick where the agents get their intelligence. The model for each job is chosen automatically: on OpenRouter only free models are used, the best one for each job first, with the next ones as backup if it is busy.
         </p>
       </div>
 
@@ -184,9 +142,9 @@ export function Settings() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-[16px] font-semibold tracking-tight">Provider</h2>
-            <p className="text-xs text-ink-3">{provider === "openrouter" ? "Free models are slower and rate limited, so checks take longer." : "Uses the Gemini API key on the server."}</p>
+            <p className="text-xs text-ink-3">{provider === "openrouter" ? "Free models only. Slower than Gemini, and they can be briefly rate limited." : "Uses the Gemini API key on the server."}</p>
           </div>
-          <Segmented value={provider} onChange={(v) => setProvider(v)} options={(["gemini", "openrouter"] as Provider[]).map((p) => ({ value: p, label: PROVIDER_LABEL[p] }))} />
+          <Segmented value={provider} onChange={(v) => setProvider(v)} options={(["openrouter", "gemini"] as Provider[]).map((p) => ({ value: p, label: PROVIDER_LABEL[p] }))} />
         </div>
 
         <div className="rounded-xl border border-line bg-surface-2 p-3.5">
@@ -220,28 +178,20 @@ export function Settings() {
       </section>
 
       <section className="card p-4 sm:p-5" aria-label="Models">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-[16px] font-semibold tracking-tight">Model for each agent</h2>
-            <p className="text-xs text-ink-3">{list.length ? `${list.length} models available on ${PROVIDER_LABEL[provider]}.` : "Loading models…"}</p>
-          </div>
-          <Button size="sm" variant="ghost" onClick={reset} icon={<RotateCcw className="size-3.5" />}>Use recommended</Button>
+        <div>
+          <h2 className="text-[16px] font-semibold tracking-tight">What runs each job</h2>
+          <p className="text-xs text-ink-3">
+            {provider === "openrouter"
+              ? "Chosen from the free models by testing them on the app’s real tasks. Audio needs Gemini: free OpenRouter models can’t take audio."
+              : "The Gemini models for each job."}
+          </p>
         </div>
         <ul className="mt-1 divide-y divide-line">
           {server.roles.map((role) => (
-            <RoleRow
-              key={role.id}
-              role={role}
-              provider={provider}
-              value={draft[provider]?.[role.id] ?? server.defaults[provider][role.id]}
-              models={list}
-              dirty={dirty}
-              test={tests[role.id]}
-              onChange={(v) => setDraft((d) => ({ ...d, [provider]: { ...d[provider], [role.id]: v } }))}
-              onTest={() => runTest(role.id)}
-            />
+            <RoleRow key={role.id} role={role} provider={provider} test={tests[role.id]} onTest={() => runTest(role.id)} />
           ))}
         </ul>
+        {dirty && <p className="mt-2 text-xs text-ink-3">Save to test the {PROVIDER_LABEL[provider]} models.</p>}
       </section>
 
       <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 p-3 shadow-float backdrop-blur sm:p-4">
@@ -249,7 +199,7 @@ export function Settings() {
           {message?.text ?? (dirty ? "You have unsaved changes." : `Running on ${PROVIDER_LABEL[server.provider]}.`)}
         </p>
         <Button variant="primary" size="lg" disabled={!dirty || busy === "save"} onClick={save} icon={busy === "save" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}>
-          Save settings
+          Save provider
         </Button>
       </div>
     </div>

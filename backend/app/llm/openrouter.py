@@ -20,6 +20,13 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://openrouter.ai/api/v1"
 FALLBACK_MODEL = "openrouter/free"  # OpenRouter's own router across free models
+
+
+def is_free_model(model: str) -> bool:
+    """The only models this app will ever call on OpenRouter: free variants (id ends in ':free') and the
+    free router. Paid models are refused here, in the settings, and in the model list, so no setting, typed id
+    or fallback can spend money."""
+    return isinstance(model, str) and (model == FALLBACK_MODEL or (model.endswith(":free") and len(model) > len(":free")))
 _HEADERS = {"HTTP-Referer": "http://localhost:5173", "X-Title": "CartTrap"}
 _client: httpx.AsyncClient | None = None
 _models_cache: tuple[float, list[dict]] | None = None
@@ -62,8 +69,8 @@ def _summarize(m: dict) -> dict:
 
 def _is_free(m: dict) -> bool:
     pricing = m.get("pricing") or {}
-    return m["id"].endswith(":free") or (str(pricing.get("prompt")) == "0" and str(pricing.get("completion")) == "0"
-                                         and (m.get("architecture") or {}).get("output_modalities", ["text"]) == ["text"])
+    zero = str(pricing.get("prompt")) == "0" and str(pricing.get("completion")) == "0"
+    return is_free_model(m["id"]) and zero
 
 
 async def list_models(free_only: bool = True) -> list[dict]:
@@ -107,6 +114,8 @@ async def chat(model: str, messages: list[dict], *, tools: list[dict] | None = N
 
     Retries 429 / 5xx with backoff inside `timeout`. If the chosen model has no live free
     endpoint (404/400 "no endpoints"), retries once on OpenRouter's free router."""
+    if not is_free_model(model):
+        raise OpenRouterError(f"{model} is not a free model; only free OpenRouter models (ending in :free) are used")
     key = settings.api_key("openrouter")
     if not key:
         raise OpenRouterError("OPENROUTER_API_KEY is not set (add it on the Settings page or in backend/.env)")
@@ -208,3 +217,37 @@ def message_text(msg: dict) -> str:
     if isinstance(content, list):  # some providers return content parts
         return "".join(p.get("text", "") for p in content if isinstance(p, dict))
     return content or ""
+
+
+async def chat_chain(models: tuple[str, ...] | list[str], messages: list[dict], *, tools: list[dict] | None = None,
+                     json_schema: dict | None = None, json_mode: bool = False, temperature: float = 0.2,
+                     max_tokens: int | None = None, timeout: float = 90.0, prefer: str | None = None) -> tuple[dict, str]:
+    """Try a job's free models in order and return (message, model that answered).
+
+    Free endpoints are rate limited and sometimes down, so a failure (429, 5xx, timeout, empty reply, a model that
+    cannot do tools) moves on to the next model; the list ends at OpenRouter's free router. A bad key stops at
+    once, since no model will work. `prefer` (the model that answered last time) is tried first."""
+    ordered = ([prefer] if prefer in models else []) + [m for m in models if m != prefer]
+    deadline = time.monotonic() + timeout
+    last: OpenRouterError | None = None
+    for n, model in enumerate(ordered):
+        remaining = deadline - time.monotonic()
+        if remaining <= 3:
+            break
+        caps = await capabilities(model)
+        if tools and not caps.get("tools"):
+            continue
+        schema = json_schema if caps.get("json") else None
+        cap = remaining if n == len(ordered) - 1 else max(20.0, remaining * 0.6)
+        try:
+            last_model = n == len(ordered) - 1
+            msg = await chat(model, messages, tools=tools, json_schema=schema, json_mode=bool(json_mode and caps.get("json")),
+                             temperature=temperature, max_tokens=max_tokens, timeout=cap, attempts=2 if last_model else 1,
+                             allow_fallback=False)  # a busy model is skipped at once; only the last gets a retry
+            return msg, model
+        except OpenRouterError as exc:
+            last = exc
+            log.warning("openrouter %s failed (%s), trying the next model", model, str(exc)[:80])
+            if exc.status == 401:
+                break
+    raise last or OpenRouterError("no free model answered in time")

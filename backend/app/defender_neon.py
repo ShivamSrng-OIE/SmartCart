@@ -117,9 +117,36 @@ def _action_label(tool: str) -> str:
             "update_checkout": "changing a checkout", "create_spend_request": "paying outside Shopify"}.get(tool, tool.replace("_", " "))
 
 
-def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCall, attempted: float) -> str:
+def flagged_quotes(media, claims: Claims | None) -> list[str]:
+    """The exact sentences in the listing (its description, the text read off photos, the audio) that the rule
+    scan recognises as orders to a shopping agent. They are quoted on the Fraud Card."""
+    from app import scanner
+
+    texts: list[str] = []
+    for m in media or []:
+        if m.kind == "text":
+            try:
+                texts.append(Path(m.path).read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
+    if claims is not None:
+        texts += list(claims.visible_text)
+        if claims.audio_transcript:
+            texts.append(claims.audio_transcript)
+    out: list[str] = []
+    for text in texts:
+        for f in scanner.scan(text):
+            if f.quote not in out:
+                out.append(f.quote)
+    return out[:3]
+
+
+def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCall, attempted: float,
+                     quotes: list[str] | None = None) -> str:
     parts = [f"Safe Checkout held this order before any money moved ({_action_label(blocked.name)} for ${attempted:,.2f})."]
-    if claims is not None and claims.instructions_detected:
+    if quotes:
+        parts.append(f"The listing contained text trying to give orders to the shopping agent: \u201c{quotes[0]}\u201d.")
+    elif claims is not None and claims.instructions_detected:
         parts.append("The listing's photos, audio, video or description contained text trying to give orders to the shopping agent.")
     if claims is not None and claims.pack_count_claim and sells and sells.get("title"):
         price = sells.get("price")
@@ -132,10 +159,10 @@ def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCal
     return " ".join(parts)
 
 
-def template_fraud_card(verdict, claims, product_json, blocked, attempted) -> FraudCard:
+def template_fraud_card(verdict, claims, product_json, blocked, attempted, quotes: list[str] | None = None) -> FraudCard:
     sells = _shopify_sells(product_json)
     return FraudCard(
-        reason=_template_reason(claims, sells, blocked, attempted),
+        reason=_template_reason(claims, sells, blocked, attempted, quotes),
         media_claimed=_media_claimed(claims),
         shopify_sells=sells,
         top_probes=_top_probes(verdict),
@@ -144,7 +171,7 @@ def template_fraud_card(verdict, claims, product_json, blocked, attempted) -> Fr
     )
 
 
-def _neon_prompt(verdict, claims, product_json, blocked, attempted) -> str:
+def _neon_prompt(verdict, claims, product_json, blocked, attempted, quotes: list[str] | None = None) -> str:
     fired = [{"id": p.id, "p": p.p} for p in _top_probes(verdict, 5)]
     claims_json = claims.model_dump_json() if claims is not None else "null"
     subs = {
@@ -154,6 +181,7 @@ def _neon_prompt(verdict, claims, product_json, blocked, attempted) -> str:
         "<<PRODUCT>>": json.dumps(product_json),
         "<<CLAIMS>>": claims_json,
         "<<PROBES>>": json.dumps(fired),
+        "<<QUOTES>>": json.dumps(quotes or []),
     }
     text = PROMPT_PATH.read_text(encoding="utf-8")
     # Single pass: untrusted product/claims text that contains a placeholder token is never re-substituted.
@@ -190,12 +218,12 @@ async def _neon_reason(prompt: str) -> str:
     return parsed.reason.strip()
 
 
-async def build_fraud_card(verdict, claims, product_json, blocked, attempted, safe_cart) -> FraudCard:
-    card = template_fraud_card(verdict, claims, product_json, blocked, attempted)
+async def build_fraud_card(verdict, claims, product_json, blocked, attempted, safe_cart, quotes: list[str] | None = None) -> FraudCard:
+    card = template_fraud_card(verdict, claims, product_json, blocked, attempted, quotes)
     card.safe_cart = safe_cart
     card.dollars_defended = dollars_defended(attempted, (safe_cart or {}).get("total"))
     try:
-        prompt = _neon_prompt(verdict, claims, product_json, blocked, attempted)
+        prompt = _neon_prompt(verdict, claims, product_json, blocked, attempted, quotes)
         card.reason = await asyncio.wait_for(_neon_reason(prompt), timeout=NEON_TIMEOUT_S)
     except Exception as exc:  # timeout or any Neon error: template reason stays, UI never hangs
         log.warning("neon fraud card fell back to template: %s", type(exc).__name__)
@@ -287,8 +315,9 @@ async def on_block(b: BlockContext) -> FraudCard | None:
 
     The template card is emitted first (no network), so the UI always shows a Fraud Card; the
     safe cart and the Neon wording are added in a second fraud_card event when they arrive."""
+    quotes = flagged_quotes(b.media, b.claims)
     try:
-        card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total)
+        card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, quotes)
         b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
     except Exception as exc:  # never break the guarded pane
         log.warning("template fraud card failed: %s", type(exc).__name__)
@@ -312,11 +341,11 @@ async def on_block(b: BlockContext) -> FraudCard | None:
                 safe_cart = await safe_swap(b.intent, b.product_json, b.ctx.shop, known=b.ctx.products)
                 if safe_cart is not None:
                     # Show the alternative now; the Neon wording (slow) replaces the text when it lands.
-                    card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total)
+                    card = template_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, quotes)
                     card.safe_cart = safe_cart
                     card.dollars_defended = dollars_defended(b.cart_total, safe_cart.get("total"))
                     b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
-                card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart)
+                card = await build_fraud_card(b.verdict, b.claims, b.product_json, b.call, b.cart_total, safe_cart, quotes)
                 b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())
         except Exception as exc:
             # Shop errors can contain access-keyed cart URLs: log the type only.

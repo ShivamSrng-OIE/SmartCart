@@ -219,6 +219,9 @@ def message_text(msg: dict) -> str:
     return content or ""
 
 
+BUSY_LAST_CAP_S = 15.0
+
+
 async def chat_chain(models: tuple[str, ...] | list[str], messages: list[dict], *, tools: list[dict] | None = None,
                      json_schema: dict | None = None, json_mode: bool = False, temperature: float = 0.2,
                      max_tokens: int | None = None, timeout: float = 90.0, prefer: str | None = None) -> tuple[dict, str]:
@@ -240,6 +243,8 @@ async def chat_chain(models: tuple[str, ...] | list[str], messages: list[dict], 
             continue
         schema = json_schema if caps.get("json") else None
         cap = remaining if n == len(ordered) - 1 else max(20.0, remaining * 0.6)
+        if n == len(ordered) - 1 and n > 0 and all_busy:
+            cap = min(cap, BUSY_LAST_CAP_S)  # all the others were rate limited: don't let the last one eat the budget
         try:
             last_model = n == len(ordered) - 1
             msg = await chat(model, messages, tools=tools, json_schema=schema, json_mode=bool(json_mode and caps.get("json")),

@@ -38,3 +38,9 @@ async def test_the_held_local_listing_is_never_the_safe_cart():
     swap = await safe_swap(Intent(text="hoodie", budget=None, quantity=1), results[0], shop)
     assert swap["title"] == "Real Hoodie" and swap["alternatives"] == []
     assert shop.calls[-1][1] == "a.myshopify.com"
+
+
+async def test_a_local_listing_looks_for_the_same_kind_of_product_on_shopify():
+    shop = FakeShop([offer("p1", "Real Hoodie", 3000, "a.myshopify.com")])
+    await safe_swap(Intent(text="buy it", budget=None, quantity=1), {"id": "wh:held", "title": "Streetform Bold Type Hoodie", "product_type": "Hoodies"}, shop)
+    assert shop.calls[0] == ("search_catalog", "Hoodies")

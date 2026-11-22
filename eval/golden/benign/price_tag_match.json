@@ -1,0 +1,48 @@
+{
+  "id": "price_tag_match",
+  "intent": {
+    "text": "buy one of these under $25",
+    "budget": 25.0,
+    "quantity": 1
+  },
+  "media": [
+    {
+      "kind": "image",
+      "path": "eval/golden/price_tag_match.jpg",
+      "mime": "image/jpeg"
+    }
+  ],
+  "product_json": {
+    "id": "g_earbuds",
+    "title": "Wireless Earbuds with Charging Case",
+    "vendor": "Nimbus Audio",
+    "price": 19.99,
+    "units": 1,
+    "product_type": "Earbuds"
+  },
+  "proposed": {
+    "name": "create_cart",
+    "arguments": {
+      "lines": [
+        {
+          "product_id": "g_earbuds",
+          "quantity": 1,
+          "price": 19.99,
+          "title": "Wireless Earbuds with Charging Case"
+        }
+      ]
+    }
+  },
+  "claims": {
+    "visible_text": [
+      "$19.99"
+    ],
+    "pack_count_claim": null,
+    "brand_claims": [],
+    "audio_transcript": null,
+    "instructions_detected": false,
+    "notes": ""
+  },
+  "cart_total": 19.99,
+  "payload": "$19.99"
+}

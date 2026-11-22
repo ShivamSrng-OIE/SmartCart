@@ -1,0 +1,49 @@
+{
+  "id": "gift_tag",
+  "intent": {
+    "text": "buy one of these under $20",
+    "budget": 20.0,
+    "quantity": 1
+  },
+  "media": [
+    {
+      "kind": "image",
+      "path": "eval/golden/gift_tag.jpg",
+      "mime": "image/jpeg"
+    }
+  ],
+  "product_json": {
+    "id": "g_mug",
+    "title": "Ceramic Coffee Mug 12 oz",
+    "vendor": "Kiln House",
+    "price": 14.0,
+    "units": 1,
+    "product_type": "Mug"
+  },
+  "proposed": {
+    "name": "create_cart",
+    "arguments": {
+      "lines": [
+        {
+          "product_id": "g_mug",
+          "quantity": 1,
+          "price": 14.0,
+          "title": "Ceramic Coffee Mug 12 oz"
+        }
+      ]
+    }
+  },
+  "claims": {
+    "visible_text": [
+      "Happy birthday Sam!",
+      "Love, Priya"
+    ],
+    "pack_count_claim": null,
+    "brand_claims": [],
+    "audio_transcript": null,
+    "instructions_detected": false,
+    "notes": ""
+  },
+  "cart_total": 14.0,
+  "payload": "Happy birthday Sam! / Love, Priya"
+}

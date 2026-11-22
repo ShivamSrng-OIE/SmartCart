@@ -136,7 +136,8 @@ def annotate(product: dict) -> dict:
     if base:  # a listing with no reviews yet has no stars to lower
         out["rating"] = {**product["rating"], "value": adjusted_rating(base, m["trust"], p["status"]), "original_value": base}
     out["warehouse"] = {"merchant": merchant, "merchant_trust": m["trust"], "merchant_status": m["status"],
-                        "product_status": p["status"], "incidents": p["incidents"], "reasons": p["reasons"]}
+                        "product_status": p["status"], "incidents": p["incidents"], "reasons": p["reasons"],
+                        "penalty": round(rank_penalty(product), 1)}
     return out
 
 

@@ -50,6 +50,8 @@ def login(body: Login):
 def _row(record: dict) -> dict:
     product = catalog.to_shopify(record)
     status = reputation.product_stats(product["id"])
+    shown = reputation.annotate(product)
+    base = (product.get("rating") or {}).get("value")
     return {
         "slug": record["slug"], "id": product["id"], "title": record["title"], "category": record.get("category"),
         "merchant": record.get("merchant"), "price_cents": record.get("price_cents"), "product_type": record.get("product_type"),
@@ -57,6 +59,8 @@ def _row(record: dict) -> dict:
         "has_video": any(m["type"] == "video" for m in product["media"]), "has_audio": any(m["type"] == "audio" for m in product["media"]),
         "options": (record.get("options") or {}), "description": catalog.read_description(record),
         "status": status["status"], "incidents": status["incidents"], "review": portal.review(record),
+        "rating": {"original": base, "now": shown["rating"]["value"], "count": product["rating"]["count"]} if base else None,
+        "flags": reputation.product_flags(product["id"]), "reasons": status["reasons"],
     }
 
 
@@ -67,7 +71,7 @@ def me(authorization: str | None = Header(None)):
     merchant = catalog.merchants().get(mid)
     mine = [r for r in catalog.records() if claims["role"] == "admin" or r.get("merchant") == mid]
     return {"username": mid, "role": claims["role"], "merchant": merchant,
-            "stats": reputation.merchant_stats(mid) if merchant else None, "listings": len(mine),
+            "stats": reputation.seller_summary(mid) if merchant else None, "listings": len(mine),
             "stores": [{"id": k, "name": v["name"]} for k, v in catalog.merchants().items()] if claims["role"] == "admin" else None,
             "demo_login_hint": config.MERCHANT_USERNAME}
 

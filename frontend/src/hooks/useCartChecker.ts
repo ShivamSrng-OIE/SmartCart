@@ -44,6 +44,12 @@ export function useCartChecker(cart: Cart, onApproved?: (p: CatalogProduct) => v
 
       const finish = (message?: string) => {
         stops.current.delete(p.id);
+        if (message && heldAlready) {
+          // the verdict already came in; only the write-up was cut short (say, the server restarted)
+          state = { ...state, guarded: { ...state.guarded, finished: true } };
+          set({ phase: "held", state, message: "Held. The full write-up was cut short; press Check again to see it." });
+          return;
+        }
         const outcome = message ? "held" : checkOutcome(state);
         if (outcome === "approved") {
           cart.add(p, opts.quantity ?? 1);

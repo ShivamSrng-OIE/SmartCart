@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bot, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Sparkles, TrendingDown } from "lucide-react";
-import { ApiError, getBriefing, getTrust, resetTrust, token, type Incident, type TrustOverview } from "../lib/marketplace";
+import { Bot, FileWarning, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Sparkles, TrendingDown } from "lucide-react";
+import { ApiError, getBriefing, getTrust, resetTrust, type Incident, type ShopifyReport, type TrustOverview } from "../lib/marketplace";
 import { money } from "../lib/format";
 import { reasonLabel, statusTone } from "../lib/trust";
-import { TrustMeter } from "./TrustBadge";
+import { RatingChange, TrustMeter } from "./TrustBadge";
 import { Button, Chip, cx } from "./ui";
 
 const SOURCE_LABEL: Record<string, string> = { agent: "Assistant", cart: "Shopper’s cart", portal: "Seller’s listing" };
@@ -50,6 +50,24 @@ function IncidentRow({ i, name }: { i: Incident; name: string }) {
   );
 }
 
+function ReportCard({ r }: { r: ShopifyReport }) {
+  return (
+    <li className="flex min-w-0 flex-col gap-2 rounded-xl border border-danger-line bg-surface p-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="tnum rounded-md bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.id}</span>
+        <span className="text-xs text-ink-3">filed {ago(r.filed_at)}{r.incidents > 1 ? ` · updated ${ago(r.updated_at)} · ${r.incidents} incidents` : ""}</span>
+      </div>
+      <p className="truncate text-[14px] font-medium" title={r.title}>{r.title}</p>
+      <p className="text-[13px] text-ink-2">
+        Seller <span className="font-medium text-ink">{r.merchant_name}</span>
+        {r.reasons.length > 0 && <> · {r.reasons.map(reasonLabel).join(", ")}</>}
+      </p>
+      {r.evidence[0] && <p className="rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-[12px] break-words text-danger">“{r.evidence[0]}”</p>}
+      <p className="mt-auto text-[11px] text-ink-3">For {r.to}, with the photos, the listing text and the order that was stopped.</p>
+    </li>
+  );
+}
+
 export function Trust() {
   const [data, setData] = useState<TrustOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +110,7 @@ export function Trust() {
       setConfirmReset(false);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? "Sign in as the operator (Sell → sign in as “warehouse”) to reset." : err instanceof Error ? err.message : "Couldn’t reset.");
+      setError(err instanceof ApiError && err.status === 401 ? "Sign in as the operator (Sell → sign in as “warehouse”) to reset the shared ledger." : err instanceof Error ? err.message : "Couldn’t reset.");
       setConfirmReset(false);
     } finally {
       setResetting(false);
@@ -119,29 +137,32 @@ export function Trust() {
         <div>
           <p className="label mb-1">Marketplace trust</p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Which sellers can shoppers trust?</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
-            Every time Safe Checkout stops a listing, for a shopper or for the assistant, it is remembered. Sellers with repeat problems lose trust, their stars drop, and their products sink in search and carry a warning.
+          <p className="mt-1 max-w-3xl text-sm text-ink-2 sm:text-[15px]">
+            Every time Safe Checkout stops a listing, for a shopper or for the assistant, it is remembered. Sellers with repeat problems lose trust, their stars drop, their products sink in search and carry a warning, and the listing is written up for Shopify’s review.
           </p>
+          {data.session && <p className="mt-1.5 text-xs text-ink-3">These numbers belong to this visit: every session starts from the sellers’ original ratings.</p>}
         </div>
         {t.incidents > 0 &&
           (confirmReset ? (
             <div className="flex items-center gap-2">
-              <span className="text-[13px] text-ink-2">Forget everything?</span>
+              <span className="text-[13px] text-ink-2">{data.session ? "Forget this visit’s incidents?" : "Forget everything?"}</span>
               <Button variant="primary" size="sm" className="bg-danger! text-white!" disabled={resetting} onClick={reset} icon={resetting ? <Loader2 className="size-3.5 animate-spin" /> : undefined}>Yes, reset</Button>
               <Button size="sm" variant="ghost" onClick={() => setConfirmReset(false)}>Cancel</Button>
             </div>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setConfirmReset(true)} icon={<RotateCcw className="size-3.5" />} title={token.get() ? "Reset all incidents" : "Needs the operator sign-in"}>Reset demo</Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmReset(true)} icon={<RotateCcw className="size-3.5" />} title="Put every seller back to its original rating">Start over</Button>
           ))}
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{error}</p>}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Stat label="Incidents recorded" value={String(t.incidents)} hint={`${t.by_source.agent ?? 0} by the assistant · ${t.by_source.cart ?? 0} at carts · ${t.by_source.portal ?? 0} at publishing`} />
         <Stat label="Stopped at checkout" value={String(t.blocked)} tone={t.blocked ? "danger" : undefined} hint="orders held by Safe Checkout" />
         <Stat label="Money protected" value={money(t.protected_usd, true)} tone={t.protected_usd ? "safe" : undefined} hint="value of the orders that were held" />
         <Stat label="Flagged sellers" value={`${t.flagged_merchants}`} tone={t.flagged_merchants ? "danger" : undefined} hint={`${t.flagged_products} listing${t.flagged_products === 1 ? "" : "s"} blocked`} />
+        <Stat label="Ratings lowered" value={String(t.ratings_lowered)} tone={t.ratings_lowered ? "danger" : undefined} hint={`listings across ${t.merchants_lowered} seller${t.merchants_lowered === 1 ? "" : "s"}`} />
+        <Stat label="Reports for Shopify" value={String(t.reports)} tone={t.reports ? "danger" : undefined} hint="listings written up for review" />
       </div>
 
       <section className="card flex flex-col gap-3 p-4 sm:p-5" aria-label="Carbon">
@@ -201,6 +222,26 @@ export function Trust() {
         )}
       </section>
 
+      <section className="card flex flex-col gap-3 p-4 sm:p-5" aria-label="Reports for Shopify">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-danger-soft shadow-[inset_0_0_0_1px_var(--danger-line)]"><FileWarning className="size-5 text-danger" /></span>
+            <div>
+              <h2 className="text-[17px] font-semibold tracking-tight">Reports for Shopify</h2>
+              <p className="text-xs text-ink-3">Each blocked listing and its seller, with the evidence, for Shopify’s merchant-trust review.</p>
+            </div>
+          </div>
+          <Chip mono={false}>Queued here · nothing is sent automatically</Chip>
+        </div>
+        {data.reports.length ? (
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {data.reports.map((r) => <ReportCard key={r.id} r={r} />)}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-3">No reports yet. When Safe Checkout blocks a listing, its report shows up here.</p>
+        )}
+      </section>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <section className="card overflow-hidden" aria-label="Sellers">
           <div className="border-b border-line px-4 py-3 sm:px-5">
@@ -217,6 +258,7 @@ export function Trust() {
                   </p>
                   <p className="truncate text-xs text-ink-3">{m.location} · {m.listings} listings</p>
                 </div>
+                <RatingChange before={m.original_rating} after={m.rating} />
                 <TrustMeter value={m.trust} status={m.status} />
                 <Chip tone={statusTone(m.status)} mono={false} className="w-20 justify-center capitalize">{m.status}</Chip>
                 <p className="tnum w-24 text-right text-xs text-ink-3">{m.incidents ? `${m.incidents} incident${m.incidents === 1 ? "" : "s"}` : "no incidents"}</p>

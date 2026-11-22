@@ -1,7 +1,8 @@
-import { AlertTriangle, ShieldAlert, ShieldCheck, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { AlertTriangle, FileWarning, ShieldAlert, ShieldCheck, Star, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { CatalogProduct } from "../catalog";
 import { money } from "../lib/format";
+import { getTrust, type ShopifyReport, type TrustOverview } from "../lib/marketplace";
 import { reasonLabel, statusTone, trustHeadline, trustLevel } from "../lib/trust";
 import type { CheckResult } from "../hooks/useCartChecker";
 import { CheckProgress } from "./CheckProgress";
@@ -67,6 +68,72 @@ export function TrustNotice({ p, className }: { p: CatalogProduct; className?: s
 }
 
 /** Why a listing was held, in a dialog: the Fraud Card, the evidence and a safer alternative. */
+/** The seller's stars: what they were, what they are now, and by how much they fell. */
+export function RatingChange({ before, after, compact = false }: { before: number | null; after: number | null; compact?: boolean }) {
+  if (before == null || after == null) return <span className="text-xs text-ink-3">no reviews</span>;
+  const drop = Math.round((before - after) * 10) / 10;
+  return (
+    <span className={cx("tnum inline-flex items-center gap-1 whitespace-nowrap", compact ? "text-xs" : "text-[13px]")} title={drop > 0 ? `Average rating fell from ${before.toFixed(1)} to ${after.toFixed(1)}` : `Average rating ${after.toFixed(1)}`}>
+      <Star className={cx("size-3.5 fill-current", drop > 0 ? "text-danger" : "text-warn")} />
+      {drop > 0 ? (
+        <>
+          <span className="text-ink-3 line-through">{before.toFixed(1)}</span>
+          <span className="font-semibold text-danger">{after.toFixed(1)}</span>
+          <span className="rounded bg-danger-soft px-1 text-[11px] font-semibold text-danger">−{drop.toFixed(1)}</span>
+        </>
+      ) : (
+        <span className="font-medium">{after.toFixed(1)}</span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Under a held review of a marketplace listing: the report filed with Shopify and what it cost the seller, read
+ * back from the marketplace (so the numbers are the real ones for this session). Shown once the check is done.
+ */
+export function ReportedNotice({ productId, className }: { productId: string; className?: string }) {
+  const [found, setFound] = useState<{ report: ShopifyReport; seller?: TrustOverview["merchants"][number] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    let tries = 0;
+    const look = async () => {
+      try {
+        const t = await getTrust();
+        const report = t.reports.find((r) => r.product_id === productId);
+        if (report && live) return setFound({ report, seller: t.merchants.find((m) => m.id === report.merchant) });
+      } catch {
+        /* the notice is extra; the review already says what happened */
+      }
+      if (live && ++tries < 4) window.setTimeout(look, 1500); // the incident is written as the run closes
+    };
+    void look();
+    return () => {
+      live = false;
+    };
+  }, [productId]);
+  if (!found) return null;
+  const { report, seller } = found;
+  return (
+    <div className={cx("flex flex-col gap-2 rounded-xl border border-danger-line bg-danger-soft p-3.5 sm:flex-row sm:items-center sm:gap-4", className)} role="status">
+      <FileWarning className="hidden size-5 shrink-0 text-danger sm:block" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-semibold text-danger">Report for Shopify · {report.id}</p>
+        <p className="text-[13px] text-ink-2">
+          This listing and its seller, {report.merchant_name}, were written up with the evidence for Shopify’s merchant-trust team, and the seller’s rating and trust were lowered.
+          <span className="text-ink-3"> Reports are queued here; nothing is sent automatically.</span>
+        </p>
+      </div>
+      {seller && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1">
+          <RatingChange before={seller.original_rating} after={seller.rating} />
+          <span className="tnum text-[13px] text-ink-2">trust <span className="font-semibold text-danger">{seller.trust}</span>/100</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HeldDialog({ product, result, onClose }: { product: CatalogProduct; result: CheckResult; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -98,6 +165,7 @@ export function HeldDialog({ product, result, onClose }: { product: CatalogProdu
         <div className="thin-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {result.message && <p className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{result.message}</p>}
           {!s.guarded.finished && <CheckProgress state={s} product={product} running={result.phase === "checking"} compact className="mb-3" />}
+          {s.guarded.finished && result.phase === "held" && product.id.startsWith("wh:") && <ReportedNotice productId={product.id} className="mb-3" />}
           <FraudCard card={s.fraudCard} verdict={s.verdict} status={s.guarded.status} attempted={s.guarded.attempted} evidence={s.guarded.evidence} finished={s.guarded.finished} />
         </div>
       </div>

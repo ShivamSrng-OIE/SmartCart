@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Loader2, LogIn, LogOut, Mic, Pencil, Plus, ScanSearch, Search, ShieldAlert, ShieldCheck, Store, Trash2, Video, X } from "lucide-react";
+import { FileWarning, ImagePlus, Loader2, LogIn, LogOut, Mic, Pencil, Plus, ScanSearch, Search, ShieldAlert, ShieldCheck, Store, Trash2, Video, X } from "lucide-react";
 import {
   ApiError, createListing, deleteListing, deletePhoto, getCategories, getListings, getSession, getStores, login, photoUrl, reviewListing, token, updateListing,
   type Listing, type Review, type Session,
 } from "../lib/marketplace";
 import { money } from "../lib/format";
 import { reasonLabel } from "../lib/trust";
-import { TrustMeter } from "./TrustBadge";
+import { RatingChange, TrustMeter } from "./TrustBadge";
 import { Button, Chip, cx } from "./ui";
 
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
@@ -79,7 +79,7 @@ function LoginCard({ onSignedIn }: { onSignedIn: () => void }) {
           Sign in
         </Button>
         <p className="text-xs leading-relaxed text-ink-3">
-          Demo accounts: <span className="font-mono">warehouse</span> manages every store; each store’s own name signs in to just that store. The demo password is the one set as <span className="font-mono">MERCHANT_PASSWORD</span> in the backend’s <span className="font-mono">.env</span> (default <span className="font-mono">warehouse-demo</span>).
+          Store accounts: <span className="font-mono">warehouse</span> manages every store; each store’s own id signs in to just that store, with the password set as <span className="font-mono">MERCHANT_PASSWORD</span> in the backend’s <span className="font-mono">.env</span>.
         </p>
         {stores.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -376,6 +376,7 @@ function ListingRow({ l, onEdit, onDelete, onReview, busy }: { l: Listing; onEdi
     return () => window.clearTimeout(t);
   }, [confirm]);
   const flagged = l.review.flagged || l.status === "flagged";
+  const f = l.flags;
   return (
     <li className={cx("card flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:p-4", flagged && "shadow-[0_0_0_1px_var(--danger-line)]")}>
       <div className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-line bg-surface-2 sm:size-24">
@@ -402,7 +403,24 @@ function ListingRow({ l, onEdit, onDelete, onReview, busy }: { l: Listing; onEdi
             <Chip tone="safe" mono={false}><ShieldCheck className="size-3" /> Clean</Chip>
           )}
           {l.incidents > 0 && <Chip tone="warn" mono={false}>{l.incidents} incident{l.incidents === 1 ? "" : "s"}</Chip>}
+          {f?.report_id && <Chip tone="danger" mono={false}><FileWarning className="size-3" /> Report for Shopify · {f.report_id}</Chip>}
+          {l.rating && <RatingChange before={l.rating.original} after={l.rating.now} compact />}
         </div>
+        {f && f.images.length > 0 && (
+          <div className="mt-3">
+            <p className="label mb-1.5 text-danger!">Where shoppers’ checks found hidden text</p>
+            <div className="flex flex-wrap gap-2">
+              {f.images.map((src) => (
+                <a key={src} href={photoUrl(src)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-danger-line bg-black" title="Open the flagged photo">
+                  <img src={photoUrl(src)} alt="Flagged area of the product photo" className="h-20 w-auto max-w-[220px] object-contain sm:h-24" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+        {!l.review.flagged && f?.quotes[0] && (
+          <p className="mt-2 rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-[12px] break-words text-danger">“{f.quotes[0]}”</p>
+        )}
         {l.review.flagged && l.review.quotes[0] && (
           <p className="mt-2 rounded-md border border-danger-line bg-danger-soft px-2.5 py-1.5 text-[12px] break-words text-danger">“{l.review.quotes[0].quote}”</p>
         )}
@@ -429,6 +447,7 @@ function Portal({ session, onSignOut }: { session: Session; onSignOut: () => voi
   const [scanning, setScanning] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ slug: string; review: Review } | null>(null);
   const [stores, setStores] = useState<{ id: string; name: string }[]>(session.stores ?? []);
+  const [stats, setStats] = useState(session.stats);
 
   const load = useCallback(async () => {
     try {
@@ -442,6 +461,15 @@ function Portal({ session, onSignOut }: { session: Session; onSignOut: () => voi
   }, [store, onSignOut]);
 
   useEffect(() => void load(), [load]);
+  // Live: what shoppers' checks do in this session (stars falling, reports to Shopify) shows up here as it happens.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.hidden || editing) return;
+      getSession().then((s) => setStats(s.stats)).catch(() => undefined);
+      void load();
+    }, 6000);
+    return () => window.clearInterval(id);
+  }, [load, editing]);
   useEffect(() => {
     if (session.role === "admin" && !stores.length) getStores().then((s) => setStores(s.map((x) => ({ id: x.id, name: x.name })))).catch(() => undefined);
   }, [session.role, stores.length]);
@@ -486,25 +514,38 @@ function Portal({ session, onSignOut }: { session: Session; onSignOut: () => voi
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {session.stats && (
+          {stats && (
             <div className="text-right">
               <p className="label">Seller trust</p>
-              <TrustMeter value={session.stats.trust} status={session.stats.status} className="justify-end" />
+              <TrustMeter value={stats.trust} status={stats.status} className="justify-end" />
             </div>
           )}
           <Button variant="ghost" onClick={onSignOut} icon={<LogOut className="size-4" />}>Sign out</Button>
         </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-3">
+      {stats && (stats.reports ?? 0) > 0 && (
+        <div className="flex flex-col gap-1 rounded-xl border border-danger-line bg-danger-soft p-3.5 sm:flex-row sm:items-center sm:gap-3" role="alert">
+          <FileWarning className="hidden size-5 shrink-0 text-danger sm:block" />
+          <p className="text-[14px] text-ink">
+            <span className="font-semibold text-danger">Reported for Shopify’s review.</span> {stats.reports} of your listings {stats.reports === 1 ? "was" : "were"} written up, with the evidence, for hidden instructions aimed at shopping agents
+            {stats.original_rating != null && stats.rating != null && stats.rating < stats.original_rating ? `, and your average rating fell from ${stats.original_rating.toFixed(1)} to ${stats.rating.toFixed(1)}` : ""}.
+            <span className="text-ink-3"> Reports are queued here; nothing is sent automatically.</span>
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {[
-          ["Listings", String(rows?.length ?? "–")],
-          ["Need attention", String(rows ? flaggedCount : "–"), flaggedCount > 0],
-          ["Seller trust", session.stats ? `${session.stats.trust}/100` : "All stores"],
-        ].map(([label, value, warn]) => (
-          <div key={String(label)} className="card p-3.5 sm:p-4">
+          { label: "Listings", value: String(rows?.length ?? "–") },
+          { label: "Need attention", value: String(rows ? flaggedCount : "–"), warn: flaggedCount > 0 },
+          { label: "Seller trust", value: stats ? `${stats.trust}/100` : "All stores", warn: !!stats && stats.status !== "trusted" },
+          { label: "Average rating", node: stats ? <RatingChange before={stats.original_rating ?? null} after={stats.rating ?? null} /> : null, value: "All stores" },
+          { label: "Reports for Shopify", value: stats ? String(stats.reports ?? 0) : "–", warn: !!stats?.reports },
+        ].map(({ label, value, warn, node }) => (
+          <div key={label} className="card p-3.5 sm:p-4">
             <p className="label">{label}</p>
-            <p className={cx("tnum mt-1 text-xl font-semibold tracking-tight sm:text-2xl", warn && "text-danger")}>{value}</p>
+            {node ? <div className="mt-2">{node}</div> : <p className={cx("tnum mt-1 text-xl font-semibold tracking-tight sm:text-2xl", warn && "text-danger")}>{value}</p>}
           </div>
         ))}
       </div>

@@ -75,6 +75,12 @@ export interface MerchantStats {
   products_with_incidents: number;
   clean_checks: number;
   last_incident: number | null;
+  /** with the seller's own session view (portal): stars before and after, and listings reported to Shopify */
+  rating?: number | null;
+  original_rating?: number | null;
+  rating_drop?: number;
+  ratings_lowered?: number;
+  reports?: number;
 }
 
 export interface Session {
@@ -119,6 +125,11 @@ export interface Listing {
   status: "clear" | "watch" | "flagged";
   incidents: number;
   review: Review;
+  /** the stars shoppers see now, and before this session's incidents */
+  rating?: { original: number; now: number; count: number } | null;
+  /** what shoppers' checks found: the report to Shopify and the evidence (boxed photo crops, the words) */
+  flags?: { report_id: string | null; images: string[]; quotes: string[]; last_incident: number | null };
+  reasons?: string[];
 }
 
 export const login = (username: string, password: string) =>
@@ -161,10 +172,48 @@ export interface Insight {
   detail: string;
 }
 
+/** A blocked listing as it is reported to Shopify's merchant-trust team (simulated: the demo sends nothing). */
+export interface ShopifyReport {
+  id: string;
+  product_id: string;
+  title: string;
+  merchant: string;
+  merchant_name: string;
+  filed_at: number;
+  updated_at: number;
+  incidents: number;
+  reasons: string[];
+  evidence: string[];
+  to: string;
+  simulated: boolean;
+}
+
+export interface MerchantRatings {
+  /** average stars over the seller's rated listings, now and before this session's incidents */
+  rating: number | null;
+  original_rating: number | null;
+  rating_drop: number;
+  /** listings whose stars were lowered */
+  ratings_lowered: number;
+}
+
 export interface TrustOverview {
-  merchants: (MerchantStats & { id: string; name: string; tagline?: string; location?: string; since?: number; listings: number })[];
+  merchants: (MerchantStats & MerchantRatings & { id: string; name: string; tagline?: string; location?: string; since?: number; listings: number })[];
   incidents: Incident[];
-  totals: { incidents: number; blocked: number; protected_usd: number; by_source: Record<string, number>; flagged_merchants: number; flagged_products: number };
+  reports: ShopifyReport[];
+  /** the numbers are this browser session's own (each visit starts from the original ratings) */
+  session: boolean;
+  totals: {
+    incidents: number;
+    blocked: number;
+    protected_usd: number;
+    by_source: Record<string, number>;
+    flagged_merchants: number;
+    flagged_products: number;
+    ratings_lowered: number;
+    merchants_lowered: number;
+    reports: number;
+  };
   analysis: {
     insights: Insight[];
     actions: { action: "demote" | "warn"; merchant?: string; product?: string; reason: string }[];

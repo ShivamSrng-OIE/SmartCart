@@ -158,7 +158,7 @@ function CheckoutButton({ shop, lines }: { shop: string; lines: Cart["lines"] })
     return (
       <p className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
         <Info className="mt-0.5 size-3.5 shrink-0" />
-        <span><span className="font-medium text-ink">{name}</span> is a demo store, so there is no payment step. Safe Checkout already approved these items.</span>
+        <span><span className="font-medium text-ink">{name}</span> takes no payment online, so there is no payment step. Safe Checkout already approved these items.</span>
       </p>
     );
   }

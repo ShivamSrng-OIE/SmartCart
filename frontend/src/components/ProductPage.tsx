@@ -8,7 +8,7 @@ import { FraudCard } from "./FraudCard";
 import { CheckProgress, listingFacts, useElapsed } from "./CheckProgress";
 import { currentActivity } from "../lib/progress";
 import { useCartChecker } from "../hooks/useCartChecker";
-import { TrustMeter, TrustNotice } from "./TrustBadge";
+import { ReportedNotice, TrustMeter, TrustNotice } from "./TrustBadge";
 import type { Cart } from "../hooks/useCart";
 import { money } from "../lib/format";
 import { sized, srcSet } from "../lib/img";
@@ -787,7 +787,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
             {checking && <p className="flex items-center gap-2 text-sm text-ink-2"><Loader2 className="size-4 animate-spin" /> {currentActivity(result.state, listingFacts(product))}… {elapsed}s</p>}
             {result?.phase === "approved" && <p className="flex items-center gap-2 text-sm font-medium text-safe"><Check className="size-4" /> Approved · added to your cart</p>}
             {held && <p className="text-sm font-medium text-danger">Held by Safe Checkout · nothing was added. The review is just below.</p>}
-            {result?.phase === "error" && result.message && <p className="text-sm text-ink-2">{result.message}</p>}
+            {held && result?.message && <p className="text-sm text-ink-2">{result.message}</p>}
           </div>
 
           <dl className="grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4 text-[13px]">
@@ -801,7 +801,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
             </div>
             <div>
               <dt className="label">Shipping</dt>
-              <dd className="mt-1 text-ink-2">Demo store, no real orders</dd>
+              <dd className="mt-1 text-ink-2">No payment is taken here</dd>
             </div>
             <div>
               <dt className="label">Checked by</dt>
@@ -827,6 +827,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
             </div>
           ) : (
             <>
+              {result.state.guarded.finished && result.phase === "held" && <ReportedNotice productId={product.id} />}
               {!result.state.guarded.finished && result.phase === "held" && <CheckProgress state={result.state} product={product} running={false} compact className="w-full max-w-2xl" />}
               <FraudCard className="w-full" card={result.state.fraudCard} verdict={result.state.verdict} status={result.state.guarded.status} attempted={result.state.guarded.attempted} evidence={result.state.guarded.evidence} finished={result.state.guarded.finished} />
             </>
@@ -863,7 +864,7 @@ function WarehouseProductPage({ product, cart, onBack, onAskAssistant }: { produ
           <p className="text-[13px] leading-relaxed text-ink-3">
             {flagged
               ? "Safe Checkout has stopped listings from this seller. Take extra care, or choose another store."
-              : "Every item from this store is checked by Safe Checkout when it is added to your cart. This is a demo marketplace."}
+              : "Every item from this store is checked by Safe Checkout when it is added to your cart."}
           </p>
         </aside>
       </section>

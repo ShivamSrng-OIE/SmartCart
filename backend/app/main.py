@@ -36,6 +36,7 @@ from app.schemas import Intent, Media
 from app.shop_mcp import ShopMCP
 from app.trace import TraceBus
 from app.victim_hydrogen import VICTIM_PROMPT, run_victim
+from app.warehouse import reputation
 from app.warehouse_shop import ALL_MATCHES_NOTE, WarehouseShop
 
 RUNS_DIR = Path("runs")
@@ -89,6 +90,26 @@ app = FastAPI(title="CartTrap", lifespan=lifespan)
 # CORS_ORIGINS is a comma-separated list of origins (default: the local dev servers); "*" allows any.
 _origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,"
                                          "http://localhost:4173,http://127.0.0.1:4173").split(",") if o.strip()]
+class ReputationSession:
+    """Scope marketplace reputation to the visitor's session (the X-Tote-Session header): each session starts from
+    a clean marketplace and only its own checks lower ratings. Plain ASGI, so event streams pass straight through;
+    tasks a request starts (a cart check, an agent run) inherit the session."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.inner(scope, receive, send)
+        raw = dict(scope.get("headers") or []).get(b"x-tote-session", b"").decode("latin-1")
+        token = reputation.SESSION.set(reputation.valid_session(raw))
+        try:
+            await self.inner(scope, receive, send)
+        finally:
+            reputation.SESSION.reset(token)
+
+
+app.add_middleware(ReputationSession)
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"],
                    allow_credentials=False, max_age=600)
 app.state.bus = TraceBus()

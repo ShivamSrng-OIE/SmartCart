@@ -56,13 +56,13 @@ def _save() -> None:
 
 def record_incident(*, product_id: str, merchant: str | None, title: str, source: str, severity: str,
                     reasons: list[str] | None = None, quotes: list[str] | None = None, run_id: str | None = None,
-                    query: str | None = None, category: str | None = None) -> dict:
+                    query: str | None = None, category: str | None = None, amount: float = 0.0) -> dict:
     """source: agent | cart | portal. severity: block | escalate | scan."""
     if severity not in WEIGHTS:
         raise ValueError(f"severity must be one of {sorted(WEIGHTS)}")
     incident = {"id": uuid.uuid4().hex[:10], "ts": time.time(), "product_id": product_id, "merchant": merchant or "unknown",
                 "title": title, "source": source, "severity": severity, "reasons": reasons or [], "quotes": (quotes or [])[:4],
-                "run_id": run_id, "query": query, "category": category}
+                "run_id": run_id, "query": query, "category": category, "amount": round(float(amount or 0), 2)}
     with _lock:
         state = _load()
         state["incidents"].append(incident)
@@ -164,5 +164,6 @@ def overview() -> dict:
     return {"merchants": by_merchant, "incidents": sorted(rows, key=lambda r: -r["ts"])[:60],
             "totals": {"incidents": len(rows), "blocked": sum(1 for r in rows if r["severity"] == "block"),
                        "by_source": {s: sum(1 for r in rows if r["source"] == s) for s in ("agent", "cart", "portal")},
+                       "protected_usd": round(sum(r.get("amount", 0) for r in rows if r["severity"] == "block"), 2),
                        "flagged_merchants": sum(1 for m in by_merchant if m["status"] == "flagged"),
                        "flagged_products": len({r["product_id"] for r in rows if r["severity"] == "block"})}}

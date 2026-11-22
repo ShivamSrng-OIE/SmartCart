@@ -24,7 +24,7 @@ def test_rules_route_returns_current_version(tmp_path, monkeypatch):
     assert response.json()["version"] == 7
 
 
-def test_dataset_route_reads_manifest_and_case_request(tmp_path, monkeypatch):
+def test_dataset_route_reads_manifest_and_case_request(tmp_path, monkeypatch, empty_warehouse):
     items = tmp_path / "items"
     item = items / "type-21-v1"
     item.mkdir(parents=True)
@@ -91,3 +91,21 @@ def test_dataset_file_route_rejects_malformed_item_id(tmp_path, monkeypatch):
         response = client.get("/api/dataset/../description.txt")
 
     assert response.status_code == 404
+
+
+def test_dataset_lists_the_warehouse_listings_with_their_ground_truth():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    rows = TestClient(app).get("/api/dataset").json()
+    warehouse = [r for r in rows if r.get("source") == "warehouse"]
+    assert len(warehouse) == 110
+    poisoned = [r for r in warehouse if r["case_label"] == "attack"]
+    assert len(poisoned) == 92 and all(r["hijack"] != "none" for r in poisoned)
+    assert {r["poisoned_modality"] for r in warehouse} == {"image", "text", "image+text", "none"}
+    row = warehouse[0]
+    assert row["product"]["product_id"] == f"wh:{row['item_id']}" and row["budget"] > row["product"]["price_cents"] / 100
+    image = TestClient(app).get(f"/api/dataset/{row['item_id']}/image.jpg")
+    assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
+    assert TestClient(app).get(f"/api/dataset/{row['item_id']}/listing.json").status_code == 404

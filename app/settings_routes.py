@@ -67,6 +67,25 @@ def put_key(body: Key, request: Request, authorization: str | None = Header(None
     return settings.snapshot()
 
 
+@router.post("/api/llm/own-key/check")
+async def check_own_key():
+    """Try the visitor's own key (sent in the X-LLM-* headers) with one tiny request. Nothing is stored."""
+    provider = settings.own_key()
+    if not provider:
+        raise HTTPException(422, "send a key in the X-LLM-OpenRouter-Key or X-LLM-Gemini-Key header")
+    t0 = time.perf_counter()
+    try:
+        _text, used = await api.complete_text("defender", "Reply with the single word OK.", "ping", timeout=60)
+        return {"ok": True, "provider": provider, "model": used, "ms": int((time.perf_counter() - t0) * 1000)}
+    except Exception as exc:  # noqa: BLE001  (never echo the key: report the kind of failure only)
+        text = f"{type(exc).__name__} {exc}".lower()
+        why = ("the key was not accepted" if any(h in text for h in ("401", "403", "unauthor", "invalid", "api key", "permission"))
+               else "the key's rate limit or quota is used up right now" if any(h in text for h in settings.QUOTA_HINTS)
+               else "the provider didn't answer in time" if "timeout" in text
+               else "the provider returned an error")
+        return {"ok": False, "provider": provider, "error": why, "ms": int((time.perf_counter() - t0) * 1000)}
+
+
 @router.post("/api/settings/llm/test")
 async def test_role(body: Test, request: Request, authorization: str | None = Header(None)):
     """One tiny request for a job. On OpenRouter it walks that job's free models, so `model` is the one that

@@ -36,6 +36,7 @@ from app.schemas import Intent, Media
 from app.shop_mcp import ShopMCP
 from app.trace import TraceBus
 from app.victim_hydrogen import VICTIM_PROMPT, run_victim
+from app.llm import settings as llm_settings
 from app.warehouse import reputation
 from app.warehouse_shop import ALL_MATCHES_NOTE, WarehouseShop
 
@@ -90,10 +91,24 @@ app = FastAPI(title="CartTrap", lifespan=lifespan)
 # CORS_ORIGINS is a comma-separated list of origins (default: the local dev servers); "*" allows any.
 _origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,"
                                          "http://localhost:4173,http://127.0.0.1:4173").split(",") if o.strip()]
-class ReputationSession:
-    """Scope marketplace reputation to the visitor's session (the X-Tote-Session header): each session starts from
-    a clean marketplace and only its own checks lower ratings. Plain ASGI, so event streams pass straight through;
-    tasks a request starts (a cart check, an agent run) inherit the session."""
+def _own_keys(headers: dict[bytes, bytes]) -> dict | None:
+    """A visitor's own model keys (X-LLM-OpenRouter-Key, X-LLM-Gemini-Key, X-LLM-Provider), for their requests only."""
+    out: dict = {}
+    for name, field in ((b"x-llm-openrouter-key", "openrouter"), (b"x-llm-gemini-key", "gemini")):
+        value = headers.get(name, b"").decode("latin-1").strip()
+        if 10 <= len(value) <= 400 and value.isprintable() and not any(c.isspace() for c in value):
+            out[field] = value
+    prefer = headers.get(b"x-llm-provider", b"").decode("latin-1").strip().lower()
+    if out and prefer in llm_settings.PROVIDERS:
+        out["prefer"] = prefer
+    return out or None
+
+
+class RequestScope:
+    """Per-request context, read from headers. The visitor's session (X-Tote-Session) scopes marketplace reputation:
+    each session starts from a clean marketplace and only its own checks lower ratings. The visitor's own model keys
+    (X-LLM-*) are used for their requests instead of the shared ones, and never stored. Plain ASGI, so event streams
+    pass straight through; tasks a request starts (a cart check, an agent run) inherit both."""
 
     def __init__(self, inner):
         self.inner = inner
@@ -101,15 +116,17 @@ class ReputationSession:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.inner(scope, receive, send)
-        raw = dict(scope.get("headers") or []).get(b"x-tote-session", b"").decode("latin-1")
-        token = reputation.SESSION.set(reputation.valid_session(raw))
+        headers = dict(scope.get("headers") or [])
+        session = reputation.SESSION.set(reputation.valid_session(headers.get(b"x-tote-session", b"").decode("latin-1")))
+        keys = llm_settings.USER_KEYS.set(_own_keys(headers))
         try:
             await self.inner(scope, receive, send)
         finally:
-            reputation.SESSION.reset(token)
+            llm_settings.USER_KEYS.reset(keys)
+            reputation.SESSION.reset(session)
 
 
-app.add_middleware(ReputationSession)
+app.add_middleware(RequestScope)
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"],
                    allow_credentials=False, max_age=600)
 app.state.bus = TraceBus()
@@ -131,7 +148,8 @@ _tasks: set[asyncio.Task] = set()
 async def health() -> dict:
     from app.llm import api
 
-    return {"ok": True, "provider": api.provider(), "model_key": api.key_missing() is None}
+    return {"ok": True, "provider": api.provider(), "model_key": api.key_missing() is None,
+            "own_key": llm_settings.own_key(), "limits": llm_settings.limits()}
 
 
 async def _save(upload: UploadFile | None, kind: str, run_dir: Path) -> Media | None:

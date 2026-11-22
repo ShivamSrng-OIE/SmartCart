@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Database, Play } from "lucide-react";
 import { useDraft } from "../draft";
 import { money } from "../lib/format";
-import { MODALITIES, fetchBlob, fetchDataset, fetchListingText, fileUrl, imageUrl, mediaToFetch, type DatasetItem } from "../lib/dataset";
+import { fetchBlob, fetchDataset, fetchListingText, fileUrl, itemImage, mediaToFetch, type DatasetItem } from "../lib/dataset";
 import { Button, Chip } from "./ui";
 
 export function Dataset({ onRun }: { onRun: () => void }) {
@@ -26,6 +26,7 @@ export function Dataset({ onRun }: { onRun: () => void }) {
     };
   }, []);
 
+  const modalities = useMemo(() => [...new Set((items ?? []).map((i) => i.poisoned_modality))], [items]);
   const shown = useMemo(() => (items ?? []).filter((i) => filter === "all" || i.poisoned_modality === filter), [items, filter]);
 
   async function run(item: DatasetItem) {
@@ -54,7 +55,7 @@ export function Dataset({ onRun }: { onRun: () => void }) {
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Poisoned orders we test against</h1>
         </div>
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by modality">
-          {["all", ...MODALITIES].map((m) => (
+          {["all", ...modalities].map((m) => (
             <Button key={m} size="sm" variant={filter === m ? "primary" : "secondary"} onClick={() => setFilter(m)}>
               {m}
             </Button>
@@ -68,17 +69,18 @@ export function Dataset({ onRun }: { onRun: () => void }) {
         <div className="card flex flex-col items-center gap-2 px-6 py-16 text-center">
           <Database className="size-7 text-ink-3" />
           <p className="text-[15px] font-medium">{error ? "The dataset could not be loaded" : items.length ? "No items for this filter" : "No dataset items yet"}</p>
-          <p className="max-w-md text-sm text-ink-3">Generated poisoned items show up here once the backend has produced them.</p>
+          <p className="max-w-md text-sm text-ink-3">Poisoned and clean listings show up here once the backend has loaded the warehouse.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {shown.map((i) => (
             <div key={i.item_id} className="card flex flex-col overflow-hidden">
-              <img src={imageUrl(i.item_id)} alt={i.case_label ?? i.item_id} loading="lazy" className="aspect-[4/3] w-full bg-surface-2 object-cover" />
+              <img src={itemImage(i)} alt={i.product?.title ?? i.case_label ?? i.item_id} loading="lazy" className="aspect-[4/3] w-full bg-surface-2 object-cover" />
               <div className="flex flex-1 flex-col gap-2 p-4">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Chip>{i.poisoned_modality}</Chip>
-                  {i.hijack && <Chip tone="danger">{i.hijack}</Chip>}
+                  {i.case_label === "benign" ? <Chip tone="safe">clean</Chip> : i.hijack && i.hijack !== "none" && <Chip tone="danger">{i.hijack}</Chip>}
+                  {i.category && <Chip mono={false}>{i.category.replace(/-/g, " ")}</Chip>}
                   {i.gate_passed != null && <Chip tone={i.gate_passed ? "safe" : "warn"}>{i.gate_passed ? "gate passed" : "gate failed"}</Chip>}
                 </div>
                 <p className="text-[15px] font-semibold">

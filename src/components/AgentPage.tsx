@@ -8,6 +8,7 @@ import { FraudCard } from "./FraudCard";
 import { describeCall } from "./OutcomeStrip";
 import { Button, Segmented, cx } from "./ui";
 import { useAgentRun } from "../hooks/useAgentRun";
+import { useModelLabels } from "../hooks/useModelLabels";
 import { useDraft } from "../draft";
 import type { AgentKind } from "../config";
 import type { Mode } from "../hooks/useBackend";
@@ -308,11 +309,18 @@ export function AgentPage({
       };
   }
 
+  const labels = useModelLabels();
+  const models = labels
+    ? kind === "unprotected"
+      ? [labels.shopper]
+      : [labels.perception, labels.provider === "gemini" ? "Decisions API" : labels.firewall, labels.defender]
+    : copy.models;
+
   const Intro = ({ className }: { className?: string }) => (
     <header className={cx("flex flex-col gap-1", className)}>
       <h1 className="text-2xl font-semibold tracking-tight sm:text-[26px]">{copy.title}</h1>
       <p className="max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
-      <p className="text-xs text-ink-3">Powered by {copy.models.join(" · ")}</p>
+      <p className="text-xs text-ink-3">Powered by {models.join(" · ")}</p>
     </header>
   );
 

@@ -161,12 +161,17 @@ export function getProductMcp(id: string, signal?: AbortSignal) {
   return callTool<{ product?: Record<string, unknown> }>("get_product", { catalog: { id, context: { address_country: code, currency } } }, signal);
 }
 
-/** Starts (never completes) a checkout on the merchant; the shopper finishes it at continue_url. */
-export function createCheckoutMcp(shop: string, lines: { variantId: string; quantity: number }[]) {
-  const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return callTool<{ id?: string; continue_url?: string; status?: string; messages?: ShopMessage[] }>("create_checkout", {
-    shop,
-    checkout: { line_items: lines.map((l) => ({ item: { id: l.variantId }, quantity: l.quantity })) },
-    meta: { "idempotency-key": key },
+/**
+ * Starts (never completes) a checkout at the merchant: the backend puts these lines in a cart at the store and
+ * returns the store's own checkout link, where the shopper signs in and pays with their own account.
+ */
+export async function createCheckoutMcp(shop: string, lines: { variantId: string; quantity: number }[]): Promise<{ id?: string; continue_url?: string }> {
+  const r = await fetch(apiUrl("/api/checkout"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shop, lines: lines.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })) }),
   });
+  const body = (await r.json().catch(() => ({}))) as { id?: string; continue_url?: string; detail?: unknown };
+  if (!r.ok) throw new Error(typeof body.detail === "string" ? `Checkout failed: ${body.detail}.` : "Checkout failed. Try again in a moment.");
+  return body;
 }

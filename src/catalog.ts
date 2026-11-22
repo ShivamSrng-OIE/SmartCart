@@ -2,8 +2,8 @@
  * Product search + detail for "Shop yourself" and the product picker.
  *
  * Source order for every call:
- *   1. team backend route, if it exists (GET /api/catalog/search, GET /api/catalog/products/{id})
- *   2. Shopify Shop MCP directly, through the /shop-mcp proxy (search_catalog / get_product)
+ *   1. Shopify Shop MCP, through the backend's read-only /shop-mcp proxy (search_catalog / get_product)
+ *   2. our warehouse storefronts (GET /api/warehouse/products), mixed in by searchCatalog
  *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
@@ -379,7 +379,6 @@ function localSearch(q: string, maxPrice?: number | null, limit = 24): CatalogPr
     .map((x) => x.p);
 }
 
-let backendSearchMissing = false;
 let shopifyUnavailable = false;
 
 // Short-lived memory cache + in-flight de-duplication: the same search typed twice, or asked
@@ -467,25 +466,6 @@ async function searchUncached(q: string, opts: SearchOptions = {}): Promise<Sear
   const { maxPrice = null, limit = 12, cursor, signal, network = true } = opts;
   const notes: string[] = [];
 
-  if (network && !backendSearchMissing) {
-    try {
-      const params = new URLSearchParams({ q, limit: String(limit) });
-      if (maxPrice != null) params.set("max_price", String(maxPrice));
-      if (cursor) params.set("cursor", cursor);
-      const r = await fetch(`/api/catalog/search?${params}`, { signal });
-      if (r.ok) {
-        const j = (await r.json()) as unknown;
-        const list = Array.isArray(j) ? j : Array.isArray(obj(j).products) ? (obj(j).products as unknown[]) : [];
-        const items = list.map(normalizeProduct).filter(Boolean) as CatalogProduct[];
-        return { items, source: "live", cursor: str(obj(obj(j).pagination).cursor) ?? undefined };
-      }
-      backendSearchMissing = true;
-    } catch (err) {
-      if ((err as Error).name === "AbortError") throw err;
-      backendSearchMissing = true;
-    }
-  }
-
   if (network && !shopifyUnavailable) {
     try {
       const doc = await searchCatalogMcp({ query: q, maxPrice, limit, cursor, signal });
@@ -526,17 +506,6 @@ export async function getProduct(id: string, network = true): Promise<{ product:
   if (demo || !network) return { product: demo, source: "demo" };
   const hit = productCache.get(`${getCountry().code}:${id}`);
   if (hit) return hit;
-  if (!backendSearchMissing) {
-    try {
-      const r = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`);
-      if (r.ok) {
-        const p = normalizeProduct(await r.json());
-        if (p) return { product: p, source: "live" };
-      }
-    } catch {
-      /* fall through */
-    }
-  }
   try {
     const doc = await getProductMcp(id);
     const p = normalizeProduct(doc.product ?? doc);

@@ -108,4 +108,5 @@ async def perceive(media: list[Media]) -> Claims:
         return _with_scan(Claims.model_validate(raw), media)
     except Exception as e:  # noqa: BLE001 - perception must never break the pipeline
         log.warning("argon perception failed: %s: %s", type(e).__name__, e)
-        return _empty("perception_error")
+        # The model could not read the media, but the rule scan still reads the listing's own text.
+        return _with_scan(_empty("perception_error"), media)

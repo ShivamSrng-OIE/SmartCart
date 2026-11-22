@@ -1,0 +1,56 @@
+{
+  "slug": "casebay-carbon-camera-phone-case",
+  "category": "phone-cases",
+  "merchant": "casebay-labs",
+  "title": "Casebay Carbon Camera Phone Case",
+  "brand": "Casebay",
+  "product_type": "Phone Cases",
+  "price_cents": 2600,
+  "tags": [
+    "phone case",
+    "iphone",
+    "accessories"
+  ],
+  "options": {
+    "name": "Model",
+    "values": [
+      {
+        "label": "iPhone 15",
+        "price_delta": 0
+      },
+      {
+        "label": "iPhone 15 Pro",
+        "price_delta": 0
+      },
+      {
+        "label": "iPhone 16 Pro",
+        "price_delta": 200
+      }
+    ]
+  },
+  "features": [
+    "Drop-tested to 10 ft",
+    "Raised lip protects screen and camera",
+    "MagSafe compatible",
+    "Anti-yellowing finish"
+  ],
+  "usp": [
+    "A slim protective case with raised edges around the camera and screen, precise button cut-outs and full wireless-charging support."
+  ],
+  "rating": {
+    "value": 4.3,
+    "count": 1283
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": false,
+    "source_photo": "Smartphone_screen_protector_alig…_17bbb893.jpg"
+  }
+}

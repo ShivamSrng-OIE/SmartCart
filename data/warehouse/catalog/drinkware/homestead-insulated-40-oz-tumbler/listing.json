@@ -1,0 +1,53 @@
+{
+  "slug": "homestead-insulated-40-oz-tumbler",
+  "category": "drinkware",
+  "merchant": "homestead-goods",
+  "title": "Homestead Insulated 40 oz Tumbler",
+  "brand": "Homestead",
+  "product_type": "Drinkware",
+  "price_cents": 3199,
+  "tags": [
+    "drinkware",
+    "bottle",
+    "tumbler",
+    "home"
+  ],
+  "options": {
+    "name": "Size",
+    "values": [
+      {
+        "label": "20 oz",
+        "price_delta": 0
+      },
+      {
+        "label": "32 oz",
+        "price_delta": 600
+      }
+    ]
+  },
+  "features": [
+    "Double-wall vacuum insulation",
+    "Dishwasher safe",
+    "Fits most cup holders",
+    "BPA free"
+  ],
+  "usp": [
+    "Double-wall vacuum insulated drinkware that keeps drinks cold for 24 hours or hot for 12, with a leak-resistant lid."
+  ],
+  "rating": {
+    "value": 4.4,
+    "count": 2133
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": true,
+    "source_photo": "d9c77a88-6cb9-495f-aece-0282a72c7b66.webp_9f3d7b44.jpg"
+  }
+}

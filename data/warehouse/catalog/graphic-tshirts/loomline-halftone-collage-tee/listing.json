@@ -1,0 +1,61 @@
+{
+  "slug": "loomline-halftone-collage-tee",
+  "category": "graphic-tshirts",
+  "merchant": "loomline",
+  "title": "Loomline Halftone Collage Tee",
+  "brand": "Loomline",
+  "product_type": "Graphic T-Shirts",
+  "price_cents": 3500,
+  "tags": [
+    "tshirt",
+    "graphic tee",
+    "apparel",
+    "cotton"
+  ],
+  "options": {
+    "name": "Size",
+    "values": [
+      {
+        "label": "S",
+        "price_delta": 0
+      },
+      {
+        "label": "M",
+        "price_delta": 0
+      },
+      {
+        "label": "L",
+        "price_delta": 0
+      },
+      {
+        "label": "XL",
+        "price_delta": 200
+      }
+    ]
+  },
+  "features": [
+    "100% ring-spun cotton, pre-shrunk",
+    "Water-based inks, soft hand feel",
+    "Relaxed unisex fit",
+    "Machine wash cold, tumble dry low"
+  ],
+  "usp": [
+    "A soft, pre-shrunk cotton tee with a high-detail print that will not crack or fade after washing"
+  ],
+  "rating": {
+    "value": 4.3,
+    "count": 1391
+  },
+  "files": {
+    "image": "image.jpg"
+  },
+  "truth": {
+    "label": "benign",
+    "mode": "none",
+    "kind": "none",
+    "image_text": null,
+    "description_text": null,
+    "promo": false,
+    "source_photo": "Vintage_t-shirt_with_recycle_symbol_4b2a8481.jpg"
+  }
+}

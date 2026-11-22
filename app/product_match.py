@@ -72,7 +72,7 @@ async def match_product(media: list[Media], claims: Claims | None, shop: ShopMCP
     """None when matching does not apply (no image, or the decisions backend is off).
     Otherwise a ProductMatch; .product is None unless the match is confident. Never raises."""
     images = [m for m in media if m.kind == "image"]
-    if not images or config.FIREWALL_BACKEND != "decisions":
+    if not images or fw.effective_backend() != "decisions":
         return None
     model = fw.backend_model("decisions")
     query = _query(claims)

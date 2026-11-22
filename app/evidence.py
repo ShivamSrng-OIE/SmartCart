@@ -17,6 +17,7 @@ from PIL import Image, ImageOps
 from pydantic import BaseModel, Field, TypeAdapter
 
 from app import config, gemini
+from app.llm import settings as llm_settings
 from app.schemas import Claims, Media
 
 log = logging.getLogger(__name__)
@@ -219,6 +220,8 @@ def _clip(path: str, location: AudioLocation) -> tuple[bytes, dict]:
 
 
 async def _localize(index: int, media: Media, claims: str, run_id: str):
+    if llm_settings.provider() == "openrouter":
+        return await _localize_openrouter(index, media, claims, run_id)
     schema = FORMATS[media.kind]
     blocks = await asyncio.to_thread(gemini.content_blocks, [media], video_processing="agentic")
     response = await gemini.client().aio.interactions.create(
@@ -228,6 +231,51 @@ async def _localize(index: int, media: Media, claims: str, run_id: str):
         generation_config={"thinking_level": "low"},
     )
     location = schema.validate_json(gemini.output_text(response))
+    return await _materialize(index, media, location, run_id)
+
+
+def _scanner_text_location(media: Media) -> TextLocation | None:
+    from app import scanner
+
+    found = scanner.scan(Path(media.path).read_text(encoding="utf-8", errors="replace"), "listing")
+    return TextLocation(modality="text", quote=found[0].quote) if found else None
+
+
+async def _localize_openrouter(index: int, media: Media, claims: str, run_id: str):
+    """The same evidence step on an OpenRouter model. Text and audio are located by the rule scan (exact quotes,
+    and the sentence's position in the transcript gives the time range); photos and video frames by the model."""
+    from app import scanner
+    from app.llm import api, media as llm_media
+
+    if media.kind == "text":
+        return await _materialize(index, media, _scanner_text_location(media), run_id)
+    if media.kind == "audio":
+        text, _ = await llm_media.transcribe(media.path)
+        found = scanner.scan(text or "", "audio")
+        if not found:
+            return None
+        with wave.open(media.path, "rb") as source:
+            duration = source.getnframes() / source.getframerate()
+        f = found[0]
+        n = max(1, len(text))
+        start = duration * f.start / n
+        end = min(duration, max(start + 1.0, duration * f.end / n))
+        return await _materialize(index, media, AudioLocation(modality="audio", start_s=start, end_s=end,
+                                                              transcript=f.quote), run_id)
+    parts, _ = await llm_media.build_parts([media], include_transcripts=False)
+    extra = " For video, set t_s to the time in seconds shown on the frame label where the text is visible." if media.kind == "video" else ""
+    parts.append({"type": "text", "text": "Quoted claims (JSON): " + claims + "\nReply with JSON. If you cannot find an instruction "
+                  'aimed at a shopping agent, reply {"found": false}. Otherwise reply {"found": true, ...fields} with '
+                  f"modality \"{media.kind}\", box [ymin,xmin,ymax,xmax] on a 0-1000 scale, and text (the words)." + extra})
+    raw, _model = await api.complete_json("perception", PROMPT, parts, None, timeout=120)
+    if not isinstance(raw, dict) or not raw.get("found"):
+        return None
+    raw = {k: v for k, v in raw.items() if k != "found"}
+    raw["modality"] = media.kind
+    return await _materialize(index, media, FORMATS[media.kind].validate_python(raw), run_id)
+
+
+async def _materialize(index: int, media: Media, location, run_id: str):
     if location is None:
         return None
     if isinstance(location, TextLocation):

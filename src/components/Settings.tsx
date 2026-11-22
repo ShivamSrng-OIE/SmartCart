@@ -146,6 +146,11 @@ export function Settings() {
           </div>
           <Segmented value={provider} onChange={(v) => setProvider(v)} options={(["openrouter", "gemini"] as Provider[]).map((p) => ({ value: p, label: PROVIDER_LABEL[p] }))} />
         </div>
+        {server.provider === "openrouter" && server.active === "gemini" && (
+          <p className="rounded-lg bg-warn-soft px-3 py-2 text-[13px] text-warn" role="status">
+            Every free OpenRouter model is rate limited right now, so the jobs are running on Gemini for a few minutes. OpenRouter is tried again after that.
+          </p>
+        )}
 
         <div className="rounded-xl border border-line bg-surface-2 p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">

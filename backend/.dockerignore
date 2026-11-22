@@ -1,0 +1,16 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.env
+.env.*
+!.env.example
+data/state
+data/cache
+data/uploads
+tests
+docs
+scripts
+redteam/out
+eval/props
+eval/cases_quick

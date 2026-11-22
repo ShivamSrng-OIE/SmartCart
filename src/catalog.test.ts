@@ -110,8 +110,9 @@ describe("warehouse catalog", () => {
 
     const result = await searchCatalog("MULTIVITAMIN", { includeWarehouse: true });
     expect(result.items).toHaveLength(2);
-    expect(result.items[0]).toMatchObject({ id: multivitamin.id, source: "shopify" });
-    const warehouse = result.items[1];
+    expect(result.items.map((p) => p.source)).toEqual(["warehouse", "shopify"]);
+    expect(result.items[1]).toMatchObject({ id: multivitamin.id, source: "shopify" });
+    const warehouse = result.items[0];
     expect(warehouse).toMatchObject({
       id: "wh:type-21-v3",
       source: "warehouse",

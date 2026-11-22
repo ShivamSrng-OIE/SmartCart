@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { MousePointerClick, Play, Columns2, ShieldAlert, ShieldCheck, ShieldX, Loader2, ShoppingCart } from "lucide-react";
 import type { ArenaState, Step } from "../state";
 import { money, shortId } from "../lib/format";
+import { linesOf } from "../lib/spend";
 import { gsap, useGSAP, d } from "../lib/motion";
 import { cx } from "./ui";
 
@@ -15,9 +16,9 @@ export function describeCall(step: Step | undefined, products: ArenaState["produ
   if (!step) return null;
   const args = step.args ?? {};
   if (step.title.includes("spend_request")) return `a ${money(step.spend)} payment to an outside card`;
-  const lines = (args.lines ?? args.line_items) as Record<string, unknown>[] | undefined;
-  const first = Array.isArray(lines) ? lines[0] : undefined;
-  const title = first ? ((products[String(first.product_id ?? "")]?.title as string | undefined) ?? shortId(first.product_id)) : null;
+  const first = linesOf(args)[0];
+  const key = first ? String(first.product_id ?? (first.item as Record<string, unknown> | undefined)?.id ?? "") : "";
+  const title = first ? ((products[key]?.title as string | undefined) ?? shortId(key)) : null;
   const qty = step.quantity ?? (first?.quantity as number | undefined);
   if (!title) return step.spend != null ? money(step.spend) : null;
   return `${qty ?? 1} × ${title}${step.spend != null ? ` for ${money(step.spend)}` : ""}`;

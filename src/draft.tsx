@@ -21,6 +21,8 @@ export interface Draft {
   product: ProductRef | null;
   media: Partial<Record<MediaKind, Attached>>;
   scenarioId: string | null;
+  /** a store's product description to check along with the order (set by the Dataset page) */
+  listingText: string;
 }
 
 interface DraftApi {
@@ -40,7 +42,7 @@ const Ctx = createContext<DraftApi | null>(null);
 function initial(): Draft {
   const s = SCENARIOS[0];
   const p = DEMO_MODE ? findDemo(s.productId) : null;
-  return { request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, media: {}, scenarioId: s.id };
+  return { request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, media: {}, scenarioId: s.id, listingText: "" };
 }
 
 export function DraftProvider({ children }: { children: ReactNode }) {
@@ -77,8 +79,9 @@ export function DraftProvider({ children }: { children: ReactNode }) {
   const pickScenario = useCallback(
     (s: Scenario) => {
       const p = DEMO_MODE ? findDemo(s.productId) : null;
-      setDraft((d) => ({ ...d, request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, scenarioId: s.id }));
-      attachLive(s);
+      setDraft((d) => ({ ...d, request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, scenarioId: s.id, listingText: "" }));
+      if (s.noProduct) liveReq.current++; // drop any product still on its way from the previous example
+      else attachLive(s);
     },
     [attachLive],
   );
@@ -108,6 +111,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
           form.set("product_id", draft.product.id);
           form.set("demo_product_id", draft.product.id); // older backend field name
         }
+        if (draft.listingText.trim()) form.set("listing_text", draft.listingText.trim());
         for (const m of Object.values(draft.media)) if (m) form.set(m.kind, m.blob, m.name);
         return form;
       },

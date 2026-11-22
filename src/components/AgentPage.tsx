@@ -13,6 +13,7 @@ import type { AgentKind } from "../config";
 import type { Mode } from "../hooks/useBackend";
 import type { RuleSet } from "../types";
 import { clock, money, shortId } from "../lib/format";
+import { linesOf } from "../lib/spend";
 import { ProductThumb } from "./ProductThumb";
 import type { ArenaState, Step } from "../state";
 import { countTo, gsap, useGSAP, d } from "../lib/motion";
@@ -63,8 +64,7 @@ function OrderCard({ step, products, held }: { step: Step; products: ArenaState[
   const qtyRef = useRef<HTMLSpanElement>(null);
   const totalRef = useRef<HTMLSpanElement>(null);
   const args = step.args ?? {};
-  const lines = (args.lines ?? args.line_items) as Record<string, unknown>[] | undefined;
-  const first = Array.isArray(lines) ? lines[0] : undefined;
+  const first = linesOf(args)[0];
   const pid = String(first?.product_id ?? (first?.item as Record<string, unknown> | undefined)?.id ?? "");
   const prod = products[pid] as Record<string, unknown> | undefined;
   const title = (prod?.title as string | undefined) ?? (pid ? shortId(pid) : step.title.replace(/_/g, " "));
@@ -113,6 +113,42 @@ function OrderCard({ step, products, held }: { step: Step; products: ArenaState[
           HELD
         </span>
       )}
+    </div>
+  );
+}
+
+/** Several carts at once ("buy all the ..."): every item the assistant added, and what they come to. */
+function OrdersCard({ carts, products }: { carts: Step[]; products: ArenaState["products"] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const total = carts.reduce((n, s) => n + (s.spend ?? 0), 0);
+  const rows = carts.map((step) => {
+    const first = linesOf(step.args ?? {})[0];
+    const key = String(first?.product_id ?? (first?.item as Record<string, unknown> | undefined)?.id ?? "");
+    return { id: step.id, title: (products[key]?.title as string | undefined) ?? shortId(key), qty: step.quantity ?? (first?.quantity as number | undefined) ?? 1, spend: step.spend };
+  });
+  useGSAP(
+    () => {
+      gsap.from("[data-row]", { y: 10, opacity: 0, duration: d(0.35), stagger: 0.07, ease: "power2.out" });
+    },
+    { scope: ref, dependencies: [carts.length] },
+  );
+  return (
+    <div ref={ref} className="w-full rounded-xl border border-line bg-surface p-3 sm:w-[320px]">
+      <p className="label mb-2">Cart · {rows.length} items</p>
+      <ul className="thin-scroll flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+        {rows.map((r) => (
+          <li key={r.id} data-row className="flex items-baseline justify-between gap-3 text-[13px] leading-snug">
+            <span className="line-clamp-2 min-w-0 flex-1">{r.title}</span>
+            <span className="tnum shrink-0 text-ink-3">
+              {r.qty} × {money(r.spend != null ? r.spend / Math.max(r.qty, 1) : null)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-baseline justify-between border-t border-line pt-2.5">
+        <span className="text-xs text-ink-3">Total</span>
+        <span className="tnum text-lg font-semibold tracking-tight">{money(total)}</span>
+      </div>
     </div>
   );
 }
@@ -215,6 +251,9 @@ export function AgentPage({
       ? [...state.victim.steps].reverse().find((x) => x.kind === "intercepted")
       : [...state.guarded.steps].reverse().find((x) => x.kind === "tool_call" && x.verdict && /cart|checkout/.test(x.title));
   const held = kind === "protected" && !!verdict && verdict.action !== "approve_checkout";
+  // "Buy all the ..." leaves several carts: show every one and the combined total, not just the last.
+  const carts = kind === "unprotected" ? state.victim.steps.filter((x) => x.kind === "intercepted" && /cart|checkout/.test(x.title)) : [];
+  const cartsTotal = carts.reduce((n, s) => n + (s.spend ?? 0), 0);
 
   /* ---------------------------------------------------------- the headline */
   let result: Parameters<typeof ResultCard>[0];
@@ -222,7 +261,7 @@ export function AgentPage({
     result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "No order yet", body: "The assistant didn’t respond, so nothing was ordered. Try again in a moment." };
   } else if (kind === "unprotected") {
     const last = [...p.steps].reverse().find((s) => s.kind === "intercepted");
-    const call = describeCall(last, state.products);
+    const call = carts.length > 1 ? `${carts.length} items, ${money(cartsTotal)} in total` : describeCall(last, state.products);
     if (phase === "idle") result = { tone: "neutral", icon: <Bot className="size-6 shrink-0 text-ink-3" />, eyebrow: "Result", headline: "What can I find for you?", body: "Describe what you need on the left. You’ll see each step the assistant takes and the order it puts together." };
     else if (p.status === "hijacked")
       result = {
@@ -311,7 +350,7 @@ export function AgentPage({
           )}
 
           {/* 1. the outcome, with the order beside it: the only place the money is shown */}
-          <ResultCard {...result} aside={orderStep ? <OrderCard step={orderStep} products={state.products} held={held} /> : undefined} />
+          <ResultCard {...result} aside={carts.length > 1 ? <OrdersCard carts={carts} products={state.products} /> : orderStep ? <OrderCard step={orderStep} products={state.products} held={held} /> : undefined} />
 
           {/* 2. one details card with tabs */}
           {phase !== "idle" && !(phase === "error" && steps === 0) && (

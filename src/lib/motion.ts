@@ -1,7 +1,19 @@
 import { gsap } from "gsap";
-import { useGSAP } from "@gsap/react";
+import { useGSAP as useGSAPBase } from "@gsap/react";
 
-gsap.registerPlugin(useGSAP);
+gsap.registerPlugin(useGSAPBase);
+
+/**
+ * useGSAP that restores the original styles before an animation re-runs. Without this a re-run
+ * (React re-invokes effects in development, and data arriving later changes dependencies) kills the
+ * first tweens mid-flight and leaves their half-finished styles behind. A "from" tween then takes
+ * those values as its destination, so elements end up stuck partly transparent.
+ */
+const useGSAP = ((callback: unknown, config: unknown = {}) =>
+  useGSAPBase(
+    callback as never,
+    (Array.isArray(config) ? { dependencies: config, revertOnUpdate: true } : { revertOnUpdate: true, ...(config as object) }) as never,
+  )) as typeof useGSAPBase;
 
 gsap.defaults({ ease: "power3.out", duration: 0.5 });
 

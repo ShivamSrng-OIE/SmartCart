@@ -100,6 +100,8 @@ export interface FraudCard {
 export type EvidenceItem =
   | { modality: "image"; box: number[]; text: string; crop_url: string; source_url?: string }
   | { modality: "video"; t_s: number; box: number[]; text: string; frame_url: string }
+  /** a hidden sentence in the listing's own description: `text` sits between `before` and `after` */
+  | { modality: "text"; text: string; before: string; after: string }
   | {
       modality: "audio";
       start_s: number;

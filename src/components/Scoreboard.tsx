@@ -88,7 +88,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
             How Safe Checkout performs across {(ct?.n_attack ?? 0) + (ct?.n_benign ?? 0) || 50} orders
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-2 sm:text-[15px]">
-            {ct?.n_attack ?? 30} unusual orders and {ct?.n_benign ?? 20} everyday ones, compared across three setups.
+            {ct?.n_attack ?? 30} unusual orders and {ct?.n_benign ?? 20} everyday ones, compared across {rows.length === 1 ? "one setup" : `${["", "", "two", "three"][rows.length] ?? rows.length} setups`}.
           </p>
         </div>
       </div>

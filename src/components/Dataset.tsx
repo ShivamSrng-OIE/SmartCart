@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Database, Play } from "lucide-react";
 import { useDraft } from "../draft";
 import { money } from "../lib/format";
-import { MODALITIES, fetchBlob, fetchDataset, fileUrl, imageUrl, mediaToFetch, type DatasetItem } from "../lib/dataset";
+import { MODALITIES, fetchBlob, fetchDataset, fetchListingText, fileUrl, imageUrl, mediaToFetch, type DatasetItem } from "../lib/dataset";
 import { Button, Chip } from "./ui";
 
 export function Dataset({ onRun }: { onRun: () => void }) {
@@ -31,6 +31,7 @@ export function Dataset({ onRun }: { onRun: () => void }) {
   async function run(item: DatasetItem) {
     setBusy(item.item_id);
     const got = await Promise.all(mediaToFetch(item).map(async (m) => ({ ...m, blob: await fetchBlob(fileUrl(item.item_id, m.name)) })));
+    const listingText = (await fetchListingText(item)) ?? "";
     (["image", "audio", "video", "pdf"] as const).forEach(detach);
     got.forEach((g) => g.blob && attach(g.kind, g.blob, g.name, "upload"));
     const p = item.product;
@@ -39,6 +40,7 @@ export function Dataset({ onRun }: { onRun: () => void }) {
       budget: item.budget != null ? String(item.budget) : "",
       product: p?.title ? { id: p.product_id, title: p.title, price: p.price_cents != null ? p.price_cents / 100 : null } : null,
       scenarioId: null,
+      listingText,
     });
     setBusy(null);
     onRun();

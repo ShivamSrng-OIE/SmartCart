@@ -27,7 +27,7 @@ function toNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function linesOf(args: Record<string, unknown>): Record<string, unknown>[] {
+export function linesOf(args: Record<string, unknown>): Record<string, unknown>[] {
   const cart = args.cart as Record<string, unknown> | undefined;
   const lines = args.lines ?? args.line_items ?? args.items ?? cart?.line_items;
   return Array.isArray(lines) ? (lines.filter((l) => l && typeof l === "object") as Record<string, unknown>[]) : [];

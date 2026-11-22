@@ -285,6 +285,15 @@ export function RequestPanel({
           {recorder.recording ? `Stop · 0:${String(recorder.seconds).padStart(2, "0")}` : "Record a clip"}
         </Button>
       )}
+      {draft.listingText && (
+        <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface-2 pr-1 pl-2 text-xs text-ink-2">
+          <FileText className="size-3.5 shrink-0" />
+          <span>Listing text</span>
+          <button onClick={() => set({ listingText: "" })} className="rounded p-0.5 hover:bg-line" aria-label="Remove listing text">
+            <X className="size-3" />
+          </button>
+        </span>
+      )}
       {others.map((m) => {
         const Icon = KIND_ICON[m.kind];
         return (

@@ -7,7 +7,7 @@ import defaultRulesJson from "./fixtures/rules.sample.json";
 import evalSample from "./fixtures/eval.sample.json";
 import { ENDPOINTS, streamUrl, type AgentKind, type FixtureName } from "./config";
 import { looksLikeGemini, toEvents } from "./lib/gemini";
-import { fetchBlob, fileUrl, mediaToFetch, type WarehousePurchase } from "./lib/dataset";
+import { fetchBlob, fetchListingText, fileUrl, mediaToFetch, type WarehousePurchase } from "./lib/dataset";
 
 // ---------------------------------------------------------------- live API
 // Routes from docs/architecture.md §5 (owned by Member 1). Send changes to M1.
@@ -37,7 +37,7 @@ export async function startRun(form: FormData, url: string = ENDPOINTS.both.run)
 }
 
 /** The guarded runner adds mode=guarded when it submits this form. */
-export async function warehouseRunForm(itemId: string, purchase: WarehousePurchase, signal?: AbortSignal): Promise<FormData> {
+export async function warehouseRunForm(itemId: string, purchase: WarehousePurchase & { itemId?: string }, signal?: AbortSignal): Promise<FormData> {
   const request = purchase.request?.trim();
   const budget = Number(purchase.budget);
   if (!request || !purchase.productId || !Number.isFinite(budget) || budget <= 0) {
@@ -49,7 +49,11 @@ export async function warehouseRunForm(itemId: string, purchase: WarehousePurcha
     if (!blob?.size) throw new Error(`Couldn’t load ${name} for Safe Checkout.`);
     return { kind, name, blob };
   }));
+  // The store's description goes along as untrusted text, so a hidden instruction in it is checked too.
+  const listing = await fetchListingText({ item_id: itemId, files: purchase.files }, signal);
+  if (!media.length && !listing) throw new Error("This listing has nothing for Safe Checkout to check.");
   const form = new FormData();
+  if (listing) form.set("listing_text", listing);
   form.set("request", request.slice(0, 1000));
   form.set("budget", String(budget));
   form.set("product_id", purchase.productId);

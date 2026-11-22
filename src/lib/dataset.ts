@@ -40,6 +40,18 @@ export async function fetchDataset(): Promise<DatasetItem[]> {
   return list as DatasetItem[];
 }
 
+/** The listing's own description (the text the store shows next to the product), or null. */
+export async function fetchListingText(item: Pick<DatasetItem, "item_id" | "files">, signal?: AbortSignal): Promise<string | null> {
+  if (!item.files?.includes("description.txt")) return null;
+  try {
+    const r = await fetch(fileUrl(item.item_id, "description.txt"), { signal });
+    const text = r.ok ? (await r.text()).trim() : "";
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBlob(url: string, signal?: AbortSignal): Promise<Blob | null> {
   try {
     const r = await fetch(url, { signal });
@@ -52,7 +64,8 @@ export async function fetchBlob(url: string, signal?: AbortSignal): Promise<Blob
 /** Which of image.png / audio.wav / video.mp4 to pull for an item. */
 export function mediaToFetch(item: Pick<DatasetItem, "files">): { kind: "image" | "audio" | "video"; name: string }[] {
   const files = item.files ?? [];
-  const out: { kind: "image" | "audio" | "video"; name: string }[] = [{ kind: "image", name: "image.png" }];
+  // Only files that exist: a listing can be text-only when its generated media isn't on this machine.
+  const out: { kind: "image" | "audio" | "video"; name: string }[] = files.includes("image.png") ? [{ kind: "image", name: "image.png" }] : [];
   if (files.includes("video.mp4")) out.push({ kind: "video", name: "video.mp4" });
   if (files.includes("audio.wav")) out.push({ kind: "audio", name: "audio.wav" });
   return out;

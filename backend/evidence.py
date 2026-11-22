@@ -31,7 +31,8 @@ PROMPT = (
     "Return JSON null if you cannot locate one in this file. Quote only the observed words. "
     "For images and video, give the tight text box as [ymin,xmin,ymax,xmax] on a 0-1000 scale "
     "in display orientation. For video, choose a time in seconds when the text is visible. "
-    "For audio, give the start and end seconds of the spoken instruction and its transcript."
+    "For audio, give the start and end seconds of the spoken instruction and its transcript. "
+    "For listing text, quote the exact sentence aimed at a shopping agent, copied word for word."
 )
 
 Coordinate = Annotated[int, Field(ge=0, le=1000, strict=True)]
@@ -60,9 +61,39 @@ class AudioLocation(BaseModel):
     transcript: Quote
 
 
+class TextLocation(BaseModel):
+    modality: Literal["text"]
+    quote: Quote
+
+
 FORMATS = {kind: TypeAdapter(model | None) for kind, model in (
-    ("image", ImageLocation), ("video", VideoLocation), ("audio", AudioLocation),
+    ("image", ImageLocation), ("video", VideoLocation), ("audio", AudioLocation), ("text", TextLocation),
 )}
+EXCERPT_CHARS = 140
+
+
+def _norm_index(text: str, quote: str) -> tuple[int, int] | None:
+    """Where `quote` sits in `text`, ignoring case and runs of whitespace. None if it is not there:
+    the model must quote the listing, never invent a sentence."""
+    import re
+
+    pieces = quote.split()
+    if not pieces:
+        return None
+    pattern = r"\s+".join(re.escape(p) for p in pieces)
+    hit = re.search(pattern, text, flags=re.IGNORECASE)
+    return (hit.start(), hit.end()) if hit else None
+
+
+def _locate_text(media: Media, location: TextLocation) -> dict:
+    text = Path(media.path).read_text(encoding="utf-8", errors="replace")
+    span = _norm_index(text, location.quote)
+    if span is None:
+        raise ValueError("quote not found in listing text")
+    start, end = span
+    lo, hi = max(0, start - EXCERPT_CHARS), min(len(text), end + EXCERPT_CHARS)
+    return {"modality": "text", "text": text[start:end], "before": ("…" if lo else "") + text[lo:start],
+            "after": text[end:hi] + ("…" if hi < len(text) else "")}
 
 
 def run_directory(run_id: str) -> Path:
@@ -199,6 +230,8 @@ async def _localize(index: int, media: Media, claims: str, run_id: str):
     location = schema.validate_json(gemini.output_text(response))
     if location is None:
         return None
+    if isinstance(location, TextLocation):
+        return await asyncio.to_thread(_locate_text, media, location), None, None
     item = location.model_dump()
     if isinstance(location, AudioLocation):
         kind, suffix = "clip", "wav"
@@ -231,7 +264,8 @@ def _stage(directory: Path, artifacts):
     staging = TemporaryDirectory(dir=directory)
     try:
         for _, name, data in artifacts:
-            (Path(staging.name) / name).write_bytes(data)
+            if name is not None:  # text evidence has no file
+                (Path(staging.name) / name).write_bytes(data)
     except Exception:
         staging.cleanup()
         raise
@@ -263,7 +297,8 @@ async def locate(media: list[Media], claims: Claims | None, run_id: str) -> list
             staging = await asyncio.to_thread(_stage, directory, artifacts)
             with staging as stage:
                 for _, name, _ in artifacts:
-                    (Path(stage) / name).replace(directory / name)
+                    if name is not None:
+                        (Path(stage) / name).replace(directory / name)
             return [item for item, _, _ in artifacts]
     except Exception as exc:
         log.warning("evidence unavailable: %s", type(exc).__name__)

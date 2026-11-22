@@ -291,7 +291,7 @@ function warehouseProduct(item: DatasetItem): CatalogProduct | null {
   const title = str(item.product?.title);
   if (!variant || !productId || !title) return null;
 
-  const image = imageUrl(item.item_id);
+  const image = item.files?.includes("image.png") ? imageUrl(item.item_id) : undefined;
   const product = normalizeProduct({
     id,
     title,
@@ -384,7 +384,7 @@ export function searchCatalog(q: string, opts: SearchOptions = {}): Promise<Sear
   const value = includeWarehouse && network && !cursor
     ? Promise.all([shopify, searchWarehouse(q, maxPrice)]).then(([result, warehouse]) => warehouse.length ? {
         ...result,
-        items: [...result.items, ...warehouse],
+        items: [...warehouse, ...result.items], // our own listings first, so they are not buried under hundreds of Shopify hits
         error: undefined,
         total: result.total == null ? undefined : result.total + warehouse.length,
       } : result)

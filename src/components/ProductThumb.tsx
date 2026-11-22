@@ -60,7 +60,9 @@ export function ProductThumb({
     setIdx(1);
     const id = window.setInterval(() => setIdx((i) => (i + 1) % gallery.length), CYCLE_MS);
     return () => window.clearInterval(id);
-  }, [active, canCycle, gallery.length, videoUrl]);
+    // `touched` matters: the <video> only mounts after the first hover, so the effect has to run
+    // again once it exists, or the very first hover never starts the preview.
+  }, [active, canCycle, gallery.length, videoUrl, touched]);
 
   const initials = (product.vendor ?? product.title)
     .replace(/[^A-Za-z0-9 &]/g, " ")

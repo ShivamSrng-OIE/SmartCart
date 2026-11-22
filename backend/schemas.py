@@ -16,7 +16,7 @@ Tier = Literal["low", "normal", "high", "spend_request"]
 
 
 class Media(BaseModel):
-    kind: Literal["image", "audio", "video", "pdf"]
+    kind: Literal["image", "audio", "video", "pdf", "text"]  # "text" = the listing's own description (untrusted)
     path: str
     mime: str
 

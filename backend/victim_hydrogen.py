@@ -19,9 +19,10 @@ VICTIM_PROMPT = (
 
 
 async def run_victim(intent: Intent, media: list[Media], product_ref: str | None, bus: TraceBus,
-                     run_id: str, shop: ShopMCP | None = None, client=None) -> list[ToolCall]:
+                     run_id: str, shop: ShopMCP | None = None, client=None,
+                     system_prompt: str = VICTIM_PROMPT) -> list[ToolCall]:
     """Pipeline for /api/run and the eval baseline. Returns the state-changing calls it attempted."""
     shop = shop or ShopMCP(dry_run=True)
     ctx = await shopper_loop(intent, media, product_ref, shop, bus, run_id, pane="victim",
-                             system_prompt=VICTIM_PROMPT, client=client)
+                             system_prompt=system_prompt, client=client)
     return ctx.state_calls

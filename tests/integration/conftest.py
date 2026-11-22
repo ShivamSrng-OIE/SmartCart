@@ -71,6 +71,7 @@ def shop_product():
 @pytest.fixture
 async def api_client(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(main.config, "WAREHOUSE_IN_AGENT", False)  # these tests mock one Shopify product
     previous_bus = main.app.state.bus
     main.app.state.bus = TraceBus()
     try:

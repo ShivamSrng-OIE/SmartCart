@@ -100,6 +100,19 @@ function Item({ item, photoUrl }: { item: EvidenceItem; photoUrl?: string }) {
       </div>
     );
   }
+  if (item.modality === "text") {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <p className="text-[13px] font-medium text-ink-2">Hidden instruction found in the product description</p>
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-[14px] leading-relaxed whitespace-pre-line text-ink-2">
+          {item.before}
+          <mark className="rounded bg-danger/15 px-0.5 font-semibold text-danger ring-2 ring-danger/40">{item.text}</mark>
+          {item.after}
+        </p>
+        <Callout text={item.text} />
+      </div>
+    );
+  }
   if (item.modality === "video") {
     const t = item.t_s.toFixed(1);
     return (

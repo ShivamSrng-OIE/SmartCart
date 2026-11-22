@@ -27,7 +27,7 @@ function Said({ text }: { text: string }) {
   return (
     <p className="flex gap-2 text-[14px] text-ink">
       <Quote className="mt-1 size-3 shrink-0 text-danger" aria-hidden />
-      <span className="font-mono text-[13px] leading-snug">{text}</span>
+      <span className="text-[13px] leading-snug">{text}</span>
     </p>
   );
 }
@@ -68,7 +68,7 @@ function Callout({ text }: { text: string }) {
   return (
     <p className="flex gap-2 rounded-lg border-2 border-danger bg-danger/10 px-3 py-2 text-ink">
       <Quote className="mt-1 size-3.5 shrink-0 text-danger" aria-hidden />
-      <span className="font-mono text-[14px] leading-snug font-semibold text-danger">&ldquo;{text}&rdquo;</span>
+      <span className="text-[14px] leading-snug font-semibold text-danger">&ldquo;{text}&rdquo;</span>
     </p>
   );
 }

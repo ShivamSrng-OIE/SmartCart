@@ -139,7 +139,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        <span className="pointer-events-none absolute top-1.5 right-2 font-mono text-[10px] text-ink-3">above the line = flagged</span>
+        <span className="pointer-events-none absolute top-1.5 right-2 text-[10px] text-ink-3">above the line = flagged</span>
       </div>
 
       {/* lights */}
@@ -172,7 +172,7 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
                     style={r && !isFired ? { opacity: 0.35 + Math.min(p * 6, 0.65) } : undefined}
                   />
                 </span>
-                <span className={cx("tnum font-mono text-[10px] sm:text-[11px]", isFired ? "font-semibold text-danger" : "text-ink-3")}>{r ? prob(p) : "··"}</span>
+                <span className={cx("tnum text-[10px] sm:text-[11px]", isFired ? "font-semibold text-danger" : "text-ink-3")}>{r ? prob(p) : "··"}</span>
               </span>
               <span className={cx("hidden w-full text-[10.5px] leading-[1.2] hyphens-auto @xs:line-clamp-2", isFired ? "text-ink" : "text-ink-2")}>{checkLabel(l.probe.id)}</span>
             </button>
@@ -187,16 +187,16 @@ export function Seismograph({ rules, verdict, checking }: { rules: RuleSet; verd
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-ink">
                 {checkLabel(focused.probe.id)}
-                <span className="ml-2 font-mono text-[10px] tracking-wide text-ink-3 uppercase">{CATEGORY_LABEL[focused.probe.category] ?? focused.probe.category}</span>
-                {focused.probe.added_by === "neon" && <span className="ml-2 font-mono text-[10px] text-warn uppercase">new</span>}
+                <span className="ml-2 text-[10px] tracking-wide text-ink-3 uppercase">{CATEGORY_LABEL[focused.probe.category] ?? focused.probe.category}</span>
+                {focused.probe.added_by === "neon" && <span className="ml-2 text-[10px] text-warn uppercase">new</span>}
               </p>
               <p className="text-xs leading-snug text-ink-3">{focused.probe.instructions}</p>
             </div>
             <div className="shrink-0 text-right">
-              <div className={cx("tnum font-mono text-sm font-semibold", focused.result?.fired ? "text-danger" : "text-ink")}>
+              <div className={cx("tnum text-sm font-semibold", focused.result?.fired ? "text-danger" : "text-ink")}>
                 {focused.result ? prob(focused.result.p) : "—"}
               </div>
-              <div className="tnum font-mono text-[10px] text-ink-3">flags at {prob(focused.probe.threshold)}</div>
+              <div className="tnum text-[10px] text-ink-3">flags at {prob(focused.probe.threshold)}</div>
             </div>
           </>
         ) : (

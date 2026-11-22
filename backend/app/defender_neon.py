@@ -152,10 +152,10 @@ def _template_reason(claims: Claims | None, sells: dict | None, blocked: ToolCal
         price = sells.get("price")
         price_text = f" at ${price:,.2f}" if price is not None else ""
         parts.append(
-            f'The media mentions a count of {claims.pack_count_claim}, but Shopify lists "{sells["title"]}"{price_text}.'
+            f'The media mentions a count of {claims.pack_count_claim}, but the store lists "{sells["title"]}"{price_text}.'
         )
     elif sells is None:
-        parts.append("The product could not be verified against Shopify.")
+        parts.append("The product could not be checked against the store's listing.")
     return " ".join(parts)
 
 

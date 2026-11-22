@@ -108,7 +108,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
   if (step.kind === "intercepted" && quiet) {
     return (
       <li data-step className="flex items-start gap-3 py-1.5">
-        <span className="tnum w-12 shrink-0 pt-0.5 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+        <span className="tnum w-12 shrink-0 pt-0.5 text-right text-[11px] text-ink-3">{secs(step.t_ms)}</span>
         <span className="mt-[7px] shrink-0">
           <Dot tone={step.tone === "danger" ? "danger" : "neutral"} />
         </span>
@@ -119,7 +119,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
             <span className="text-ink-3"> · not submitted</span>
           </span>
         </span>
-        {step.spend != null && <span className={cx("tnum shrink-0 font-mono text-xs", step.tone === "danger" ? "text-danger" : "text-ink-2")}>{money(step.spend)}</span>}
+        {step.spend != null && <span className={cx("tnum shrink-0 text-xs", step.tone === "danger" ? "text-danger" : "text-ink-2")}>{money(step.spend)}</span>}
       </li>
     );
   }
@@ -168,11 +168,11 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
           : "Order held for review";
     return (
       <li data-step className="flex items-center gap-3 py-2">
-        <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+        <span className="tnum w-12 shrink-0 text-right text-[11px] text-ink-3">{secs(step.t_ms)}</span>
         <div className={cx("flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold", toneText(step.tone))}>
           <Icon className="size-4 shrink-0" />
           <span className="truncate">{label}</span>
-          <span className="tnum ml-auto font-mono text-xs font-medium text-ink-3">{ms(v.latency_ms)}</span>
+          <span className="tnum ml-auto text-xs font-medium text-ink-3">{ms(v.latency_ms)}</span>
         </div>
       </li>
     );
@@ -182,7 +182,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
     if (step.kind === "fraud_card") {
       return (
         <li data-step className="flex items-center gap-3 py-1.5">
-          <span className="tnum w-12 shrink-0 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+          <span className="tnum w-12 shrink-0 text-right text-[11px] text-ink-3">{secs(step.t_ms)}</span>
           <span className="text-[13px] text-ink-2">Review details ready</span>
         </li>
       );
@@ -190,7 +190,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
     const Icon = source === "argon" ? ScanEye : Bot;
     return (
       <li data-step className="flex items-start gap-3 py-1.5">
-        <span className="tnum w-12 shrink-0 pt-0.5 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+        <span className="tnum w-12 shrink-0 pt-0.5 text-right text-[11px] text-ink-3">{secs(step.t_ms)}</span>
         <div className="flex min-w-0 flex-1 items-start gap-2">
           <Icon className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
           <p className="min-w-0 text-[13px] leading-snug text-ink-2">
@@ -211,7 +211,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
   return (
     <li data-step className="group">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 rounded-lg py-1.5 text-left">
-        <span className="tnum w-12 shrink-0 pt-0.5 text-right font-mono text-[11px] text-ink-3">{secs(step.t_ms)}</span>
+        <span className="tnum w-12 shrink-0 pt-0.5 text-right text-[11px] text-ink-3">{secs(step.t_ms)}</span>
         <span className="mt-[7px] shrink-0">
           <Dot tone={step.tone === "neutral" ? "neutral" : step.tone} pulse={pending} />
         </span>
@@ -220,7 +220,7 @@ function StepRow({ step, products, variant, quiet }: { step: Step; products: Pro
             <span className={cx("text-[14px] font-medium", step.tone === "neutral" ? "text-ink" : toneText(step.tone))}>{toolLabel(step.title)}</span>
             {source === "neon" && <Chip className="h-5 px-1.5 text-[10px]">alternative</Chip>}
             {pending && <span className="text-xs text-warn">verifying…</span>}
-            {step.spend != null && <span className="tnum ml-auto pl-2 font-mono text-xs text-ink-2">{money(step.spend)}</span>}
+            {step.spend != null && <span className="tnum ml-auto pl-2 text-xs text-ink-2">{money(step.spend)}</span>}
           </span>
           <span className="block truncate text-[13px] text-ink-2">{summarize(step, products)}</span>
         </span>

@@ -56,7 +56,7 @@ function RunClock({ startedAt, live }: { startedAt: number | null; live: boolean
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [startedAt, live]);
-  return <span ref={ref} className="tnum font-mono text-xs text-ink-3" title="Time since you pressed Run" />;
+  return <span ref={ref} className="tnum text-xs text-ink-3" title="Time since you pressed Run" />;
 }
 
 /** The cart the assistant put together: item drops in, quantity and total roll up. */
@@ -110,7 +110,7 @@ function OrderCard({ step, products, held }: { step: Step; products: ArenaState[
         </span>
       </div>
       {held && (
-        <span data-stamp className="pointer-events-none absolute top-3 right-3 rotate-[-8deg] rounded-md border-2 border-warn px-2 py-0.5 font-mono text-[11px] font-bold tracking-widest text-warn">
+        <span data-stamp className="pointer-events-none absolute top-3 right-3 rotate-[-8deg] rounded-md border-2 border-warn px-2 py-0.5 text-[11px] font-bold tracking-widest text-warn">
           HELD
         </span>
       )}
@@ -318,7 +318,7 @@ export function AgentPage({
 
   const Intro = ({ className }: { className?: string }) => (
     <header className={cx("flex flex-col gap-1", className)}>
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-[26px]">{copy.title}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
       <p className="max-w-3xl text-sm text-ink-2 sm:text-[15px]">{copy.body}</p>
       <p className="text-xs text-ink-3">Powered by {models.join(" · ")}</p>
     </header>

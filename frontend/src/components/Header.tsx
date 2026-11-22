@@ -81,7 +81,7 @@ function CountryPicker({ compact = false }: { compact?: boolean }) {
         title={`Deliver to ${country.name}. Prices in ${country.currency} where stores support it.`}
         className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink", compact && "w-full justify-between px-3")}
       >
-        <span className="rounded bg-surface-2 px-1 font-mono text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{country.code}</span>
+        <span className="rounded bg-surface-2 px-1 text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{country.code}</span>
         <span className={compact ? "" : "hidden lg:inline"}>{compact ? `Deliver to ${country.name}` : country.currency}</span>
         <ChevronDown className="size-3.5" />
       </button>
@@ -97,7 +97,7 @@ function CountryPicker({ compact = false }: { compact?: boolean }) {
                 }}
                 className={cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-surface-2", c.code === country.code && "bg-surface-2 font-medium")}
               >
-                <span className="w-7 rounded bg-surface-2 px-1 text-center font-mono text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{c.code}</span>
+                <span className="w-7 rounded bg-surface-2 px-1 text-center text-[10px] font-semibold text-ink shadow-[inset_0_0_0_1px_var(--line)]">{c.code}</span>
                 <span className="flex-1">{c.name}</span>
                 <span className="text-xs text-ink-3">{c.currency}</span>
               </button>
@@ -224,7 +224,7 @@ export function Header({
                     title={v.hint}
                     className={cx("inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all", on ? "bg-surface text-ink shadow-card" : "text-ink-2 hover:text-ink")}
                   >
-                    <span className={cx("flex size-4 items-center justify-center rounded font-mono text-[10px] font-semibold max-md:short:hidden", on ? "bg-ink text-ink-inverse" : "bg-line text-ink-2")}>{v.key}</span>
+                    <span className={cx("flex size-4 items-center justify-center rounded text-[10px] font-semibold max-md:short:hidden", on ? "bg-ink text-ink-inverse" : "bg-line text-ink-2")}>{v.key}</span>
                     <Icon className="hidden size-4 lg:block max-md:short:block" />
                     <span className="max-md:short:hidden">{v.label}</span>
                     <span className="hidden max-md:short:inline">{v.short}</span>

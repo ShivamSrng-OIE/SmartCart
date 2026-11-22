@@ -173,7 +173,7 @@ export function ProductPicker({ value, onChange }: { value: ProductRef | null; o
                       </span>
                       <span className="min-w-0">
                         <span className="block text-[14px]">Use this product URL</span>
-                        <span className="block truncate font-mono text-xs text-ink-3">{o.url}</span>
+                        <span className="block truncate text-xs text-ink-3">{o.url}</span>
                       </span>
                     </>
                   )}

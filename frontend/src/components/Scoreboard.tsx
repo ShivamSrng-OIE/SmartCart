@@ -217,11 +217,11 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                     <Bar value={r.m.benign_completion} tone="ink" />
                   </div>
                 </td>
-                <td className="tnum px-5 py-4 font-mono text-sm text-ink-2">{r.m.p95_ms ? `${Math.round(r.m.p50_ms)} / ${Math.round(r.m.p95_ms)} ms` : "no checks"}</td>
+                <td className="tnum px-5 py-4 text-sm text-ink-2">{r.m.p95_ms ? `${Math.round(r.m.p50_ms)} / ${Math.round(r.m.p95_ms)} ms` : "no checks"}</td>
                 <td className="px-5 py-4">
                   <Num value={r.m.dollars_defended} format={moneyFmt} className="text-[15px] font-semibold" />
                 </td>
-                <td className="tnum px-5 py-4 font-mono text-sm text-ink-3">
+                <td className="tnum px-5 py-4 text-sm text-ink-3">
                   {r.m.n_attack} + {r.m.n_benign}
                 </td>
               </tr>
@@ -236,7 +236,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
           <div key={r.key} className={cx("card p-4", r.key === "carttrap" && "border-line-strong")}>
             <div className="flex items-baseline justify-between">
               <p className="text-[15px] font-semibold">{r.label}</p>
-              <p className="tnum font-mono text-xs text-ink-3">
+              <p className="tnum text-xs text-ink-3">
                 {r.m.n_attack} + {r.m.n_benign} orders
               </p>
             </div>
@@ -256,7 +256,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                 </div>
               </div>
             </div>
-            <p className="tnum mt-3 font-mono text-xs text-ink-3">
+            <p className="tnum mt-3 text-xs text-ink-3">
               {r.m.p95_ms ? `p50 ${Math.round(r.m.p50_ms)} · p95 ${Math.round(r.m.p95_ms)} ms · ` : ""}
               {money(r.m.dollars_defended, true)} defended
             </p>
@@ -284,7 +284,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                   {rows.map((r) => {
                     const c = byModality[r.key]?.[mod];
                     return (
-                      <td key={r.key} className="tnum py-2.5 font-mono text-sm">
+                      <td key={r.key} className="tnum py-2.5 text-sm">
                         {c && c.n_attack > 0 ? (
                           <>
                             <span className={cx("font-semibold", r.key === "carttrap" ? "text-safe" : c.asr > 0.3 ? "text-danger" : "text-ink")}>{pct(c.asr)}</span>
@@ -322,7 +322,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
                   {rows.map((r) => {
                     const c = byTier[r.key]?.[tier];
                     return (
-                      <td key={r.key} className="tnum py-2.5 font-mono text-sm">
+                      <td key={r.key} className="tnum py-2.5 text-sm">
                         {c ? (
                           <>
                             <span className={cx("font-semibold", r.key === "carttrap" ? "text-safe" : c.asr > 0.3 ? "text-danger" : "text-ink")}>{pct(c.asr)}</span>
@@ -350,7 +350,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
             <ul className="mt-3 flex flex-col divide-y divide-line">
               {results.failures.map((f) => (
                 <li key={f.case_id + (f.system ?? "")} className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:gap-4">
-                  <span className="shrink-0 font-mono text-xs text-ink-2 sm:w-48">{f.case_id}</span>
+                  <span className="shrink-0 text-xs text-ink-2 sm:w-48">{f.case_id}</span>
                   <span className="text-sm text-ink">{f.note ?? f.vector}</span>
                 </li>
               ))}
@@ -376,7 +376,7 @@ function ScoreboardBody({ results }: { results: EvalResults }) {
             ].map(([k, v]) => (
               <div key={k} className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-3">{k}</dt>
-                <dd className="tnum truncate font-mono text-[13px] text-ink">{v}</dd>
+                <dd className="tnum truncate text-[13px] text-ink">{v}</dd>
               </div>
             ))}
           </dl>

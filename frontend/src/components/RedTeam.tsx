@@ -146,13 +146,13 @@ export function RedTeam({
         <header className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
           <div>
             <p className="label mb-1">Safety updates</p>
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">How Safe Checkout adds new checks</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">How Safe Checkout adds new checks</h1>
             <p className="mt-1 max-w-lg text-sm text-ink-2">
               Safe Checkout keeps learning. When a new kind of order slips through, a check is drafted, verified against everyday orders, and switched on.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="tnum font-mono text-sm text-ink-3">{clock(elapsed)}</span>
+            <span className="tnum text-sm text-ink-3">{clock(elapsed)}</span>
             <Button variant="primary" size="lg" onClick={launch} disabled={running} icon={items.length && !running ? <RotateCcw className="size-4" /> : <Play className="size-4 fill-current" />}>
               {running ? "Running" : items.length ? "Run again" : "Launch"}
             </Button>
@@ -208,16 +208,16 @@ export function RedTeam({
                       <div className="flex items-baseline justify-between gap-3">
                         <p className={cx("text-[14px] font-semibold", toneText[s.tone])}>
                           {s.title}
-                          {typeof it.data.round === "number" && <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">round {it.data.round}</span>}
+                          {typeof it.data.round === "number" && <span className="ml-2 text-[11px] font-normal text-ink-3">round {it.data.round}</span>}
                         </p>
-                        <span className="tnum shrink-0 font-mono text-[11px] text-ink-3">{(it.t_ms / 1000).toFixed(1)}s</span>
+                        <span className="tnum shrink-0 text-[11px] text-ink-3">{(it.t_ms / 1000).toFixed(1)}s</span>
                       </div>
                       <p className="text-[13px] text-ink-2">{it.message}</p>
                       {typeof it.data.payload === "string" && (
-                        <p className="mt-1.5 inline-block rounded-md border border-line bg-sunken px-2 py-1 font-mono text-[12px] text-ink">“{it.data.payload}”</p>
+                        <p className="mt-1.5 inline-block rounded-md border border-line bg-sunken px-2 py-1 text-[12px] text-ink">“{it.data.payload}”</p>
                       )}
                       {typeof it.data.latency_ms === "number" && (
-                        <p className="tnum mt-1 font-mono text-[11px] text-ink-3">
+                        <p className="tnum mt-1 text-[11px] text-ink-3">
                           {ms(it.data.latency_ms as number)}
                           {it.data.top_probe ? ` · ${checkLabel(String((it.data.top_probe as Record<string, unknown>).id))} ${prob(Number((it.data.top_probe as Record<string, unknown>).p))}` : ""}
                           {typeof it.data.approve_p === "number" ? ` · P(approve) ${prob(it.data.approve_p as number)}` : ""}
@@ -259,11 +259,11 @@ export function RedTeam({
           {probe ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[13px] font-medium break-all text-ink">{String(probe.id)}</span>
+                <span className="text-[13px] font-medium break-all text-ink">{String(probe.id)}</span>
                 <Chip tone="warn">{String(probe.added_by ?? "neon")}</Chip>
               </div>
               <p className="text-[14px] leading-snug text-ink-2">{String(probe.instructions)}</p>
-              <p className="tnum font-mono text-[11px] text-ink-3">
+              <p className="tnum text-[11px] text-ink-3">
                 {String(probe.type)} · {String(probe.category)} · threshold {prob(Number(probe.threshold))}
               </p>
             </div>
@@ -278,7 +278,7 @@ export function RedTeam({
             <ul className="flex flex-col gap-2.5">
               <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
                 <span className="text-[14px] font-medium">Flags the order that slipped through</span>
-                <span className={cx("tnum font-mono text-[13px] font-semibold", exploit.fired ? "text-safe" : "text-danger")}>{prob(exploit.p)}</span>
+                <span className={cx("tnum text-[13px] font-semibold", exploit.fired ? "text-safe" : "text-danger")}>{prob(exploit.p)}</span>
                 <span className="col-span-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <span className="block h-full rounded-full bg-safe" style={{ width: `${exploit.p * 100}%` }} />
                 </span>
@@ -286,7 +286,7 @@ export function RedTeam({
               {benign.map((b) => (
                 <li key={b.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
                   <span className="truncate text-[13px] text-ink-2">Normal order: {humanize(b.id.replace(/^benign_/, "")).toLowerCase()}</span>
-                  <span className={cx("tnum font-mono text-[12px]", b.p < 0.1 ? "text-ink-2" : "text-danger")}>{prob(b.p)}</span>
+                  <span className={cx("tnum text-[12px]", b.p < 0.1 ? "text-ink-2" : "text-danger")}>{prob(b.p)}</span>
                   <span className="col-span-2 h-1 overflow-hidden rounded-full bg-surface-2">
                     <span className="block h-full rounded-full bg-ink-3" style={{ width: `${Math.max(2, b.p * 100)}%` }} />
                   </span>

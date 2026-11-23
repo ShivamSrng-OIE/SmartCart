@@ -176,7 +176,21 @@ The two halves deploy to free hosting independently:
 
 Pages use clean addresses (`/shop`, `/results`, `/trust`, ...); `frontend/public/_redirects` lets Cloudflare Pages serve them directly. The backend guide lists every environment variable.
 
-The live deployment runs at [tote-shop.pages.dev](https://tote-shop.pages.dev) (Cloudflare Pages, uploaded build of `frontend/`) with the API at [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health) (Render, built from `main`). To publish a new frontend build there, run `VITE_API_URL=https://tote-api-wbpx.onrender.com npm run build` in `frontend/` and upload `dist/` as a new deployment of the `tote-shop` project.
+The live deployment runs at [tote-shop.pages.dev](https://tote-shop.pages.dev) (Cloudflare Pages, uploaded build of `frontend/`) with the API at [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health) (Render, built from `main`). Each half also has its own deployment branch, holding that folder as the branch root, with its history:
+
+| Branch | Contents | Used by |
+|---|---|---|
+| `carttrap-backend` | `backend/` | Render (`tote-api`), root directory empty |
+| `carttrap-frontend` | `frontend/` | Ready for Cloudflare Pages' Git integration |
+
+After changes land on `main`, refresh the two branches with:
+
+```bash
+git subtree split --prefix=backend -b carttrap-backend && git push origin carttrap-backend
+git subtree split --prefix=frontend -b carttrap-frontend && git push origin carttrap-frontend
+```
+
+To publish a new frontend build on the current Cloudflare project, run `VITE_API_URL=https://tote-api-wbpx.onrender.com npm run build` in `frontend/` and upload `dist/` as a new deployment of the `tote-shop` project. Both sites are checked every five minutes by an uptime monitor.
 
 Notes on the free tiers: a free Render service sleeps after 15 minutes without traffic (the next request wakes it in up to a minute), and its disk is reset on restart, so listings added through the seller portal do not persist there.
 

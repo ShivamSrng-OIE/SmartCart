@@ -1,0 +1,35 @@
+name: Sync deployment branches
+
+on:
+  push:
+    branches:
+      - main
+      - shivam
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-deployment-branches-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pushed commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish backend and frontend deployment branches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          backend_sha="$(git subtree split --prefix=backend "$GITHUB_SHA")"
+          frontend_sha="$(git subtree split --prefix=frontend "$GITHUB_SHA")"
+
+          git push origin "$backend_sha:refs/heads/carttrap-backend"
+          git push origin "$frontend_sha:refs/heads/carttrap-frontend"

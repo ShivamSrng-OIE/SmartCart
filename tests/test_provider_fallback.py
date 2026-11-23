@@ -56,3 +56,17 @@ def test_openrouter_is_used_again_after_its_rest(monkeypatch):
     _openrouter_chosen(monkeypatch, "AIza-test")
     assert settings.rest_openrouter(seconds=0.0) is True
     assert settings.provider() == "openrouter"
+
+
+def test_a_rejected_gemini_key_is_never_the_fallback(monkeypatch):
+    _openrouter_chosen(monkeypatch, "AIza-revoked")
+    settings.note_failure("gemini", RuntimeError("401 UNAUTHENTICATED. API key not valid. Please pass a valid API key."))
+    assert settings.rest_openrouter() is False and settings.provider() == "openrouter"
+    assert settings.limits()["gemini"] == "limited"
+
+
+def test_a_key_rejected_mid_rest_hands_back_to_openrouter(monkeypatch):
+    _openrouter_chosen(monkeypatch, "AIza-test")
+    assert settings.rest_openrouter() is True and settings.provider() == "gemini"
+    settings.note_failure("gemini", RuntimeError("403 PERMISSION_DENIED"))
+    assert settings.provider() == "openrouter"

@@ -148,7 +148,7 @@ def provider() -> str:
     if mine:
         return mine
     picked = chosen()
-    if picked == "openrouter" and resting() and _keys.get("gemini"):
+    if picked == "openrouter" and resting() and _keys.get("gemini") and time.monotonic() >= _gemini_limited_until:
         return "gemini"
     return picked
 
@@ -161,14 +161,16 @@ def rest_openrouter(seconds: float = REST_S) -> bool:
     """Every free OpenRouter model failed: run on Gemini for a while. Returns whether there is a Gemini to use.
     A visitor's own key is their own business: its failures never rest the shared one."""
     global _rest_until
-    if own_key() or not _keys.get("gemini"):
-        return False
+    if own_key() or not _keys.get("gemini") or time.monotonic() < _gemini_limited_until:
+        return False  # no usable Gemini: keep trying the free models rather than fail on a dead key
     _rest_until = time.monotonic() + seconds
     log.warning("every free OpenRouter model failed; using Gemini for the next %d s", int(seconds))
     return True
 
 
 QUOTA_HINTS = ("429", "resource_exhausted", "resource exhausted", "quota", "rate limit", "rate-limit", "too many requests")
+DEAD_KEY_HINTS = ("401", "unauthenticated", "api key not valid", "api_key_invalid", "permission_denied", "403")
+DEAD_KEY_S = 6 * 3600.0  # a rejected key stays out of use for hours (it was revoked, not just busy)
 
 
 def note_failure(provider_name: str, exc: BaseException) -> None:
@@ -178,7 +180,10 @@ def note_failure(provider_name: str, exc: BaseException) -> None:
     if own_key() or provider_name != "gemini":
         return
     text = f"{type(exc).__name__} {exc}".lower()
-    if any(h in text for h in QUOTA_HINTS):
+    if any(h in text for h in DEAD_KEY_HINTS):
+        _gemini_limited_until = time.monotonic() + DEAD_KEY_S
+        log.warning("the shared Gemini key was rejected; it is not used as a fallback")
+    elif any(h in text for h in QUOTA_HINTS):
         _gemini_limited_until = time.monotonic() + LIMIT_S
         log.warning("the shared Gemini key is out of quota; suggesting visitors add their own key")
 

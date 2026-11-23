@@ -410,6 +410,8 @@ async def decide(intent: Intent, media: list[Media], product_json: dict | None, 
     except TimeoutError:
         return fail_closed(f"firewall timeout after {timeout_ms_} ms", tier)
     except Exception as e:  # noqa: BLE001 - fail closed on anything
+        if backend != "json_llm" or not on_openrouter():
+            llm_settings.note_failure("gemini", e)  # a revoked or exhausted shared key stops being the fallback
         return fail_closed(f"{type(e).__name__}: {e}"[:500], tier)
 
     by_id = {p.id: p for p in probes}

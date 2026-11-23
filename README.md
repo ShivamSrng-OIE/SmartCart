@@ -11,11 +11,15 @@ The project ships as a working storefront called **Tote**: shoppers browse real 
 ![Gemini](https://img.shields.io/badge/Built_on-Google_Gemini-4285F4?logo=googlegemini&logoColor=white)
 ![OpenRouter](https://img.shields.io/badge/Runs_on-OpenRouter_free_models-6467F2)
 
-**Live app:** [tote-shop.pages.dev](https://tote-shop.pages.dev) (API: [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health))
+**Live app:** [tote-store.pages.dev](https://tote-store.pages.dev) (API: [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health))
 
-**[Watch the 50-second video walkthrough](https://drive.google.com/file/d/1M1uhcndMoO7fPsk2D7aWiRjlTvPunZRO/view?usp=sharing)**: image, video and audio attacks held live, with the evidence for each.
+### Launch film
 
-![Safe Checkout holding a manipulated listing and showing where the hidden instruction is](backend/docs/images/walkthrough.gif)
+https://github.com/user-attachments/assets/897f817c-fbef-460f-82a3-6caeb435b80e
+
+*Under a minute and a half: a hidden instruction in each of the four places it can hide (image, text, video, audio), the Gemini model behind each job, safe alternatives, falling seller ratings and self-healing checks, on laptop, tablet and phone.*
+
+[![SmartCart launch film](backend/docs/images/launch-film.gif)](https://github.com/user-attachments/assets/897f817c-fbef-460f-82a3-6caeb435b80e)
 
 ---
 
@@ -127,7 +131,7 @@ CartTrap/
 **Prerequisites:** Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 22+, ffmpeg, and an API key for [OpenRouter](https://openrouter.ai/settings/keys) (free) or [Google Gemini](https://aistudio.google.com/apikey).
 
 ```bash
-git clone https://github.com/Dev-22-goel/SmartCart.git CartTrap
+git clone https://github.com/ShivamSrng-OIE/SmartCart.git CartTrap
 cd CartTrap
 ```
 
@@ -176,21 +180,30 @@ The two halves deploy to free hosting independently:
 
 Pages use clean addresses (`/shop`, `/results`, `/trust`, ...); `frontend/public/_redirects` lets Cloudflare Pages serve them directly. The backend guide lists every environment variable.
 
-The live deployment runs at [tote-shop.pages.dev](https://tote-shop.pages.dev) (Cloudflare Pages, uploaded build of `frontend/`) with the API at [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health) (Render, built from `main`). Each half also has its own deployment branch, holding that folder as the branch root, with its history:
+Deployment is automatic. Every push to `main` runs the **Sync deployment branches** workflow (`.github/workflows/sync-deployment-branches.yml`), which splits each half into its own branch, holding that folder as the branch root, with its history. Each host watches its branch and rebuilds when it changes, so a push that only touches the frontend redeploys only the frontend, and the same for the backend.
 
-| Branch | Contents | Used by |
+```mermaid
+flowchart LR
+    P["git push to main"] --> W["GitHub Actions<br/>Sync deployment branches"]
+    W -->|"backend/ changed"| B["carttrap-backend"]
+    W -->|"frontend/ changed"| F["carttrap-frontend"]
+    B -->|"auto-deploy"| R["Render<br/>tote-api-wbpx.onrender.com"]
+    F -->|"Git integration"| C["Cloudflare Pages<br/>tote-store.pages.dev"]
+```
+
+| Branch | Contents | Deployed to |
 |---|---|---|
-| `carttrap-backend` | `backend/` | Render (`tote-api`), root directory empty |
-| `carttrap-frontend` | `frontend/` | Ready for Cloudflare Pages' Git integration |
+| `carttrap-backend` | `backend/` | Render web service `tote-api` (Docker, root directory empty, auto-deploy on commit) |
+| `carttrap-frontend` | `frontend/` | Cloudflare Pages project `tote-store` (build command `npm run build`, output `dist`, `VITE_API_URL` set to the API's address) |
 
-After changes land on `main`, refresh the two branches with:
+The live app runs at [tote-store.pages.dev](https://tote-store.pages.dev), with the API at [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health). The earlier address, tote-shop.pages.dev, forwards there. Both sites are checked every five minutes by an uptime monitor.
+
+To refresh the branches by hand (for example from a fork without Actions enabled):
 
 ```bash
 git subtree split --prefix=backend -b carttrap-backend && git push origin carttrap-backend
 git subtree split --prefix=frontend -b carttrap-frontend && git push origin carttrap-frontend
 ```
-
-To publish a new frontend build on the current Cloudflare project, run `VITE_API_URL=https://tote-api-wbpx.onrender.com npm run build` in `frontend/` and upload `dist/` as a new deployment of the `tote-shop` project. Both sites are checked every five minutes by an uptime monitor.
 
 Notes on the free tiers: a free Render service sleeps after 15 minutes without traffic (the next request wakes it in up to a minute), and its disk is reset on restart, so listings added through the seller portal do not persist there.
 

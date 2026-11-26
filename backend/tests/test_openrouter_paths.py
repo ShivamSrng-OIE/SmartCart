@@ -243,7 +243,7 @@ async def test_the_openrouter_firewall_gets_its_longer_deadline():
 
 
 # ------------------------------------------------------------------ free models only
-@pytest.mark.parametrize("model", ["openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemma-4-31b-it", "x/y:free-but-not", ":free", ""])
+@pytest.mark.parametrize("model", ["openai/gpt-4o", "mistralai/mistral-large", "google/gemma-4-31b-it", "x/y:free-but-not", ":free", ""])
 async def test_a_paid_model_is_never_called(monkeypatch, model):
     seen = serve(monkeypatch, lambda r, n: ok())
     with pytest.raises(openrouter.OpenRouterError, match="not a free model"):

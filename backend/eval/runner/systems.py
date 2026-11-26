@@ -38,9 +38,9 @@ class ShopUnavailable(RuntimeError):
 
 
 def require_shop(shop):
-    """ADR 0015: the eval talks to the live Shop MCP only; there is no fixture fallback."""
+    """The eval talks to the live Shop MCP only; there is no fixture fallback."""
     if shop != "live":
-        raise ValueError(f"shop mode must be live, not {shop!r} (ADR 0015)")
+        raise ValueError(f"shop mode must be live, not {shop!r}")
     try:
         import_module("app.shop_mcp")
     except ImportError as exc:

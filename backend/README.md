@@ -1,4 +1,4 @@
-# CartTrap backend
+# SmartCart backend
 
 The FastAPI service behind the Tote storefront. It runs the shopping agents, verifies every money-moving call with the Safe Checkout firewall, explains and evidences held orders, finds safe alternatives on Shopify, keeps the marketplace's trust scores, and improves its own checks through a red-team loop.
 
@@ -228,9 +228,9 @@ backend/
 │   ├── warehouse/       seed marketplace (git-tracked)
 │   └── state/           runtime state (git-ignored)
 ├── eval/                benchmark cases, runner, results, golden set
-├── redteam/             red-team sandbox
+├── runs/                recorded red-team round (replayed when live red teaming is unavailable)
 ├── scripts/             catalog builder, sweeps and utilities
-├── docs/                requirements, architecture, decisions, model choices, images
+├── docs/                model choices, external API notes, diagrams
 ├── tests/               pytest suite
 ├── Dockerfile
 └── pyproject.toml

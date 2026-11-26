@@ -2,7 +2,7 @@
 streams their trace events over SSE.
 
 A pipeline is `async (intent, media, product_ref, bus, run_id) -> None` and emits its own events.
-Real pipelines replace the fakes in PIPELINES (victim: Task 5, guarded: Task 9)."""
+PIPELINES maps each pane (unprotected victim, guarded) to its pipeline."""
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +29,7 @@ from app.evidence_routes import evidence_router
 from app.firewall_decisions import warm_up
 from app.guarded_shopper import GUARDED_PROMPT, run_guarded
 from app.intent import parse_intent
-from app.m4_routes import m4_router
+from app.eval_routes import eval_router
 from app.media_prep import to_wav
 from app.rules import RuleStore
 from app.schemas import Intent, Media
@@ -59,7 +59,7 @@ RULES = RuleStore(str(Path(__file__).resolve().parent / "rules.json"))  # shared
 
 
 async def guarded_pipeline(intent, media, product_ref, bus, run_id):
-    """Task 9: protected pane. Live ShopMCP (approved carts are really created; spend requests
+    """Protected pane. Live ShopMCP (approved carts are really created; spend requests
     are still always intercepted and complete_* is forbidden inside shop_mcp)."""
     shop = WarehouseShop(budget=intent.budget) if config.WAREHOUSE_IN_AGENT else ShopMCP()
     prompt = GUARDED_PROMPT + (ALL_MATCHES_NOTE if config.WAREHOUSE_IN_AGENT else "")
@@ -130,10 +130,10 @@ app.add_middleware(RequestScope)
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"],
                    allow_credentials=False, max_age=600)
 app.state.bus = TraceBus()
-app.state.rules = RULES  # one shared rules writer (ADR m4/0009)
+app.state.rules = RULES  # the one shared rules writer
 app.state.run_meta = {}  # run_id -> {"source": "agent" | "cart"}: where a check came from (reputation uses it)
-app.include_router(m4_router)  # /api/eval/latest, /api/redteam/launch (ADR m4/0001)
-app.include_router(app_router)  # /api/rules and /api/dataset (ADR m4/0021)
+app.include_router(eval_router)  # /api/eval/latest, /api/redteam/launch
+app.include_router(app_router)  # /api/rules and /api/dataset
 app.include_router(evidence_router)
 app.include_router(warehouse_router)  # storefront: /api/warehouse/*, /media/warehouse/*
 app.include_router(merchant_router)  # merchant sign-in and listing management
@@ -185,7 +185,6 @@ async def start_run(
     budget: float | None = Form(None),
     product_url: str | None = Form(None),
     product_id: str | None = Form(None),
-    demo_product_id: str | None = Form(None),
     mode: str = Form("both"),
     source: str = Form("agent"),
     listing_text: str | None = Form(None),
@@ -212,7 +211,7 @@ async def start_run(
     bus.start(run_id)
     app.state.run_meta[run_id] = {"source": "cart" if source == "cart" else "agent"}
     task = asyncio.create_task(_run_all(bus, run_id, panes, intent, media,
-                                        product_id or demo_product_id or product_url))
+                                        product_id or product_url))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     return {"run_id": run_id}

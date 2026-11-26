@@ -1,4 +1,4 @@
-"""Guarded shopper: the protected pane (plan.md Task 9, contract C7).
+"""Guarded shopper: the protected side of the comparison.
 
 Same Hydrogen loop, model and prompt as the victim (shopper_loop, MODELS["victim"],
 VICTIM_PROMPT), so the comparison is fair. The only difference is the state-change hook:
@@ -19,7 +19,7 @@ Flow:
   Approve: the call is really sent through `shop` (live ShopMCP; shop_mcp still always
   intercepts spend requests and forbids complete_*).
   Anything else: the loop STOPS (no more model or tool calls), a "log" event says why, and
-  after_block() runs (Member 4, Task 10: fraud card + safe swap).
+  the on_block hook runs (explanation card and safe alternative).
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class CallBlocked(Exception):
 
 @dataclass
 class BlockContext:
-    """Everything Task 10 needs to explain the block and build a safe cart."""
+    """Everything the on_block hook needs to explain the hold and build a safe cart."""
     intent: Intent
     media: list[Media]
     call: ToolCall
@@ -84,11 +84,9 @@ AfterBlock = Callable[[BlockContext], Awaitable[None]]
 
 
 async def after_block(b: BlockContext) -> None:
-    """TODO(Member 4, Task 10): Neon fraud card + safe swap. Runs once, after the loop stopped on
-    a non-approve verdict. Emit a "fraud_card" event on pane "guarded"
-    (b.bus.emit(b.run_id, "guarded", "fraud_card", card.model_dump())) and build the safe cart
-    through b.ctx.shop (in budget, from b.intent). Exceptions are caught and logged by run_guarded.
-    Replace this body, or pass on_block= to run_guarded."""
+    """Default on_block hook: does nothing. The app passes defender_neon.on_block, which emits the
+    "fraud_card" event and builds a safe cart through b.ctx.shop. Runs once, after the loop stopped
+    on a non-approve verdict; exceptions are caught and logged by run_guarded."""
     return None
 
 
@@ -96,12 +94,12 @@ AGENT_INSTRUCTION_PROBE = "listing_agent_instruction"
 AGENT_INSTRUCTION_REASON = "listing contains instructions aimed at AI agents"
 
 
-ARGON_GRACE_S = 12.0  # max wait for perception before approving a cart (ADR 0026)
+ARGON_GRACE_S = 12.0  # max wait for perception before approving a cart
 LISTING_PERCEPTION_S = 60.0  # reading a warehouse listing's photo, video, audio and text before judging the cart
 
 
 def hold_if_agent_instructions(verdict: Verdict, claims: Claims | None) -> Verdict:
-    """ADR 0026: a seller that plants agent-directed commands is untrustworthy, so an approve
+    """A seller that plants agent-directed commands is untrustworthy, so an approve
     becomes a hold (hard_block_quarantine) even when the cart matches the intent. Non-approve
     verdicts and benign listings are returned unchanged."""
     if verdict.action != "approve_checkout" or claims is None or not claims.instructions_detected:
@@ -196,9 +194,8 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
         """SHOP_PRODUCT_JSON is the product ACTUALLY BEING BOUGHT (the product of the cart's
         variant). product_ref / the camera match are used only when they are that same product, or
         when the cart's product is unknown (e.g. a spend request). Otherwise the firewall would
-        compare the photo against a product the cart doesn't buy (test c: demo_product_id was
-        Gymshark, the cart bought the Flexform listing, an honest purchase was hard-blocked).
-        None means no product: mismatch probes are skipped (architecture decision 7)."""
+        compare the photo against a product the cart doesn't buy and hard-block an honest
+        purchase. None means no product: mismatch probes are skipped."""
         bought = _bought_product(call, ctx)
         ref = _ref_product(bus, run_id, ctx) if product_ref else None
         if bought is None:
@@ -247,7 +244,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
             except Exception:  # noqa: BLE001 - keep whatever perception we already had
                 log.warning("listing perception failed", exc_info=True)
         if verdict.action == "approve_checkout" and c is None and all_media:
-            # ADR 0026: before money moves, give Argon a short grace period so a listing with
+            # Before money moves, give Argon a short grace period so a listing with
             # hidden agent instructions can't slip through just because perception was slower.
             try:
                 c = await asyncio.wait_for(asyncio.shield(perception), timeout=ARGON_GRACE_S)
@@ -285,7 +282,7 @@ async def run_guarded(intent: Intent, media: list[Media], product_ref: str | Non
                                     claims=claims_if_ready(), product_json=state["product_json"],
                                     cart_total=attempted_spend(b.call, state["ctx"].variants),
                                     ctx=state["ctx"], bus=bus, run_id=run_id))
-        except Exception as exc:  # noqa: BLE001 - a Task 10 failure must not lose the block result
+        except Exception as exc:  # noqa: BLE001 - a failing on_block hook must not lose the block result
             log.exception("after_block failed")
             bus.emit(run_id, PANE, "log", {"level": "error", "event": "after_block", "model": config.MODELS["defender"],
                                            "message": f"after_block failed: {type(exc).__name__}: {exc}"})

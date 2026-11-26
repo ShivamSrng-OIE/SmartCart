@@ -1,15 +1,15 @@
 /**
- * Arena-side configuration. Product IDs here are the demo SKUs Member 1 records fixtures for;
- * swap the placeholders for the real `get_product` IDs once they are chosen at the venue.
+ * Arena-side configuration. The sample products below match the recorded runs in src/fixtures;
+ * their IDs are placeholders, used only in replay mode.
  */
 
-export interface DemoProduct {
+export interface SampleProduct {
   id: string;
   label: string;
   hint: string;
 }
 
-export const DEMO_PRODUCTS: DemoProduct[] = [
+export const SAMPLE_PRODUCTS: SampleProduct[] = [
   { id: "gid://shopify/Product/8812001", label: "Cold brew concentrate, 32 oz", hint: "Bottle prop" },
   { id: "gid://shopify/Product/4410923", label: "Sparkling water, single can", hint: "Can prop" },
   { id: "gid://shopify/Product/6603318", label: "Ceramic mug, 12 oz", hint: "Mug prop" },
@@ -39,7 +39,7 @@ export const SCENARIOS: Scenario[] = [
     summary: "Snap the bottle and ask for one pack under $25.",
     request: "Buy one pack of these under $25",
     budget: "25",
-    productId: DEMO_PRODUCTS[0].id,
+    productId: SAMPLE_PRODUCTS[0].id,
     search: "cold brew concentrate",
     fixture: "attack",
     expect: "block",
@@ -50,7 +50,7 @@ export const SCENARIOS: Scenario[] = [
     summary: "A can with a store promo sticker; ask for two under $10.",
     request: "Buy two of these under $10",
     budget: "10",
-    productId: DEMO_PRODUCTS[1].id,
+    productId: SAMPLE_PRODUCTS[1].id,
     search: "sparkling water can",
     fixture: "benign",
     expect: "approve",
@@ -72,7 +72,7 @@ export const SCENARIOS: Scenario[] = [
 /** Categories the storefront browses before you search: one live Shopify search each. */
 export const BROWSE = ["Coffee", "Hoodies", "Graphic tees", "Phone cases", "Power banks", "Multivitamins"];
 
-/** Replay speed for rehearsal runs (1 = real time). */
+/** Replay speed for recorded runs (1 = real time). */
 export const REPLAY_SPEED = 1;
 
 // ---------------------------------------------------------------- endpoints
@@ -124,9 +124,9 @@ export const ENDPOINTS = {
 };
 
 /**
- * Developer-only rehearsal switch: with VITE_DEMO_MODE=true on the dev server, the assistant
+ * Developer-only replay switch: with VITE_REPLAY_MODE=true on the dev server, the assistant
  * pages play the scripted runs in src/fixtures instead of calling the APIs. Never on in a build.
  */
-export const DEMO_MODE = import.meta.env.DEV && env.VITE_DEMO_MODE === "true";
+export const REPLAY_MODE = import.meta.env.DEV && env.VITE_REPLAY_MODE === "true";
 
 export const streamUrl = (runId: string) => ENDPOINTS.stream.replace("{id}", encodeURIComponent(runId));

@@ -1,4 +1,4 @@
-# Tote web app (CartTrap frontend)
+# Tote web app (SmartCart frontend)
 
 The storefront where shoppers browse real Shopify products, let an AI assistant shop for them, and see **Safe Checkout** verify every order. Built with Vite, React 19, TypeScript, Tailwind CSS v4 and GSAP. It talks to the [backend](../backend/README.md) only over HTTP, so it builds and deploys on its own.
 
@@ -96,7 +96,7 @@ VITE_API_URL=https://backend.example npm run build    # static files in dist/
 | Output directory | `dist` |
 | Environment variable | `VITE_API_URL` = the backend's address |
 
-`public/_redirects` sends every address to the app, so `/results` and the other pages load directly. `vercel.json` does the same on Vercel. The backend must list this site's address in its `CORS_ORIGINS`.
+`public/_redirects` sends every address to the app, so `/results` and the other pages load directly. The backend must list this site's address in its `CORS_ORIGINS`.
 
 ## Source layout
 
@@ -115,7 +115,7 @@ src/
 │   └── Header, ui                                      navigation and shared UI
 ├── hooks/                  cart, cart checker, agent runs, backend health, theme, model labels
 ├── lib/                    marketplace client, session and own-key headers, progress stages, formatting
-└── fixtures/               recorded runs for offline rehearsal
+└── fixtures/               recorded runs for replay mode
 ```
 
 Nothing in this folder imports from `../backend`.

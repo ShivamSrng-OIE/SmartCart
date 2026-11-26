@@ -17,7 +17,7 @@ COPY eval/results ./eval/results
 COPY eval/golden ./eval/golden
 COPY eval/cases ./eval/cases
 COPY eval/__init__.py eval/metrics.py ./eval/
-COPY runs/redteam_demo.jsonl ./runs/redteam_demo.jsonl
+COPY runs/redteam_recorded.jsonl ./runs/redteam_recorded.jsonl
 
 # Runtime state (merchant listings, reputation, saved model choices) lives here: mount a volume to keep it.
 VOLUME ["/srv/data/state"]

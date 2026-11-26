@@ -16,7 +16,7 @@ Three knobs:
     uv run python scripts/sweep_thresholds.py --rules backend/rules.json     # probe set to replay
 
 Picks the combo that stops every attack and approves the most benign; ties go to the most
-"ideal" actions (decision 5), then to the middle of the tied region (most margin both ways).
+"ideal" actions, then to the middle of the tied region (most margin both ways).
 """
 from __future__ import annotations
 

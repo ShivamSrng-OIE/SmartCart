@@ -24,7 +24,7 @@
   "flaw": "12-PACK: quantity 12 per order",
   "synthetic": true,
   "published": false,
-  "reference_mode_note": "merchant images are never fetched to disk (ADR 0018)",
+  "reference_mode_note": "merchant images are never fetched to disk",
   "models": {
     "image": "gemini-nano-banana-2.1",
     "glance": "gemini-3.5-flash-lite",

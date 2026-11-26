@@ -1,5 +1,5 @@
 """The Performance page's numbers always come from the per-case records, never from a stale summary."""
-from app.m4_routes import summarize_results
+from app.eval_routes import summarize_results
 
 
 def case(system, label, *, success=None, completed=None, defended=0.0, latencies=(), error=None):

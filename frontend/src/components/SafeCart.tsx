@@ -17,7 +17,7 @@ interface Choice {
   best: boolean;
 }
 
-/** The prepared cart first (its continue_url is used exactly as returned, ADR m4/0008), then the other offers. */
+/** The prepared cart first (its continue_url is used exactly as returned), then the other offers. */
 function choices(cart: SafeCartT): Choice[] {
   const line = cart.line_items?.[0];
   const qty = cart.line_items?.reduce((n, l) => n + (l.quantity ?? 0), 0) ?? line?.quantity ?? 1;

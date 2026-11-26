@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEMO_MODE, SCENARIOS, type FixtureName, type Scenario } from "./config";
-import { findDemo, firstLiveProduct, refFromProduct, type ProductRef } from "./catalog";
+import { REPLAY_MODE, SCENARIOS, type FixtureName, type Scenario } from "./config";
+import { findBundled, firstLiveProduct, refFromProduct, type ProductRef } from "./catalog";
 import { parseIntent, requestText } from "./lib/intent";
 import type { Intent } from "./types";
 
@@ -41,7 +41,7 @@ const Ctx = createContext<DraftApi | null>(null);
 
 function initial(): Draft {
   const s = SCENARIOS[0];
-  const p = DEMO_MODE ? findDemo(s.productId) : null;
+  const p = REPLAY_MODE ? findBundled(s.productId) : null;
   return { request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, media: {}, scenarioId: s.id, listingText: "" };
 }
 
@@ -78,7 +78,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
 
   const pickScenario = useCallback(
     (s: Scenario) => {
-      const p = DEMO_MODE ? findDemo(s.productId) : null;
+      const p = REPLAY_MODE ? findBundled(s.productId) : null;
       setDraft((d) => ({ ...d, request: s.request, budget: s.budget, product: p ? refFromProduct(p) : null, scenarioId: s.id, listingText: "" }));
       if (s.noProduct) liveReq.current++; // drop any product still on its way from the previous example
       else attachLive(s);
@@ -107,10 +107,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
         form.set("request", requestText(draft.request, Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : null).slice(0, 1000));
         if (draft.budget.trim()) form.set("budget", draft.budget.trim());
         if (draft.product?.url) form.set("product_url", draft.product.url);
-        if (draft.product?.id) {
-          form.set("product_id", draft.product.id);
-          form.set("demo_product_id", draft.product.id); // older backend field name
-        }
+        if (draft.product?.id) form.set("product_id", draft.product.id);
         if (draft.listingText.trim()) form.set("listing_text", draft.listingText.trim());
         for (const m of Object.values(draft.media)) if (m) form.set(m.kind, m.blob, m.name);
         return form;

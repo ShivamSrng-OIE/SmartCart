@@ -6,7 +6,7 @@ import { REPLAY_SPEED, type FixtureName, type RunKind } from "../config";
 import type { Mode } from "./useBackend";
 import type { Phase } from "./useArena";
 
-/** One AI shopper (mode 2 or 3): live against its endpoint, or the scripted demo for its pane. */
+/** One AI shopper (mode 2 or 3): live against its endpoint, or the recorded run for its pane. */
 export function useAgentRun(kind: RunKind, mode: Mode) {
   const pane = kind === "unprotected" ? "victim" : "guarded";
   const [state, setState] = useState<ArenaState>(() => initialState());

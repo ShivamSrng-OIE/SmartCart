@@ -172,7 +172,7 @@ export interface Insight {
   detail: string;
 }
 
-/** A blocked listing as it is reported to Shopify's merchant-trust team (simulated: the demo sends nothing). */
+/** A blocked listing as it is reported to Shopify's merchant-trust team (simulated: nothing is sent). */
 export interface ShopifyReport {
   id: string;
   product_id: string;

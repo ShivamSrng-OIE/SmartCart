@@ -1,4 +1,4 @@
-"""Task 7: firewall gate math, spend tiers and fail-closed decide() (mocked backends)."""
+"""Firewall gate math, spend tiers and fail-closed decide() (mocked backends)."""
 import asyncio
 import math
 
@@ -40,7 +40,7 @@ def _results(**overrides):
     return [ProbeResult(id=p.id, p=overrides.get(p.id, 0.02), fired=False) for p in PROBES]
 
 
-# --- gate (plan.md Task 7 Step 1) ---
+# --- gate ---
 
 def test_gate_all_low_probes_approves():
     """Review Focus 1: blurry/dark frame, nothing readable, benign request -> approve."""
@@ -255,7 +255,7 @@ async def test_decide_malformed_answer_fails_closed(decisions_backend, mutate):
 
 
 async def test_decide_without_product_skips_mismatch(decisions_backend):
-    """Review Focus 4 / decision 7: no product -> pack_lie probes not sent, injection still runs."""
+    """No product -> pack_lie probes not sent, injection still runs."""
     v = await _decide(product=None)
     sent = decisions_backend["sent"][0]["questions"]
     assert "pack_count_mismatch" not in sent and "brand_mismatch" not in sent
@@ -491,7 +491,7 @@ async def test_call_json_llm_empty_output_fails_closed(monkeypatch):
     assert v.action == "hard_block_quarantine" and v.error
 
 
-# --- Step 6a: confidence gate; 6d: model on every verdict ---
+# --- confidence gate; model named on every verdict ---
 
 def test_gate_low_confidence_never_approves():
     probs = {"approve_checkout": 0.95, "escalate_to_neon_swap": 0.03, "hard_block_quarantine": 0.02}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { defaultRules, getEvalLatest, getRules, healthInfo, rehearsalEval, type ServiceLimits } from "../api";
-import { DEMO_MODE } from "../config";
+import { defaultRules, getEvalLatest, getRules, healthInfo, recordedEval, type ServiceLimits } from "../api";
+import { REPLAY_MODE } from "../config";
 import type { EvalResults, RuleSet } from "../types";
 
 export type Mode = "live" | "replay";
@@ -24,7 +24,7 @@ export function useBackend(): Backend {
   const [online, setOnline] = useState<boolean | null>(null);
   const [limits, setLimits] = useState<ServiceLimits | null>(null);
   const [rules, setRules] = useState<RuleSet>(defaultRules);
-  const [evalResults, setEval] = useState<EvalResults | null>(() => (DEMO_MODE ? rehearsalEval() : null));
+  const [evalResults, setEval] = useState<EvalResults | null>(() => (REPLAY_MODE ? recordedEval() : null));
 
   const load = useCallback(async () => {
     const h = await healthInfo();
@@ -55,5 +55,5 @@ export function useBackend(): Backend {
 
   const bumpRules = useCallback((version: number) => setRules((r) => ({ ...r, version: Math.max(r.version, version) })), []);
 
-  return { mode: DEMO_MODE ? "replay" : "live", online, limits, rules, evalResults, refresh: () => void load(), bumpRules };
+  return { mode: REPLAY_MODE ? "replay" : "live", online, limits, rules, evalResults, refresh: () => void load(), bumpRules };
 }

@@ -1,6 +1,6 @@
 import asyncio
 
-from app import config, m4_routes, main
+from app import config, eval_routes, main
 from app.schemas import TraceEvent
 
 from .conftest import PRODUCT_ID, read_sse
@@ -23,7 +23,7 @@ async def test_redteam_launch_streams_background_stages(api_client, monkeypatch)
             ))
 
     monkeypatch.setattr(config, "MANAGED_AGENTS", True)
-    monkeypatch.setattr(m4_routes, "launch_redteam", fake_launch)
+    monkeypatch.setattr(eval_routes, "launch_redteam", fake_launch)
     try:
         response = await asyncio.wait_for(
             api_client.post("/api/redteam/launch", json={"product_id": PRODUCT_ID, "rounds": 1}), 5,

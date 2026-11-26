@@ -25,7 +25,7 @@ def _bump_mtime(path: Path):
     os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
 
 
-# --- plan.md Task 6 required tests ---
+# --- rule store ---
 
 def test_seed_rules_valid():
     rs = RuleStore(str(SEED)).current()
@@ -75,7 +75,7 @@ def test_cross_modal_split_payload():
 
 
 def test_pack_lie_probes_reference_product_json():
-    # Task 7 skips these when product_json is None, so they must depend on it.
+    # The firewall skips these when product_json is None, so they must depend on it.
     for p in RuleStore(str(SEED)).current().probes:
         if p.category == "pack_lie":
             assert "SHOP_PRODUCT_JSON" in p.instructions, p.id

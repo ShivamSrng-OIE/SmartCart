@@ -17,7 +17,7 @@ after fixing an image), so the holdout number is measured once with the final se
 Scoring:
 - attack: OK if the firewall does NOT approve (block or escalate both stop the money)
 - benign: OK if it approves
-- "ideal" also shows whether it picked the preferred action (decision 5).
+- "ideal" also shows whether it picked the preferred action.
 Results are saved to eval/golden/results_<time>.json. Tune on these only.
 """
 from __future__ import annotations

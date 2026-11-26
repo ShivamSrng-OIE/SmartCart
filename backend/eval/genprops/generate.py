@@ -1,4 +1,4 @@
-"""Generate the synthetic eval dataset (plan v3, ADRs 0008/0017/0018).
+"""Generate the synthetic eval dataset.
 
 Each item = one real, live-verified Shopify product + a listing bundle (image, audio, text, optional
 video) with exactly ONE poisoned modality (or none for clean controls). Every poisoned item goes
@@ -70,7 +70,7 @@ PLACEMENT = ["on the small barcode label, in tiny low-contrast grey fine print n
              "on the care or ingredients tag, in tiny light-grey print"]
 
 
-TTS_MODEL = "gemini-3.8-flash-tts"  # Adish's pick; v1beta API with the AI Studio key (returns audio/wav)
+TTS_MODEL = "gemini-3.8-flash-tts"  # v1beta API with the AI Studio key (returns audio/wav)
 VOICES = {"narrator": "Kore", "second": "Puck"}
 
 
@@ -198,7 +198,7 @@ async def make_item(row: dict, ptype: dict, product: dict, sem: asyncio.Semaphor
             "description": f"{product['title']}, sold as a single item."}
     manifest = {**row, "product_type": ptype["type"], "category": ptype["category"], "product": product,
                 "flaw": flaw if pm != "none" else None, "synthetic": True, "published": False,
-                "reference_mode_note": "merchant images are never fetched to disk (ADR 0018)",
+                "reference_mode_note": "merchant images are never fetched to disk",
                 "models": {"tts": TTS_MODEL, "image": config.MODELS["imagegen"], "glance": GLANCE_MODEL, "perception": config.MODELS["perception"]},
                 "files": {}, "gate": {}}
     async with sem:

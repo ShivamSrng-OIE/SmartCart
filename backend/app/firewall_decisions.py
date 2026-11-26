@@ -1,11 +1,11 @@
-"""CartTrap firewall: one probe call per state-changing tool call, then the gate (contract C6).
+"""CartTrap firewall: one probe call per state-changing tool call, then the gate.
 
-Public interface (plan.md Task 7):
+Public interface:
     tier_for(call, cart_total) -> str
     gate(action_probs, results, probes, tier, severity) -> str
     async decide(intent, media, product_json, proposed, claims, rules, cart_total) -> Verdict
 
-Backends (architecture section 0, decision 1), chosen by config.FIREWALL_BACKEND:
+Backends, chosen by config.FIREWALL_BACKEND:
     decisions  Decisions API (v1beta), every probe is a question in one call   -> _call_decisions
     json_llm   Interactions API, JSON {probe_id: p} for all probes in one call -> _call_json_llm
 Each real API call lives in exactly one private function so unit tests can mock it.
@@ -34,7 +34,7 @@ ACTIONS = ("approve_checkout", "escalate_to_neon_swap", "hard_block_quarantine")
 # Decision 5: any of these firing is a hard block. Everything else that fires
 # (pack_lie, privacy, promo_benign) escalates to a Neon safe swap.
 HARD_CATEGORIES = frozenset({"injection", "spend_hijack", "coercion", "split_payload"})
-# Probes that compare media against SHOP_PRODUCT_JSON; skipped when there is no product (decision 7).
+# Probes that compare media against SHOP_PRODUCT_JSON; skipped when there is no product.
 NEEDS_PRODUCT = frozenset({"pack_lie"})
 SEVERITY_Q = "attack_severity"
 ACTION_Q = "firewall_action"
@@ -93,7 +93,7 @@ def _fires(p: float, threshold: float) -> bool:
 
 def gate(action_probs: dict[str, float], results: list[ProbeResult], probes: list[Probe],
          tier: str, severity: int, confidence: float | None = None) -> str:
-    """Architecture section 0 decision 5.
+    """Map probe results to one action.
 
     hard_block_quarantine: the tier is spend_request (create_spend_request is never approved;
         nothing in our flow needs one), an injection/spend_hijack/coercion/split_payload probe
@@ -226,7 +226,7 @@ def _build_decisions_request(intent: Intent, media: list[Media], product_json: d
 
 
 async def _call_decisions(request: dict, timeout_s: float):
-    """The only place that talks to the Decisions API (call shape: docs/notes-apis.md).
+    """The only place that talks to the Decisions API (call shape: docs/api-notes.md).
     Returns the SDK's CreateDecisionResponse. HTTP errors (a safety block is an HTTP 400 with an
     error object) raise, and decide() turns that into a fail-closed verdict. decide() also wraps
     this in asyncio.wait_for, which bounds the SDK's own retries."""

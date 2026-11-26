@@ -1,4 +1,4 @@
-"""Step 6b: camera product matching with one Decisions API choice question (decision 7, option 3)."""
+"""Camera product matching with one Decisions API choice question."""
 import pytest
 from google.genai import decisions as gd
 

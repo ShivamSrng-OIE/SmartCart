@@ -1,4 +1,4 @@
-"""Task 9 Step 4: run_guarded and parse_intent are wired into main.py (Member 2's own tests)."""
+"""run_guarded and parse_intent are wired into main.py."""
 import httpx
 
 import app.main as main
@@ -20,9 +20,9 @@ async def test_guarded_pipeline_calls_run_guarded(monkeypatch):
     assert isinstance(seen["shop"], ShopMCP) and seen["shop"].dry_run is False
     assert isinstance(seen["rules"], RuleStore) and seen["rules"] is main.RULES
     assert seen["rules"].current().version >= 1 and seen["ref"] == "gid://p/1"
-    assert seen["on_block"] is main.defender_on_block  # ADR m4/0010
+    assert seen["on_block"] is main.defender_on_block
     assert seen["prompt"].startswith(main.GUARDED_PROMPT) and "buy all of something" in seen["prompt"]  # same note as the victim
-    assert main.app.state.rules is main.RULES  # ADR m4/0009
+    assert main.app.state.rules is main.RULES
 
 
 async def test_run_uses_parse_intent(monkeypatch):

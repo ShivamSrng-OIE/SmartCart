@@ -60,7 +60,7 @@ describe("normalizeProduct (Shop MCP shape)", () => {
     expect(normalizeProduct({ title: "no id" })).toBeNull();
   });
 
-  it("still reads the demo catalog shape (major units)", () => {
+  it("still reads the bundled catalog shape (major units)", () => {
     expect(normalizeProduct({ id: "x", title: "Mug", price: 24, seller: { domain: "kiln.example", name: "Kiln" } })).toMatchObject({ price: 24, shop: "kiln.example" });
   });
 });

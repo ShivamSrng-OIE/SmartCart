@@ -1,4 +1,4 @@
-"""Argon perception: raw untrusted media -> Claims JSON (plan.md Task 8).
+"""Argon perception: raw untrusted media -> Claims JSON.
 
 Argon has NO tools. Its output is untrusted data: other models get it only as quoted data
 (see firewall_decisions._context_text), never as instructions.
@@ -68,7 +68,7 @@ async def _call_openrouter(media: list[Media], prompt: str) -> dict:
 
 async def _call_argon(media: list[Media], prompt: str) -> dict:
     """The only place that talks to a model for perception. Gemini: one Interactions API call with the
-    Claims JSON schema as the response format, no tools (call shape: docs/notes-apis.md). OpenRouter: see above."""
+    Claims JSON schema as the response format, no tools (call shape: docs/api-notes.md). OpenRouter: see above."""
     if llm_settings.provider() == "openrouter":
         return await _call_openrouter(media, prompt)
     resp = await gemini.client().aio.interactions.create(

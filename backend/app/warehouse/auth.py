@@ -2,7 +2,7 @@
 
 Accounts are the warehouse merchants (their id is the username) plus an operator account ("warehouse"
 by default) that can manage every store. Passwords come from the environment (MERCHANT_PASSWORD, one
-demo password for every account), compared in constant time. A successful login returns a signed,
+shared password for every account), compared in constant time. A successful login returns a signed,
 expiring token (HMAC-SHA256) that the portal sends as `Authorization: Bearer ...`. The signing secret
 is generated on first run and kept in data/state/auth_secret (gitignored); no database, no sessions.
 """

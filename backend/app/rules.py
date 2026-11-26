@@ -1,4 +1,4 @@
-"""Versioned probe store backed by rules.json, hot-reloaded on file change (contract C4)."""
+"""Versioned probe store backed by rules.json, hot-reloaded on file change."""
 from __future__ import annotations
 
 import json

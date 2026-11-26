@@ -1,4 +1,4 @@
-"""Task 8: Argon perception. Unit tests mock the single private API call."""
+"""Argon perception. Unit tests mock the single private API call."""
 import base64
 from pathlib import Path
 from types import SimpleNamespace

@@ -132,8 +132,8 @@ function CheckoutButton({ shop, lines }: { shop: string; lines: Cart["lines"] })
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
   const [msg, setMsg] = useState<string | null>(null);
   const name = lines[0]?.shopName ?? shop;
-  const demoStore = /(^|\.)warehouse\.local$/.test(shop);
-  const real = lines.every((l) => l.variantId) && !/\.example$/.test(shop) && !demoStore;
+  const localStore = /(^|\.)warehouse\.local$/.test(shop);
+  const real = lines.every((l) => l.variantId) && !/\.example$/.test(shop) && !localStore;
   const fallbackUrl = lines.find((l) => l.url)?.url ?? null;
 
   const go = async () => {
@@ -154,7 +154,7 @@ function CheckoutButton({ shop, lines }: { shop: string; lines: Cart["lines"] })
     }
   };
 
-  if (demoStore) {
+  if (localStore) {
     return (
       <p className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
         <Info className="mt-0.5 size-3.5 shrink-0" />

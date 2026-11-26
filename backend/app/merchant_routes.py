@@ -14,7 +14,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from app import config
 from app.warehouse import auth, catalog, portal, reputation
 
 router = APIRouter()
@@ -72,8 +71,7 @@ def me(authorization: str | None = Header(None)):
     mine = [r for r in catalog.records() if claims["role"] == "admin" or r.get("merchant") == mid]
     return {"username": mid, "role": claims["role"], "merchant": merchant,
             "stats": reputation.seller_summary(mid) if merchant else None, "listings": len(mine),
-            "stores": [{"id": k, "name": v["name"]} for k, v in catalog.merchants().items()] if claims["role"] == "admin" else None,
-            "demo_login_hint": config.MERCHANT_USERNAME}
+            "stores": [{"id": k, "name": v["name"]} for k, v in catalog.merchants().items()] if claims["role"] == "admin" else None}
 
 
 @router.get("/api/merchant/listings")

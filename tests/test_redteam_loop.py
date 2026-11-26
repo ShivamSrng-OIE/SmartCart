@@ -108,13 +108,13 @@ async def test_round_error_emits_event_and_stops(store, broken):
 @pytest.mark.asyncio
 async def test_trace_replays_in_order(tmp_path, store):
     bus = Bus()
-    await loop.launch_redteam(None, 2, bus, "rt_demo", cases=[case(1), case(2)], store=store,
+    await loop.launch_redteam(None, 2, bus, "rt_recorded", cases=[case(1), case(2)], store=store,
                              evaluate=blocked)
-    path = tmp_path / "redteam_demo.jsonl"
+    path = tmp_path / "redteam_recorded.jsonl"
     path.write_text("".join(json.dumps(e) + "\n" for e in bus.events), encoding="utf-8")
     events = [e if isinstance(e, dict) else e.model_dump() for e in iter_trace(path)]
     assert events == bus.events
-    assert all(e["pane"] == "redteam" and e["run_id"] == "rt_demo" for e in events)
+    assert all(e["pane"] == "redteam" and e["run_id"] == "rt_recorded" for e in events)
     assert [e["data"]["step"] for e in events] == [
         "fixture_loaded", "verdict", "blocked", "fixture_loaded", "verdict", "blocked", "done"]
     assert events == sorted(events, key=lambda e: e["t_ms"])
@@ -123,7 +123,7 @@ async def test_trace_replays_in_order(tmp_path, store):
 def test_recording_has_no_secrets(tmp_path):
     from app.schemas import TraceEvent
 
-    path = tmp_path / "runs" / "demo.jsonl"
+    path = tmp_path / "runs" / "round.jsonl"
     envelope = {"run_id": "rt_ab12cd34", "pane": "redteam", "t_ms": 10, "kind": "log"}
     secret = "sensitive-canary"
     details = {"round": 1, "step": "blocked", "action": "hard_block_quarantine",
@@ -239,7 +239,7 @@ async def test_shared_rulestore_backup_then_append(tmp_path):
 def test_record_round_keeps_stage_and_message(tmp_path):
     from app.schemas import TraceEvent
 
-    path = tmp_path / "demo.jsonl"
+    path = tmp_path / "round.jsonl"
     data = {"round": 1, "step": "validation", "stage": "validate", "message": "It catches the attack.",
             "exploit": {"p": 0.8, "fired": True}, "benign": [{"id": "ben-0", "p": 0.01}],
             "rules_version_from": 1, "rules_version_to": 2}

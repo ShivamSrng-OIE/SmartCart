@@ -1,4 +1,4 @@
-"""Member 4 API routes kept separate from the shared application module."""
+"""Benchmark results (/api/eval/latest) and red-team rounds (/api/redteam/launch)."""
 
 from __future__ import annotations
 
@@ -20,12 +20,12 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = ROOT / "eval" / "results"
-DEMO_TRACE = ROOT / "runs" / "redteam_demo.jsonl"
+RECORDED_TRACE = ROOT / "runs" / "redteam_recorded.jsonl"
 GOLDEN_REDS = ROOT / "eval" / "golden" / "redteam"
 REPLAY_SPEED = float(os.getenv("REPLAY_SPEED", "1.0"))
 _tasks: set[asyncio.Task] = set()
 
-m4_router = APIRouter()
+eval_router = APIRouter()
 
 
 class _BusAdapter:
@@ -52,7 +52,7 @@ def _latest_result_file() -> Path | None:
     return None
 
 
-@m4_router.get("/api/eval/latest")
+@eval_router.get("/api/eval/latest")
 def latest_eval():
     newest = _latest_result_file()
     if newest is None:
@@ -113,12 +113,12 @@ def _app_dependencies(request: Request):
 
 async def _run_redteam(bus, store, run_id: str, product_id, rounds) -> None:
     if launch_redteam is None:
-        await replay_trace(DEMO_TRACE, bus, run_id, REPLAY_SPEED)
+        await replay_trace(RECORDED_TRACE, bus, run_id, REPLAY_SPEED)
         return
     await launch_redteam(product_id, rounds, _BusAdapter(bus), run_id, store=store)
 
 
-@m4_router.post("/api/redteam/launch")
+@eval_router.post("/api/redteam/launch")
 async def redteam_launch(request: Request, body: dict | None = None):
     body = body or {}
     product_id = body.get("product_id")
@@ -136,9 +136,9 @@ async def redteam_launch(request: Request, body: dict | None = None):
         managed_agents = MANAGED_AGENTS
 
     if launch_redteam is None or (not managed_agents and not use_recorded_golden):
-        if not DEMO_TRACE.is_file():
+        if not RECORDED_TRACE.is_file():
             raise HTTPException(status_code=404, detail="Red-team launcher and its recorded trace are unavailable")
-        task = asyncio.create_task(replay_trace(DEMO_TRACE, bus, run_id, REPLAY_SPEED))
+        task = asyncio.create_task(replay_trace(RECORDED_TRACE, bus, run_id, REPLAY_SPEED))
     else:
         task = asyncio.create_task(_run_redteam(bus, store, run_id, product_id, rounds))
     _tasks.add(task)

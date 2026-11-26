@@ -218,7 +218,7 @@ def _ratings(records: list[dict], trust: int) -> dict:
 
 
 def reports(rows: list[dict], names: dict[str, str]) -> list[dict]:
-    """One report per blocked listing, as it would be filed with Shopify's merchant-trust team. This demo sends
+    """One report per blocked listing, as it would be filed with Shopify's merchant-trust team. The app sends
     nothing outside the app: `simulated` says so, and the UI shows it."""
     by_product: dict[str, dict] = {}
     for i in sorted(rows, key=lambda r: r["ts"]):

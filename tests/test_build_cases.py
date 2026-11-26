@@ -1,6 +1,6 @@
 """Tests for eval/build_cases.py, run against stubs (no network, no real forge).
 
-Stubs copy plan.md Task 2/13 interfaces; swap for the real ShopMCP / forge at C2/C5.
+The stubs mirror the ShopMCP and red-team manifest interfaces.
 """
 from collections import Counter
 

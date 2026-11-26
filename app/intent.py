@@ -1,7 +1,7 @@
 """Parse the trusted Request box into an Intent.
 
-Only the Request box text and budget field are trusted (architecture §0
-decision 3). Never call this on text that came from media.
+Only the Request box text and budget field are trusted. Never call this on text that came
+from media.
 """
 from __future__ import annotations
 

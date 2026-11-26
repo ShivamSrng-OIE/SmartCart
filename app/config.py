@@ -27,7 +27,7 @@ MODELS: dict[str, str] = {
     }.items()
 }
 
-# json_llm firewall fallback (architecture decision 1): a fast Gemini 4 model via the
+# json_llm firewall fallback: a fast Gemini 4 model via the
 # Interactions API. gemini-decision-1 only serves the Decisions API, so it can't be reused here.
 FIREWALL_JSON_LLM_MODEL: str = os.getenv("MODEL_FIREWALL_JSON_LLM", MODELS["perception"])
 
@@ -55,9 +55,9 @@ LLM_PROVIDER: str = (os.getenv("LLM_PROVIDER") or ("openrouter" if OPENROUTER_AP
 # Free OpenRouter models are much slower than the hackathon Gemini endpoints, so the firewall gets
 # a longer deadline there. It still fails closed when the deadline passes.
 OPENROUTER_FIREWALL_TIMEOUT_MS: int = int(os.getenv("OPENROUTER_FIREWALL_TIMEOUT_MS", "45000"))
-# The merchant portal's demo login (fictional local warehouse). Override in backend/.env.
+# The seller portal's login for the fictional local warehouse. Override in backend/.env.
 MERCHANT_USERNAME: str = os.getenv("MERCHANT_USERNAME", "warehouse")
-MERCHANT_PASSWORD: str = os.getenv("MERCHANT_PASSWORD", "warehouse-demo")
+MERCHANT_PASSWORD: str = os.getenv("MERCHANT_PASSWORD", "warehouse-seller")
 SHOP_MCP_URL: str = os.getenv("SHOP_MCP_URL", "https://mcp.shop.com/")
 FIREWALL_BACKEND: Literal["decisions", "json_llm"] = (
     "json_llm" if os.getenv("FIREWALL_BACKEND") == "json_llm" else "decisions"

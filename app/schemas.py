@@ -1,4 +1,4 @@
-"""Shared data shapes for CartTrap (contract C1).
+"""Shared data shapes for CartTrap.
 
 Everyone builds on these. After the 11:00 checkpoint, changes here are
 ADDITIVE ONLY: new optional fields are fine, renames and removals are not.
@@ -85,7 +85,7 @@ class FraudCard(BaseModel):
 
 class TraceEvent(BaseModel):
     run_id: str
-    # "system" is used only for the final `done` event, which belongs to no pane (Member 1, main.py).
+    # "system" is used only for the final `done` event, which belongs to no pane (see main.py).
     pane: Literal["victim", "guarded", "redteam", "system"]
     t_ms: int
     kind: Literal["tool_call", "tool_result", "intercepted", "verdict", "fraud_card", "evidence", "log", "done"]

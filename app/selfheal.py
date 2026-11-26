@@ -313,7 +313,7 @@ async def propose_probe(bypass_trace: list[TraceEvent], *, store: RuleStore | No
 
 
 async def evaluate_fixture(fixture: dict, rules: RuleSet) -> dict:
-    """Score a fixed decision input using Task 7. No shop client or tool dispatcher."""
+    """Score a fixed decision input with the firewall. No shop client or tool dispatcher."""
     from app.firewall_decisions import decide
     from app.rules import RuleSet as SharedRuleSet
     from app.schemas import Claims, Intent, Media, ToolCall

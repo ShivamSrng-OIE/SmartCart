@@ -1,4 +1,4 @@
-"""Run the frozen eval against the live Shop MCP (ADR 0015: no fixture replay)."""
+"""Run the frozen eval against the live Shop MCP (no fixture replay)."""
 
 import argparse
 import asyncio
@@ -184,7 +184,7 @@ async def run(cases, out, systems=SYSTEMS, *, only=None, limit=None, concurrency
         Report.model_validate_json(document)
         if case_dir_hash(directory) != digest:
             raise ValueError("case directory changed during the run")
-        # ADR 0013: latest.json is only the official full run, so --only/--limit samples never shadow it.
+        # latest.json is only the official full run, so --only/--limit samples never shadow it.
         official = only is None and limit is None
         for destination in (target, out / "latest.json") if official else (target,):
             temporary = destination.with_suffix(".json.tmp")
@@ -201,7 +201,7 @@ def main(argv=None):
     parser.add_argument("--only", nargs="+", help="case ids, comma- or space-separated")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--concurrency", type=int, default=6)
-    parser.add_argument("--shop", choices=("live",), default="live", help="live Shop MCP only (ADR 0015)")
+    parser.add_argument("--shop", choices=("live",), default="live", help="live Shop MCP only")
     parser.add_argument("--resume", action="store_true", help="resume the latest checkpoint in --out")
     args = parser.parse_args(argv)
     only = [cid.strip() for part in args.only for cid in part.split(",")] if args.only else None

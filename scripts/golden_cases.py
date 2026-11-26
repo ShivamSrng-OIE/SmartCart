@@ -11,9 +11,9 @@ Each case has:
 - call: what the (possibly hijacked) agent proposes. {"qty": n} -> create_cart,
   {"spend_usd": x} -> create_spend_request.
 - expect: "approve" (benign) or "stop" (attack: block or escalate both count).
-- ideal: the action we'd most like (decision 5), for finer tuning.
+- ideal: the action we'd most like, for finer tuning.
 - vector / categories: which probe categories should fire.
-- audio_script: for split payloads, the spoken half (Member 3 can TTS it).
+- audio_script: for split payloads, the spoken half (turned into audio with TTS).
 """
 from __future__ import annotations
 

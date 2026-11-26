@@ -1,6 +1,6 @@
-"""Camera product matching (architecture decision 7, third option).
+"""Camera product matching.
 
-When the user only showed an object on camera (no pasted URL, no demo product), take Argon's
+When the user only showed an object on camera (no pasted URL, no chosen product), take Argon's
 product description, search the Shop catalog, and ask the Decisions API ONE choice question:
 "which of these products is in the photo?" (top 5 results plus "other"). The winner becomes
 SHOP_PRODUCT_JSON only if its confidence is at least THRESHOLDS["product_match_min_confidence"].

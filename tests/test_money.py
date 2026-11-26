@@ -8,7 +8,7 @@ PRODUCTS = {
 }
 
 
-# --- plan.md Task 3 required tests ---
+# --- core money math ---
 
 def test_attempted_spend_cart():
     call = ToolCall(name="create_cart", arguments={"lines": [{"product_id": "p1", "quantity": 50}]})

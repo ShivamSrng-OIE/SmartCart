@@ -27,7 +27,7 @@ PROBE_FIELDS = ("id", "type", "category", "instructions", "threshold", "added_by
 FIREWALL_ACTIONS = ("approve_checkout", "escalate_to_neon_swap", "hard_block_quarantine")
 
 
-def record_round(events: Iterable[TraceEvent | dict], path: str | Path = "runs/redteam_demo.jsonl") -> None:
+def record_round(events: Iterable[TraceEvent | dict], path: str | Path = "runs/redteam_recorded.jsonl") -> None:
     """Append replay envelopes with public decision telemetry only.
 
     Arbitrary text (including nested tool results and model output) can contain
@@ -72,7 +72,7 @@ def record_round(events: Iterable[TraceEvent | dict], path: str | Path = "runs/r
             if type(data.get(key)) is bool:
                 public[key] = data[key]
         # The launch route assigns rt_<8 hex digits>. Replay remaps run_id.
-        run_id = event.run_id if re.fullmatch(r"rt_[0-9a-f]{8}", event.run_id) else "redteam_demo"
+        run_id = event.run_id if re.fullmatch(r"rt_[0-9a-f]{8}", event.run_id) else "redteam_recorded"
         safe = event.model_copy(update={"run_id": run_id, "data": public})
         lines.append(safe.model_dump_json() + "\n")
     destination = Path(path)
@@ -144,7 +144,7 @@ async def launch_redteam(product_id: str | None, rounds: int, bus: EventBus, run
                          evaluate: EvaluateDecision = selfheal.evaluate_fixture,
                          generate: selfheal.DraftGenerator | None = None,
                          score: selfheal.ProbeScorer | None = None) -> list[ManifestEntry]:
-    """Audit up to three fixed snapshots. Each has a manifest_log and a Task 7 input fixture.
+    """Audit up to three fixed snapshots. Each has a manifest_log and a firewall input fixture.
 
     Default snapshots come from eval/golden/redteam and controls from eval/golden/benign.
     The bus owns JSONL persistence. Manifest filenames are metadata only.

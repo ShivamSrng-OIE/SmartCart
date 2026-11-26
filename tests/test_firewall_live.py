@@ -1,7 +1,7 @@
-"""Task 7 live checks against the real firewall backend. Run with `uv run pytest -m live`.
+"""Live checks against the real firewall backend. Run with `uv run pytest -m live`.
 
-Needs GEMINI_API_KEY, the real SDK call filled in (see docs/notes-apis.md) and the golden
-images from Member 4 in eval/golden/. Skips cleanly when any of those is missing.
+Needs GEMINI_API_KEY (call shapes in docs/api-notes.md) and the golden images in
+eval/golden/. Skips cleanly when any of those is missing.
 """
 import statistics
 from pathlib import Path

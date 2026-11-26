@@ -1,4 +1,4 @@
-"""Shared Hydrogen shopping loop, used by the victim (Task 5) and the guarded shopper (Task 9).
+"""Shared Hydrogen shopping loop, used by the unprotected victim and the guarded shopper.
 
 The model sees a small, simplified tool set (raw Shop MCP schemas are huge). Each simple call is
 translated into the real Shop MCP tool + arguments before it is emitted or executed, so traces,

@@ -405,8 +405,8 @@ async def on_block(b: BlockContext) -> FraudCard | None:
     return card
 
 
-# ---------------------------------------------------------------- self-heal re-exports (ADR m4/0003)
-# Self-heal lives in backend/selfheal.py; these keep plan.md Task 16's names on this module.
+# ---------------------------------------------------------------- self-heal re-exports
+# Self-heal lives in app/selfheal.py; these keep its entry points reachable from this module.
 async def propose_probe(bypass_trace, **kwargs):
     from app import selfheal
 

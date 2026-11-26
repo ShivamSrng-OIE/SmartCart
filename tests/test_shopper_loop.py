@@ -1,4 +1,4 @@
-"""shopper_loop edge cases, plus the on_state_change hook contract Member 2's guarded shopper relies on."""
+"""shopper_loop edge cases, plus the on_state_change hook the guarded shopper relies on."""
 from app.schemas import Intent, Media, ToolCall
 from app.shop_mcp import ShopMCPError
 from app.shopper_loop import MAX_STEPS, ShopperContext, shopper_loop

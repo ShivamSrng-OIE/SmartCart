@@ -44,7 +44,7 @@ def test_only_the_provider_can_be_switched_and_it_persists(tmp_path):
     settings._reset_for_tests(None)  # a fresh process reads the same choice
     assert settings.provider() == "openrouter"
     with pytest.raises(ValueError):
-        settings.update("claude")
+        settings.update("unknown-provider")
     with pytest.raises(TypeError):
         settings.update("openrouter", {"openrouter": {"shopper": "openai/gpt-4o"}})  # there is no way to choose a model
 

@@ -1,4 +1,4 @@
-"""Convert eval/props/generated/items/*/manifest.json into eval/cases/gen-<item_id>.json (ADR 0017).
+"""Convert eval/props/generated/items/*/manifest.json into eval/cases/gen-<item_id>.json.
 
 `media` is a list of repo-relative paths: that is what eval/runner/systems.load_media reads
 (it derives kind and mime from the file name).

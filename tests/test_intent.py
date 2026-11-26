@@ -5,7 +5,7 @@ from app.intent import parse_intent
 from app.schemas import Intent, Probe, TraceEvent, Verdict
 
 
-# --- plan.md Task 3 required tests ---
+# --- core parsing ---
 
 def test_parse_intent_budget_from_text():
     i = parse_intent("buy one pack under $25", None)
@@ -24,7 +24,7 @@ def test_parse_intent_no_budget():
     assert i.quantity == 1
 
 
-# --- extra cases the live demo will hit ---
+# --- everyday requests ---
 
 @pytest.mark.parametrize("text,budget", [
     ("buy one of these under 25", 25),

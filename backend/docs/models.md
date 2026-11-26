@@ -40,5 +40,5 @@ Gemma 4 and Ling returned temporary upstream 429s during the runs, so they sit i
   firewall said. Anything the firewall cannot decide in time fails closed (held).
 - **Speed:** a free-model firewall check takes roughly 15 to 40 s; on Gemini it is about 1 s. Argon reading the listing
   runs at the same time as the firewall, and the "held" state is shown as soon as the verdict arrives.
-- **Gemini** keeps the hackathon models (`gemini-4-*`, `gemini-decision-1`). When that access ends, switch the provider to
-  OpenRouter on the Models page (or set `LLM_PROVIDER=openrouter`) and nothing else changes.
+- **Gemini** keeps the original models (`gemini-4-*`, `gemini-decision-1`). The provider is chosen on the AI models and keys
+  page (or with `LLM_PROVIDER`); nothing else changes when it switches.

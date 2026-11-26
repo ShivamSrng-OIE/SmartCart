@@ -1,6 +1,6 @@
-# CartTrap
+# SmartCart
 
-**An execution firewall for AI shopping agents.** CartTrap checks every order an AI shopping agent tries to place, *before any money moves*, and stops the ones a product listing has manipulated. When it holds an order, it shows exactly where the manipulation was hidden, offers safe alternatives from real Shopify stores, lowers the dishonest seller's standing, and learns new checks on its own.
+**Safe Checkout for AI shopping agents.** SmartCart is an execution firewall: it checks every order an AI shopping agent tries to place, *before any money moves*, and stops the ones a product listing has manipulated. When it holds an order, it shows exactly where the manipulation was hidden, offers safe alternatives from real Shopify stores, lowers the dishonest seller's standing, and learns new checks on its own.
 
 The project ships as a working storefront called **Tote**: shoppers browse real Shopify products, ask an AI assistant to shop for them, and every order passes through **Safe Checkout**.
 
@@ -13,13 +13,11 @@ The project ships as a working storefront called **Tote**: shoppers browse real 
 
 **Live app:** [tote-store.pages.dev](https://tote-store.pages.dev) (API: [tote-api-wbpx.onrender.com](https://tote-api-wbpx.onrender.com/health))
 
-### Launch film
+### SmartCart: Safe Checkout for AI Shopping Agents (1:28)
 
-https://github.com/user-attachments/assets/897f817c-fbef-460f-82a3-6caeb435b80e
+https://github.com/user-attachments/assets/b9bb4a82-5b55-4342-9844-96782d49191e
 
-*Under a minute and a half: a hidden instruction in each of the four places it can hide (image, text, video, audio), the Gemini model behind each job, safe alternatives, falling seller ratings and self-healing checks, on laptop, tablet and phone.*
-
-[![SmartCart launch film](backend/docs/images/launch-film.gif)](https://github.com/user-attachments/assets/897f817c-fbef-460f-82a3-6caeb435b80e)
+A hidden instruction in each of the four places it can hide (image, text, video and audio), the Gemini model behind each job, safe alternatives, falling seller ratings and self-healing checks, on laptop, tablet and phone.
 
 ---
 
@@ -47,7 +45,7 @@ That makes product media a new attack surface. A seller only has to hide one lin
 
 ## The idea
 
-CartTrap sits between the shopping agent and the store's checkout tools. Every call that would move money (such as `create_cart`) must pass a firewall that compares three things:
+SmartCart sits between the shopping agent and the store's checkout tools. Every call that would move money (such as `create_cart`) must pass a firewall that compares three things:
 
 | Source | Question |
 |---|---|
@@ -93,7 +91,7 @@ flowchart TD
 
 ## Models: built on Gemini, running on free OpenRouter models
 
-CartTrap was built for the **Gemini 4 NYC Hackathon**, and every agent in the system was originally powered by Google Gemini:
+SmartCart was built at the **Gemini 4 NYC Hackathon**, and every agent in the system was originally powered by Google Gemini:
 
 | Role | Gemini model (hackathon) | Job |
 |---|---|---|
@@ -115,13 +113,16 @@ Gemini remains fully supported. When a Gemini key is configured, it is used auto
 The repository holds two independent applications that are built and deployed separately and never import each other:
 
 ```
-CartTrap/
+SmartCart/
 ├── README.md        this overview
+├── .github/         workflow that keeps the two deployment branches in sync
 ├── backend/         FastAPI service: agents, firewall, marketplace, evaluation, tests
 │   └── README.md    backend guide: architecture, API, configuration, data
 └── frontend/        Vite + React web app (the Tote storefront)
     └── README.md    frontend guide: pages, structure, build and deploy
 ```
+
+Inside the code the firewall goes by its working name, CartTrap (for example the `carttrap` system in the benchmark and the `carttrap-*` deployment branches).
 
 - **[Backend guide](backend/README.md):** how the firewall, perception, explanations, safe alternatives, marketplace trust and self-healing work; every API route; configuration; tests.
 - **[Frontend guide](frontend/README.md):** every page and its address, how the app talks to the API, live progress and evidence views, build and hosting.
@@ -131,8 +132,8 @@ CartTrap/
 **Prerequisites:** Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 22+, ffmpeg, and an API key for [OpenRouter](https://openrouter.ai/settings/keys) (free) or [Google Gemini](https://aistudio.google.com/apikey).
 
 ```bash
-git clone https://github.com/ShivamSrng-OIE/SmartCart.git CartTrap
-cd CartTrap
+git clone https://github.com/ShivamSrng-OIE/SmartCart.git
+cd SmartCart
 ```
 
 **1. Start the backend** (http://localhost:8000)
@@ -231,6 +232,5 @@ The benchmark's unprotected assistant was rarely fooled by these cases, so it do
 ## Further reading
 
 - [Backend guide](backend/README.md) and [frontend guide](frontend/README.md)
-- [How the models were chosen](backend/docs/models.md)
-- [Product requirements](backend/docs/PRD.md) and [architecture notes](backend/docs/architecture.md)
+- [How the models were chosen](backend/docs/models.md) and [notes on the external APIs](backend/docs/api-notes.md)
 - [Architecture diagram](backend/docs/images/architecture.png) and [plain-language explainer](backend/docs/images/nontech-explainer.png)

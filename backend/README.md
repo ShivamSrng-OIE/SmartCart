@@ -158,7 +158,7 @@ uv sync
 uv run uvicorn app.main:app --port 8000
 ```
 
-Create `backend/.env` (git-ignored) with at least one key:
+Copy `.env.example` to `backend/.env` (git-ignored) and set at least one key:
 
 ```bash
 OPENROUTER_API_KEY=sk-or-...

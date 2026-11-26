@@ -81,6 +81,8 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
+No configuration is needed for local development. To override a setting on one machine, copy `.env.example` to `.env.local`; it lists every option.
+
 ## Build and deploy
 
 ```bash

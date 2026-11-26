@@ -1,5 +1,5 @@
-"""All tunables in one place. Model IDs are placeholders until the DeepMind resource sheet;
-override any of them with env vars (e.g. MODEL_VICTIM=...) in .env."""
+"""All tunables in one place. Every value can be overridden with an environment variable in
+backend/.env (see .env.example), for example MODEL_VICTIM=... for a Gemini model."""
 import os
 from typing import Literal
 

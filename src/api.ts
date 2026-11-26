@@ -2,14 +2,14 @@ import type { EvalResults, Metrics, Pane, RuleSet, TraceEvent } from "./types";
 import { parseJsonl } from "./state";
 import attackJsonl from "./fixtures/run_attack.jsonl?raw";
 import benignJsonl from "./fixtures/run_benign.jsonl?raw";
-import redteamJsonl from "./fixtures/redteam_demo.jsonl?raw";
+import redteamJsonl from "./fixtures/redteam_recorded.jsonl?raw";
 import defaultRulesJson from "./fixtures/rules.sample.json";
 import evalSample from "./fixtures/eval.sample.json";
 import { ENDPOINTS, apiUrl, streamUrl, type FixtureName, type RunKind } from "./config";
 import { looksLikeGemini, toEvents } from "./lib/gemini";
 
 // ---------------------------------------------------------------- live API
-// Routes from docs/architecture.md §5 (owned by Member 1). Send changes to M1.
+// API routes; the backend guide (backend/README.md) lists them all.
 
 /** How the shared model keys are doing: "busy" = the free models are rate limited and a backup fills in;
  *  "limited" = the shared quota is used up, so checks are slow or held for safety. */
@@ -268,7 +268,7 @@ export function normalizeEval(raw: unknown): EvalResults {
 }
 
 // ---------------------------------------------------------------- replay
-// Recorded runs for rehearsal and the offline fallback.
+// Recorded runs for replay mode and the offline fallback.
 
 const FIXTURES: Record<FixtureName | "redteam", string> = {
   attack: attackJsonl,
@@ -279,8 +279,8 @@ const FIXTURES: Record<FixtureName | "redteam", string> = {
 export const fixtureEvents = (name: FixtureName | "redteam"): TraceEvent[] => parseJsonl(FIXTURES[name]);
 /** Default rule set shipped with the site, used until GET /api/rules answers. */
 export const defaultRules = (): RuleSet => normalizeRules(defaultRulesJson);
-/** Rehearsal-only (DEMO_MODE) results. */
-export const rehearsalEval = (): EvalResults => normalizeEval(evalSample);
+/** Recorded results, used only in replay mode. */
+export const recordedEval = (): EvalResults => normalizeEval(evalSample);
 
 /** Play events on their recorded t_ms clock. Returns a cancel function. */
 export function replay(events: TraceEvent[], onEvent: (e: TraceEvent) => void, speed = 1, onDone?: () => void): () => void {

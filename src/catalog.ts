@@ -4,12 +4,12 @@
  * Source order for every call:
  *   1. Shopify Shop MCP, through the backend's read-only /shop-mcp proxy (search_catalog / get_product)
  *   2. our warehouse storefronts (GET /api/warehouse/products), mixed in by searchCatalog
- *   (rehearsal only: the bundled catalog when DEMO_MODE is on and nothing else answers)
+ *   (replay mode only: the bundled catalog when REPLAY_MODE is on and nothing else answers)
  */
 import sample from "./fixtures/catalog.sample.json";
 import { getProductMcp, minorToMajor, searchCatalogMcp, ShopError, type ShopMessage } from "./shop";
 import { getCountry } from "./locale";
-import { DEMO_MODE, apiUrl, assetUrl } from "./config";
+import { REPLAY_MODE, apiUrl, assetUrl } from "./config";
 
 export interface MediaSource {
   url: string;
@@ -115,7 +115,7 @@ export interface CatalogProduct {
   raw: Record<string, unknown>;
 }
 
-export type CatalogSource = "live" | "shopify" | "demo";
+export type CatalogSource = "live" | "shopify" | "bundled";
 
 export interface SearchResult {
   items: CatalogProduct[];
@@ -133,7 +133,7 @@ export interface SearchOptions {
   limit?: number;
   cursor?: string;
   signal?: AbortSignal;
-  /** false skips network sources (offline rehearsal) */
+  /** false skips network sources (offline replay) */
   network?: boolean;
   /** Mix in the local warehouse storefronts (default true). */
   includeWarehouse?: boolean;
@@ -168,7 +168,7 @@ export function plainText(html: string | null): string | null {
   return text || null;
 }
 
-/** Accept Shop MCP products, raw search items, or our demo shape. Never throws on a missing field. */
+/** Accept Shop MCP products, raw search items, or our bundled shape. Never throws on a missing field. */
 export function normalizeProduct(raw: unknown): CatalogProduct | null {
   const r = obj(raw);
   const p = r.product && typeof r.product === "object" ? obj(r.product) : r;
@@ -184,7 +184,7 @@ export function normalizeProduct(raw: unknown): CatalogProduct | null {
   const rangeMin = obj(range.min);
   const rangeMax = obj(range.max);
 
-  // Shop MCP prices are minor units with a currency; our demo data uses major units.
+  // Shop MCP prices are minor units with a currency; our bundled data uses major units.
   let currency = str(vPrice.currency) ?? str(rangeMin.currency) ?? str(obj(p.price).currency) ?? str(p.currency) ?? "USD";
   let price: number | null = null;
   if (vPrice.amount != null) price = minorToMajor(vPrice.amount, currency);
@@ -298,9 +298,9 @@ function toOffer(v: Obj, fallbackCurrency: string): Offer | null {
   };
 }
 
-const DEMO: CatalogProduct[] = (sample.products as unknown[]).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
-export const demoCatalog = () => DEMO;
-export const findDemo = (id: string) => DEMO.find((p) => p.id === id) ?? null;
+const BUNDLED: CatalogProduct[] = (sample.products as unknown[]).map(normalizeProduct).filter(Boolean) as CatalogProduct[];
+export const bundledCatalog = () => BUNDLED;
+export const findBundled = (id: string) => BUNDLED.find((p) => p.id === id) ?? null;
 
 const WAREHOUSE_ID = /^wh:([a-z0-9][a-z0-9-]*)$/;
 
@@ -368,7 +368,7 @@ export function splitQueries(q: string): string[] {
 
 function localSearch(q: string, maxPrice?: number | null, limit = 24): CatalogProduct[] {
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-  return DEMO.map((p) => {
+  return BUNDLED.map((p) => {
     const hay = `${p.title} ${p.vendor ?? ""} ${p.type ?? ""} ${p.description ?? ""} ${p.shopName ?? ""}`.toLowerCase();
     const score = terms.length ? terms.reduce((s, t) => s + (hay.includes(t) ? (p.title.toLowerCase().includes(t) ? 3 : 1) : -10), 0) : 1;
     return { p, score };
@@ -396,7 +396,7 @@ function cachedShopify(q: string, opts: SearchOptions): Promise<SearchResult> {
   // The shared request is never tied to one caller's AbortSignal.
   const value = searchUncached(q, { ...opts, signal: undefined });
   cache.set(key, { at: Date.now(), value });
-  value.then((r) => (r.source === "demo" || r.error) && cache.delete(key)).catch(() => cache.delete(key));
+  value.then((r) => (r.source === "bundled" || r.error) && cache.delete(key)).catch(() => cache.delete(key));
   if (cache.size > 60) cache.delete(cache.keys().next().value!);
   return value;
 }
@@ -456,7 +456,7 @@ export async function similarProducts(id: string, opts: { limit?: number; signal
 export async function firstLiveProduct(q: string, signal?: AbortSignal): Promise<CatalogProduct | null> {
   try {
     const r = await searchCatalog(q, { limit: 4, signal });
-    return r.source !== "demo" ? (r.items.find((p) => p.available !== false) ?? r.items[0] ?? null) : null;
+    return r.source !== "bundled" ? (r.items.find((p) => p.available !== false) ?? r.items[0] ?? null) : null;
   } catch {
     return null;
   }
@@ -485,7 +485,7 @@ async function searchUncached(q: string, opts: SearchOptions = {}): Promise<Sear
     }
   }
 
-  if (DEMO_MODE) return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "demo", note: notes[0] };
+  if (REPLAY_MODE) return { items: cursor ? [] : localSearch(q, maxPrice, limit * 2), source: "bundled", note: notes[0] };
   return { items: [], source: "shopify", error: notes[0] ?? "Couldn’t reach Shopify right now." };
 }
 
@@ -502,8 +502,8 @@ export async function getProduct(id: string, network = true): Promise<{ product:
       return { product: null, source: "warehouse" };
     }
   }
-  const demo = DEMO_MODE ? findDemo(id) : null;
-  if (demo || !network) return { product: demo, source: "demo" };
+  const bundled = REPLAY_MODE ? findBundled(id) : null;
+  if (bundled || !network) return { product: bundled, source: "bundled" };
   const hit = productCache.get(`${getCountry().code}:${id}`);
   if (hit) return hit;
   try {
@@ -518,7 +518,7 @@ export async function getProduct(id: string, network = true): Promise<{ product:
   } catch {
     /* fall through */
   }
-  return { product: null, source: "demo" };
+  return { product: null, source: "bundled" };
 }
 
 /** Product the AI shoppers should buy, carried between pages. */

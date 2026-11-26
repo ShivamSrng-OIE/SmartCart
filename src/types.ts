@@ -1,4 +1,4 @@
-// Mirrors backend/schemas.py (contract C1, plan.md Task 3). Keep field names identical.
+// Mirrors backend/app/schemas.py. Keep field names identical.
 
 export type Pane = "victim" | "guarded" | "redteam" | "system";
 
@@ -74,7 +74,7 @@ export interface Verdict {
   confidence?: number | null;
 }
 
-/** Defender safe swap (ADR m4/0008): continue_url must be shown exactly as returned. */
+/** Defender safe swap: continue_url must be shown exactly as returned. */
 export interface SafeCart {
   checkout_id?: string | null;
   cart_id?: string | null;
@@ -138,7 +138,7 @@ export interface Intent {
   quantity: number;
 }
 
-/** eval/metrics.py Metrics (contract C6). */
+/** eval/metrics.py Metrics. */
 export interface Metrics {
   asr: number;
   benign_completion: number;
